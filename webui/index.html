@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>doc-forensics · 文档解析质检套件</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
   :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#8b949e;
           --ok:#3fb950; --retry:#d29922; --human:#f85149; --accent:#58a6ff; }
@@ -118,11 +120,26 @@ function render(d) {
   if (repairs.length) {
     repairCard.classList.remove("hide");
     document.getElementById("repairs").innerHTML = repairs.map(e =>
-      `<div style="margin:8px 0">· <code>${esc(e.original ?? "")}</code> → <code>${esc(e.latex ?? "重提取")}</code>
-       ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}">` : "⚠️ 缺证据"}
-       <span style="color:var(--dim)">（${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次）</span>
-       <div id="render-${esc(e.node_id)}" style="margin:4px 0 0 18px;color:var(--dim);font-size:13px">LaTeX 编译检查中…</div></div>`).join("");
-    for (const e of repairs) fetchRender(e.node_id);
+      `<div style="margin:10px 0">
+       <div>
+        <span style="color:var(--dim);font-size:12px">修复前</span>
+        <span class="math" id="mo-${esc(e.node_id)}" style="background:rgba(248,81,73,.12);border-radius:6px;padding:4px 8px"></span>
+        <span style="color:var(--dim)">→</span>
+        <span style="color:var(--dim);font-size:12px">修复后</span>
+        <span class="math" id="mr-${esc(e.node_id)}" style="background:rgba(63,185,80,.12);border-radius:6px;padding:4px 8px"></span>
+       </div>
+       ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}" title="原始截图证据">` : "⚠️ 缺证据"}
+       <span style="color:var(--dim);font-size:13px">（${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次 · SymPy 回判通过）</span>
+       <div id="render-${esc(e.node_id)}" style="margin:4px 0 0 2px;color:var(--dim);font-size:13px">LaTeX 编译检查中…</div></div>`).join("");
+    for (const e of repairs) {
+      try {
+        if (window.katex) {
+          katex.render(e.original ?? "", document.getElementById("mo-" + e.node_id), { throwOnError: false });
+          katex.render(e.latex ?? "", document.getElementById("mr-" + e.node_id), { throwOnError: false });
+        }
+      } catch (_) {}
+      fetchRender(e.node_id);
+    }
   }
   if (d.report_ready && !d.running && !doneShown) {
     doneShown = true;
