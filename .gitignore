@@ -16,3 +16,6 @@ models/
 
 *.log
 .DS_Store
+
+# 提交包产物
+dist/
