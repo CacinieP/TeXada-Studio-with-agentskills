@@ -1,8 +1,8 @@
 # PROVENANCE · latex-cleanup
 
 - 来源仓库：`CacinieP/latex-cleanup`（GitHub，私有）
-- 提取版本：v0.2.3 · commit `bdca55ad0dde02885790761d49d69e242b6a04dd`（分支 `docs/layout-recapture-checklist`，领先 main 2 个 docs 提交）
-- 提取日期：2026-09-28 · 方式：`git archive HEAD` 按路径提取
+- 提取版本：v0.2.3 · commit `bdca55a`（后续 0.2.4 的 OCR 损伤修复规则见源仓 references/ocr-pitfalls.md，按需重新提取）
+- 提取日期：2026-09-28 · 方式：`git archive HEAD` 按路径提取 · 源仓 main 已合入 0.2.3（merge b4759b6）并发布 0.2.4（commit 0e9d0f1）
 
 ## 包含
 
