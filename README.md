@@ -22,6 +22,7 @@ doc-forensics/
 │   ├── doc-table-audit/         # 表格跨页/合并/合计值交叉验算
 │   ├── doc-formula-verify/      # 公式 SymPy 解析回判 + 高分辨率重识别
 │   ├── doc-report/              # 质检报告与 diff 视图（证据链）
+│   ├── latex-cleanup/           # 内部依赖：TeX/Markdown 清洗与编译回环（v0.2.3，见其 PROVENANCE.md）
 │   └── spark-ops/               # 内部依赖：内存预算与模型装卸（不单独参赛）
 ├── harness/                     # Agent Harness 说明（模型网关/装卸/断点协议）
 ├── scripts/

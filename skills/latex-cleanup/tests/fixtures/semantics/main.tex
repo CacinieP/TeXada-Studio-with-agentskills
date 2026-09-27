@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+\usepackage[authoryear]{natbib}
+\begin{document}
+\section{Meaning must survive}
+\citet{smith2024} introduced the method.   
+A later comparison supports it \citep{smith2024}.
+
+Resistance is denoted by $R$, with $R=10$.
+The input belongs to the real numbers: $x \in \mathbb{R}$.
+We use $\epsilon$ for measurement error and $\varepsilon$ for a separate tolerance.
+% TODO: verify whether the tolerance should be 0.01 or 0.02.
+% This comment explains the intentionally distinct symbols.
+\begin{equation}
+    V=IR   
+\end{equation}
+
+Literal source example:
+\begin{verbatim}
+\begin{not-an-environment}
+\ref{not-a-real-reference}
+TODO: this text is literal sample data.
+\end{verbatim}
+
+\begin{thebibliography}{1}
+\bibitem[Smith(2024)]{smith2024}
+Smith, A. (2024). A test reference.
+\end{thebibliography}
+\end{document}

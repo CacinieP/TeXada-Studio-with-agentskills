@@ -1,0 +1,6 @@
+{
+  "check-only": "只检查 main.tex 的问题，给出具体位置和依据，不修改源文件。把检查报告保存为 report.md。",
+  "cleanup": "清洗 notes.md 的源码格式，保留正文、公式、代码、链接和硬换行，reference.md 是已有依赖。把实际改动和验证结果写到 report.md。",
+  "repair": "修复 main.tex 的编译错误，保留正文、数学符号和 TODO，使用当前可用的 Tectonic 编译验证。把结果和真实验证状态写到 report.md。",
+  "uncertain-ocr": "清洗这段 OCR Markdown。手头没有原 PDF 或截图，请保留无法确认的内容并记录待核对项；不要猜补字母或数字。把结果写到 report.md。"
+}

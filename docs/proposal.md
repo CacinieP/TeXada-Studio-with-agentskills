@@ -36,9 +36,11 @@ OCR / 视觉解析管线在扫描件上必然出错，且错误会**沿流水线
 | `doc-formula-verify` | 公式 SymPy 解析回判；不合法触发带 20% padding 的高分辨率重识别 | `scripts/verify.py` + VLM |
 | `doc-report` | 质检报告 + diff 视图，每处修改附原始 crop 证据 | 模板渲染 |
 | `spark-ops`（内部依赖） | 内存预算规划、vLLM 启动参数、OOM 诊断与降级、llama-swap 装卸 | 系统读取脚本 |
+| `latex-cleanup`（内部依赖） | 修复结果的编译回环：数学审计 + 实际编译验证 + 保守空白清洗 | vendor 自 CacinieP/latex-cleanup v0.2.3（scripts/tests） |
 
 协作协议：`doc-layout-parse` 产出结构树 → 质检 Skill 各自认领节点类型（`formula` / `table`）→
 产出 `OK / RETRY / NEEDS_HUMAN` 三态 → 全部决策追加写入 `state.jsonl`（断点续跑）→ `doc-report` 汇总。
+公式修复走「SymPy 回判 → 重识别 → `latex-cleanup` 数学审计与编译回环」三级验证（吸收方案 B 的编译回环思路）。
 任何节点失败**不得阻塞流水线**。
 
 ## 5. 为什么必须在 DGX Spark 上（评审必问，答案前置）

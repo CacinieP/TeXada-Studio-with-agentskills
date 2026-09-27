@@ -30,6 +30,14 @@ Harness 是 Skills 的执行外壳：规划循环、三态协议、状态持久�
 - 证据文件：`state/crops/<node_id>-a<attempt>.png`
 - `state/` 不入 git（见 .gitkeep 约定）
 
+## 工具链
+
+- Python（stdlib + SymPy/antlr）：harness、doc-formula-verify、doc-table-audit
+- Node：latex-cleanup 的 `audit_math.cjs` 数学审计（修复后检查模式调用，属内部依赖）
+- Tectonic（可选，P1/P2）：latex-cleanup 的 `compile_tex.py` 编译回环；目标环境未装时按其
+  契约显式报告「未执行」，不得当作通过
+- 全部端点 127.0.0.1，断网可用；不新增全局工具安装（沿用 latex-cleanup 的约束）
+
 ## 目录约定（TODO P0）
 
 ```
