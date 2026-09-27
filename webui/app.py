@@ -199,3 +199,239 @@ def crops(name: str, token: str = Query("")):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="no crop")
     return FileResponse(path)
+
+
+# ============ Studio：VS Code 风格编辑器 + Skill 一键修复 ============
+
+import re as _re
+import sys as _sys
+import uuid as _uuid
+
+_sys.path.insert(0, os.path.join(REPO, "harness"))
+from docforensics.vlm import OllamaProvider  # noqa: E402
+
+STUDIO_DOCS = os.path.join(REPO, "samples", "docs")
+STUDIO_STATE = os.path.join(REPO, "state", "studio")
+VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
+PROVIDER = OllamaProvider("http://127.0.0.1:11434", VLM_MODEL)
+TECTONIC = os.path.expanduser("~/bin/tectonic")
+_TABLE_LABELS = ("合计", "总计", "total")
+_jobs = {}
+
+
+def _studio_compile(content: str, name: str, tag: str):
+    d = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag)
+    os.makedirs(d, exist_ok=True)
+    texf = os.path.join(d, "main.tex")
+    with open(texf, "w") as f:
+        f.write(content)
+    try:
+        r = subprocess.run([TECTONIC, "-o", d, texf], capture_output=True, text=True, timeout=240)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "log": "compile timeout"}
+    ok = r.returncode == 0
+    png = None
+    if ok:
+        subprocess.run(["pdftoppm", "-png", "-r", "100", "-singlefile",
+                        os.path.join(d, "main.pdf"), os.path.join(d, "preview")], check=True)
+        p = os.path.join(d, "preview.png")
+        png = f"/api/studio/preview/{name}/{tag}?v={int(time.time())}" if os.path.exists(p) else None
+    return {"ok": ok, "log": (r.stderr or r.stdout or "")[-600:], "png": png}
+
+
+@app.get("/api/studio/preview/{name}/{tag}")
+def studio_preview(name: str, tag: str, token: str = Query("")):
+    _guard(token)
+    _safe = _re.fullmatch(r"[\w.-]+", name) and _re.fullmatch(r"[\w-]+", tag)
+    if not _safe:
+        raise HTTPException(status_code=400, detail="bad path")
+    p = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag, "preview.png")
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404, detail="no preview")
+    return FileResponse(p)
+
+
+def _formula_problems(content: str):
+    problems, nid = [], 0
+    for i, line in enumerate(content.splitlines(), 1):
+        for m in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
+            nid += 1
+            fid = f"f-{i:03d}-{nid}"
+            v = subprocess.run([_sys.executable, VERIFY, m.group(1)], capture_output=True, text=True)
+            try:
+                vj = json.loads(v.stdout.strip().splitlines()[-1])
+            except Exception:
+                vj = {"status": "OK"}
+            if vj.get("status") != "OK":
+                problems.append({"id": fid, "type": "formula", "line": i, "latex": m.group(1),
+                                 "status": vj.get("status", "RETRY"), "reason": vj.get("reason", "")})
+    return problems
+
+
+def _table_problems(content: str):
+    problems, lines = [], content.splitlines()
+    in_tab, rows, start = False, [], 0
+    for i, line in enumerate(lines + [r"\end{tabular}"]):
+        if r"\begin{tabular}" in line:
+            in_tab, rows, start = True, [], i
+            continue
+        if in_tab and "&" in line:
+            rows.append((i, [c.strip() for c in line.split("&")]))
+        if r"\end{tabular}" in line and in_tab:
+            in_tab = False
+            if rows and any(k in rows[-1][1][0].lower() for k in _TABLE_LABELS):
+                total_i, total_cells = rows[-1]
+                data = [c for li, c in rows[1:-1]]
+                for j in range(1, len(total_cells)):
+                    vals = []
+                    for c in data:
+                        if j >= len(c):
+                            continue
+                        m = _re.search(r"[+-]?\d[\d,]*\.?\d*", c[j])
+                        vals.append(float(m.group(0).replace(",", "")) if m else None)
+                    if any(v is None for v in vals):
+                        continue
+                    want = _re.search(r"[+-]?\d[\d,]*\.?\d*", total_cells[j])
+                    want = float(want.group(0).replace(",", "")) if want else None
+                    got = sum(vals)
+                    if want is None or abs(got - want) > 1e-9:
+                        problems.append({"id": f"t-{total_i+1:03d}-{j}", "type": "table_total",
+                                         "line": total_i + 1, "col": j, "wrong": total_cells[j],
+                                         "right": str(int(got)) if got == int(got) else str(got),
+                                         "status": "RETRY",
+                                         "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
+            rows, in_tab = [], False
+    return problems
+
+
+def _analyze(content: str):
+    fp = _formula_problems(content)
+    tp = _table_problems(content)
+    return fp + tp
+
+
+def _apply_fixes(content: str, log):
+    lines = content.splitlines()
+    edits = []
+    fp = _formula_problems(content)
+    for p in fp:
+        li = p["line"] - 1
+        latex = p["latex"]
+        fixed, ok = None, False
+        for attempt in (1, 2):
+            log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → VLM 重识别（第 {attempt} 次）")
+            cand = PROVIDER.repair_formula({"id": p["id"], "data": {"latex": latex}})
+            if not cand:
+                log.append(f"[doc-formula-verify] {p['id']} VLM 无有效修复")
+                continue
+            v = subprocess.run([_sys.executable, VERIFY, cand], capture_output=True, text=True)
+            try:
+                vj = json.loads(v.stdout.strip().splitlines()[-1])
+            except Exception:
+                vj = {"status": "RETRY"}
+            if vj.get("status") == "OK":
+                fixed, ok = cand, True
+                log.append(f"[doc-formula-verify] {p['id']} 修复 → SymPy 回判 ✓ ：{cand}")
+                break
+            log.append(f"[doc-formula-verify] {p['id']} SymPy 拒绝：{vj.get('reason','')[:80]}")
+        if ok and fixed != latex:
+            old = f"${latex}$"
+            if old in lines[li]:
+                lines[li] = lines[li].replace(old, f"${fixed}$", 1)
+                edits.append({"line": p["line"], "before": latex, "after": fixed, "skill": "doc-formula-verify"})
+    content = "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+
+    tp = _table_problems(content)
+    lines = content.splitlines()
+    for p in tp:
+        li = p["line"] - 1
+        cells = lines[li].split("&")
+        j = p["col"]
+        if j < len(cells):
+            log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 重算为 {p['right']}")
+            edits.append({"line": p["line"], "before": cells[j].strip(), "after": p["right"], "skill": "doc-table-audit"})
+            # 只替换数值本身，保留行尾 \\ 等表格结构
+            cells[j] = _re.sub(r"[+-]?\d[\d,]*\.?\d*", p["right"], cells[j], count=1)
+            lines[li] = "&".join(cells)
+    content = "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+    return content, edits
+
+
+def _studio_job(name: str, content: str, job_id: str):
+    job = _jobs[job_id]
+    log = job["log"]
+    try:
+        log.append(f"[studio] 编译修复前版本（原始文档）…")
+        before = _studio_compile(content, name, "before")
+        log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败（存在注入错误）'}")
+        fixed, edits = _apply_fixes(content, log)
+        log.append(f"[studio] 共应用 {len(edits)} 处修复")
+        log.append(f"[studio] 编译修复后版本…")
+        after = _studio_compile(fixed, name, "after")
+        log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
+        job["result"] = {"fixed_content": fixed, "edits": edits,
+                         "compile_before": before, "compile_after": after,
+                         "problems_after": _analyze(fixed)}
+        job["done"] = True
+    except Exception as e:  # noqa: BLE001
+        log.append(f"[studio] 出错：{e}")
+        job["done"] = True
+        job["error"] = str(e)
+
+
+@app.get("/studio")
+def studio(token: str = Query("")):
+    _guard(token)
+    return FileResponse(os.path.join(os.path.dirname(__file__), "studio.html"))
+
+
+@app.get("/api/studio/files")
+def studio_files(token: str = Query("")):
+    _guard(token)
+    return {"files": sorted(f for f in os.listdir(STUDIO_DOCS) if f.endswith(".tex"))}
+
+
+@app.get("/api/studio/file")
+def studio_file(name: str = Query(""), token: str = Query("")):
+    _guard(token)
+    if not _re.fullmatch(r"[\w.-]+\.tex", name):
+        raise HTTPException(status_code=400, detail="bad name")
+    path = os.path.join(STUDIO_DOCS, name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="no file")
+    with open(path) as f:
+        return {"name": name, "content": f.read()}
+
+
+@app.post("/api/studio/analyze")
+def studio_analyze(token: str = Query(""), name: str = Query(""), body: dict = None):
+    _guard(token)
+    body = body or {}
+    content = body.get("content", "")
+    problems = _analyze(content)
+    return {"problems": problems,
+            "summary": {"formula": sum(1 for p in problems if p["type"] == "formula"),
+                        "table": sum(1 for p in problems if p["type"] == "table_total")}}
+
+
+@app.post("/api/studio/fix")
+def studio_fix(token: str = Query(""), body: dict = None):
+    _guard(token)
+    body = body or {}
+    name, content = body.get("name", ""), body.get("content", "")
+    if not _re.fullmatch(r"[\w.-]+\.tex", name):
+        raise HTTPException(status_code=400, detail="bad name")
+    job_id = _uuid.uuid4().hex[:8]
+    _jobs[job_id] = {"done": False, "log": [f"[studio] 任务 {job_id} 接收：{name}"], "result": None}
+    threading.Thread(target=_studio_job, args=(name, content, job_id), daemon=True).start()
+    return {"job": job_id}
+
+
+@app.get("/api/studio/fixstatus")
+def studio_fixstatus(id: str = Query(""), token: str = Query("")):
+    _guard(token)
+    job = _jobs.get(id)
+    if not job:
+        raise HTTPException(status_code=404, detail="no job")
+    return {"done": job["done"], "log": job["log"][-30:], "result": job.get("result"),
+            "error": job.get("error")}
