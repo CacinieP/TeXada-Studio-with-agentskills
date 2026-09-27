@@ -37,6 +37,23 @@
   .bar { height:8px; background:#21262d; border-radius:4px; overflow:hidden; margin:8px 0 2px; }
   .bar i { display:block; height:100%; background:var(--ok); width:0; transition:width .5s; }
   .hide { display:none; }
+  .editor { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
+  .pane { background:#0b0f14; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .pane-head { display:flex; justify-content:space-between; align-items:center; background:#11161d;
+               padding:5px 12px; font-size:12px; color:var(--dim); border-bottom:1px solid var(--line); }
+  .pane-body { padding:10px 12px; }
+  .codeline { display:flex; font-family:"SF Mono",Menlo,monospace; font-size:14px; }
+  .gutter { color:#484f58; padding-right:10px; text-align:right; user-select:none; min-width:22px; }
+  .del { background:rgba(248,81,73,.28); border-radius:3px; padding:0 2px; text-decoration:line-through; }
+  .add { background:rgba(63,185,80,.28); border-radius:3px; padding:0 2px; }
+  .mathbox { margin-top:8px; padding:10px 12px; background:#11161d; border-radius:6px; overflow-x:auto; }
+  .mathbox.bad { outline:1px solid rgba(248,81,73,.5); }
+  .mathbox.good { outline:1px solid rgba(63,185,80,.5); }
+  .pill { padding:1px 8px; border-radius:10px; font-size:11.5px; }
+  .pill.fail { background:rgba(248,81,73,.15); color:var(--human); }
+  .pill.pass { background:rgba(63,185,80,.15); color:var(--ok); }
+  .renderwrap { text-align:center; padding:8px; }
+  .renderwrap img { max-width:100%; background:#fff; border-radius:6px; }
 </style>
 </head>
 <body>
@@ -94,6 +111,14 @@ async function run(fresh) {
 
 function esc(s){ const d=document.createElement("div"); d.textContent=s??""; return d.innerHTML; }
 
+// 字符级 diff：取公共前后缀，高亮中间被修改的部分
+function diffSpans(a, b, cls) {
+  let s = 0; while (s < a.length && s < b.length && a[s] === b[s]) s++;
+  let ea = a.length, eb = b.length;
+  while (ea > s && eb > s && a[ea-1] === b[eb-1]) { ea--; eb--; }
+  return esc(a.slice(0,s)) + '<span class="' + cls + '">' + esc(a.slice(s,ea)) + "</span>" + esc(a.slice(ea));
+}
+
 function render(d) {
   status.textContent = d.running
     ? `运行中 · ${d.elapsed}s · 完成 ${Object.keys(terminalOf(d)).length}/${TOTAL_NODES} 节点`
@@ -119,18 +144,32 @@ function render(d) {
   const repairs = Object.values(t).filter(e => e.repaired);
   if (repairs.length) {
     repairCard.classList.remove("hide");
-    document.getElementById("repairs").innerHTML = repairs.map(e =>
-      `<div style="margin:10px 0">
-       <div>
-        <span style="color:var(--dim);font-size:12px">修复前</span>
-        <span class="math" id="mo-${esc(e.node_id)}" style="background:rgba(248,81,73,.12);border-radius:6px;padding:4px 8px"></span>
-        <span style="color:var(--dim)">→</span>
-        <span style="color:var(--dim);font-size:12px">修复后</span>
-        <span class="math" id="mr-${esc(e.node_id)}" style="background:rgba(63,185,80,.12);border-radius:6px;padding:4px 8px"></span>
-       </div>
-       ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}" title="原始截图证据">` : "⚠️ 缺证据"}
-       <span style="color:var(--dim);font-size:13px">（${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次 · SymPy 回判通过）</span>
-       <div id="render-${esc(e.node_id)}" style="margin:4px 0 0 2px;color:var(--dim);font-size:13px">LaTeX 编译检查中…</div></div>`).join("");
+    document.getElementById("repairs").innerHTML = repairs.map(e => {
+      const a = e.original ?? "", b = e.latex ?? "";
+      return `<div style="margin:14px 0">
+      <div class="editor">
+        <div class="pane">
+          <div class="pane-head"><span>修复前 · original.tex</span><span class="pill fail" id="po-${esc(e.node_id)}">编译检查中…</span></div>
+          <div class="pane-body">
+            <div class="codeline"><span class="gutter">1</span><span>${diffSpans(a, b, "del")}</span></div>
+            <div class="mathbox bad" id="mo-${esc(e.node_id)}"></div>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane-head"><span>修复后 · repaired.tex</span><span class="pill pass" id="pr-${esc(e.node_id)}">编译检查中…</span></div>
+          <div class="pane-body">
+            <div class="codeline"><span class="gutter">1</span><span>${diffSpans(a, b, "add")}</span></div>
+            <div class="mathbox good" id="mr-${esc(e.node_id)}"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}" title="原始截图证据">` : "⚠️ 缺证据"}
+        <span style="color:var(--dim);font-size:13px">SymPy 回判通过 · ${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次</span>
+        <div id="renderwrap-${esc(e.node_id)}" class="renderwrap hide"></div>
+        <div id="render-${esc(e.node_id)}" style="color:var(--dim);font-size:13px">LaTeX 编译检查中…</div>
+      </div></div>`;
+    }).join("");
     for (const e of repairs) {
       try {
         if (window.katex) {
@@ -159,11 +198,15 @@ async function fetchRender(nid) {
   try {
     const d = await j(`/api/render/${nid}?token=${T}`);
     renderCache[nid] = d;
-    box.innerHTML =
-      `<span style="color:${d.orig_ok ? "var(--retry)" : "var(--human)"}">修复前编译 ${d.orig_ok ? "✓" : "✗"}</span>
-       <span style="color:var(--dim)"> → </span>
-       <span style="color:var(--ok)">修复后编译 ✓</span>` +
-      (d.img ? ` <img class="crop" src="${esc(d.img)}?token=${T}" style="background:#fff">` : " 修复后编译 ✗");
+    const po = document.getElementById("po-" + nid), pr = document.getElementById("pr-" + nid);
+    po.textContent = "编译 " + (d.orig_ok ? "✓" : "✗"); po.className = "pill " + (d.orig_ok ? "pass" : "fail");
+    pr.textContent = "编译 " + (d.rep_ok ? "✓" : "✗"); pr.className = "pill " + (d.rep_ok ? "pass" : "fail");
+    if (d.img) {
+      const wrap = document.getElementById("renderwrap-" + nid);
+      wrap.classList.remove("hide");
+      wrap.innerHTML = `<img src="${esc(d.img)}?token=${T}">`;
+    }
+    box.textContent = "";
   } catch (e) {
     box.textContent = "LaTeX 编译检查失败";
   }
