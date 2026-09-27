@@ -35,7 +35,7 @@ PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
 | 解析 + 重识别 + 仲裁（单模型） | `qwen3.8:27b-q4_K_M`（~16GB） | **Qwen3.8 原生多模态**（官方模型卡：Native support for image and video），一个模型覆盖三个角色，常驻内存减半 |
 | 兼容回退 | `qwen2.5vl:7b`（~6GB） | 管线验证用；真实回路已验证（修复 + 幻觉拦截均工作） |
 | P1 升级 | `qwen3.8:27b-nvfp4` | 原生 NVFP4；**Ollama 无法加载（需 MLX 运行时）**，走 vLLM/NGC 容器路线 |
-| P1 升级 | `stepfun-ai/Step-3.7-Flash` | 联办方模型（评审加分）。**无 GGUF**，ModelScope 拉权重 + vLLM 服务（trust_remote_code） |
+| ~~Step 集成~~ | `stepfun-ai/Step-3.7-Flash` | **单机不可行（已否决）**：BF16 403GB、NVFP4 129GB、FP8 213GB，均超出节点 121GB 可用内存；无 GGUF。除非组委会提供双机互联或 Step 云端 API，否则不投入 |
 
 ```bash
 mkdir -p ~/bin ~/lib
