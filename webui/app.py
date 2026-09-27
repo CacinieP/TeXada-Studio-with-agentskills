@@ -239,6 +239,45 @@ def _studio_compile(content: str, name: str, tag: str):
     return {"ok": ok, "log": (r.stderr or r.stdout or "")[-600:], "png": png}
 
 
+@app.post("/api/studio/preview")
+def studio_preview_live(token: str = Query(""), body: dict = None):
+    """编译当前编辑器内容并返回整页渲染（预览窗口用）。"""
+    _guard(token)
+    body = body or {}
+    name, content = body.get("name", ""), body.get("content", "")
+    if not _re.fullmatch(r"[\w.-]+\.tex", name):
+        raise HTTPException(status_code=400, detail="bad name")
+    tag = "live-" + hashlib.sha1(content.encode()).hexdigest()[:12]
+    res = _studio_compile(content, name, tag)
+    return {"ok": res["ok"], "png": res["png"], "log": res["log"]}
+
+
+@app.post("/api/studio/upload")
+def studio_upload(token: str = Query(""), body: dict = None):
+    """导入 .tex 文档到 samples/docs（文件树即时可见）。"""
+    _guard(token)
+    body = body or {}
+    name, content = body.get("name", ""), body.get("content", "")
+    if not _re.fullmatch(r"[\w\u4e00-\u9fff.-]+\.tex", name or ""):
+        raise HTTPException(status_code=400, detail="仅支持 .tex 文件名")
+    if name in (".", "..") or "/" in name:
+        raise HTTPException(status_code=400, detail="bad name")
+    with open(os.path.join(STUDIO_DOCS, name), "w") as f:
+        f.write(content)
+    return {"ok": True, "name": name}
+
+
+@app.get("/api/studio/pdf/{name}/{tag}")
+def studio_pdf(name: str, tag: str, token: str = Query("")):
+    _guard(token)
+    if not (_re.fullmatch(r"[\w.-]+", name) and _re.fullmatch(r"[\w-]+", tag)):
+        raise HTTPException(status_code=400, detail="bad path")
+    p = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag, "main.pdf")
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404, detail="no pdf")
+    return FileResponse(p, media_type="application/pdf", filename=name.replace(".tex", f"-{tag}.pdf"))
+
+
 @app.get("/api/studio/preview/{name}/{tag}")
 def studio_preview(name: str, tag: str, token: str = Query("")):
     _guard(token)

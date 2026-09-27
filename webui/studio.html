@@ -63,6 +63,10 @@
     <button class="act ghost" id="btnAnalyze"> ⟲ 质检分析</button>
     <button class="act star" id="btnFix">✨ Skill 一键修复</button>
     <button class="act ghost" id="btnDiff" disabled>查看修复对比</button>
+    <button class="act ghost" id="btnUpload">⬆ 上传 .tex</button>
+    <button class="act ghost" id="btnExport">⬇ 导出 .tex</button>
+    <button class="act ghost hide" id="btnPdf">⬇ 导出 PDF</button>
+    <input type="file" id="fileInput" accept=".tex" class="hide">
   </div>
   <div id="main">
     <div id="sidebar">
@@ -75,9 +79,21 @@
       <div class="file" style="cursor:default;color:var(--dim)">✓ latex-cleanup · 编译回环</div>
     </div>
     <div id="center">
-      <div id="tabs"><div class="tab" id="tabname">—</div></div>
+      <div id="tabs">
+        <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
+        <div class="tab" id="tab-diff" onclick="showCenter('diff')" style="color:var(--dim)">修复对比</div>
+        <div class="tab" id="tab-preview" onclick="showCenter('preview')" style="color:var(--dim)">预览</div>
+      </div>
       <div id="editor"></div>
       <div id="diff" class="hide"></div>
+      <div id="previewPane" class="hide" style="flex:1;overflow:auto;background:#11161d;padding:14px;">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+          <button class="act" id="btnCompile">⟳ 编译当前文档</button>
+          <span id="pvStatus" style="color:var(--dim);font-size:12.5px">将当前 .tex 用 Tectonic 编译并渲染整页</span>
+        </div>
+        <div id="pvLog" class="kv hide" style="background:#0b0f14;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err)"></div>
+        <div id="pvImgWrap" style="text-align:center"></div>
+      </div>
     </div>
     <div id="rightpanel">
       <div class="panel"><h4>问题 · Problems</h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
@@ -119,13 +135,13 @@ async function loadFiles() {
 }
 
 async function loadFile(name) {
-  curName = name; preFix = null; diffShown = false;
+  curName = name; preFix = null;
   $("tabname").textContent = name;
-  $("diff").classList.add("hide"); $("editor").classList.remove("hide");
-  $("btnDiff").disabled = true;
+  $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
   const d = await j(`/api/studio/file?token=${T}&name=${name}`);
   if (editor.getModel()) editor.getModel().setValue(d.content);
   else editor.setValue(d.content);
+  showCenter("edit");
   loadFiles();
   analyze();
 }
@@ -157,6 +173,85 @@ function gotoLine(line) {
   ed.setPosition({ lineNumber: line, column: 1 });
   ed.focus();
 }
+
+function showCenter(mode) {
+  diffShown = (mode === "diff");
+  $("editor").classList.toggle("hide", mode !== "edit");
+  $("diff").classList.toggle("hide", mode !== "diff");
+  $("previewPane").classList.toggle("hide", mode !== "preview");
+  $("tab-edit").classList.toggle("active", mode === "edit");
+  $("tab-diff").classList.toggle("active", mode === "diff");
+  $("tab-preview").classList.toggle("active", mode === "preview");
+  $("tab-edit").style.color = mode === "edit" ? "var(--fg)" : "var(--dim)";
+  $("tab-diff").style.color = mode === "diff" ? "var(--fg)" : "var(--dim)";
+  $("tab-preview").style.color = mode === "preview" ? "var(--fg)" : "var(--dim)";
+  if (!$("btnDiff").disabled) $("btnDiff").textContent = mode === "diff" ? "返回编辑器" : "查看修复对比";
+}
+$("btnDiff").onclick = () => showCenter(diffShown ? "edit" : "diff");
+
+function currentContent() {
+  return diffShown && modModel ? modModel.getValue() : editor.getValue();
+}
+
+function download(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("btnExport").onclick = () => {
+  if (!editor.getModel()) return alert("先打开一个文档");
+  download(curName.replace(/\.tex$/, "") + (diffShown && modModel ? ".fixed" : "") + ".tex",
+           new Blob([currentContent()], { type: "text/plain" }));
+};
+
+$("btnPdf").onclick = () => {
+  if (!lastPreviewTag) return alert("先编译一次");
+  fetch(`/api/studio/pdf/${curName}/${lastPreviewTag}?token=${T}`).then(r => {
+    if (!r.ok) throw new Error("PDF 不存在");
+    return r.blob();
+  }).then(b => download(curName.replace(/\.tex$/, "") + ".pdf", b))
+    .catch(e => alert(e.message));
+};
+
+$("btnUpload").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  await j(`/api/studio/upload?token=${T}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: f.name, content: text })
+  });
+  ev.target.value = "";
+  await loadFiles();
+  loadFile(f.name);
+};
+
+let lastPreviewTag = null;
+async function compilePreview(content) {
+  $("pvStatus").innerHTML = `<span class="spin"></span>Tectonic 编译中…`;
+  $("pvLog").classList.add("hide"); $("pvImgWrap").innerHTML = "";
+  try {
+    const d = await j(`/api/studio/preview?token=${T}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: curName, content })
+    });
+    if (d.ok && d.png) {
+      lastPreviewTag = d.png.split("/").pop().split("?")[0];
+      $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
+      $("pvImgWrap").innerHTML = `<img src="${d.png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+      $("btnPdf").classList.remove("hide");
+    } else {
+      lastPreviewTag = null;
+      $("pvStatus").innerHTML = `<span style="color:var(--err)">编译 ✗ 失败</span> · 错误详情如下（这通常就是文档中的问题）`;
+      $("pvLog").classList.remove("hide");
+      $("pvLog").textContent = d.log || "unknown";
+      $("btnPdf").classList.add("hide");
+    }
+  } catch (e) { $("pvStatus").textContent = "编译请求失败: " + e.message; }
+}
+$("btnCompile").onclick = () => compilePreview(currentContent());
 
 $("btnAnalyze").onclick = () => analyze().catch(e => alert(e.message));
 
@@ -199,24 +294,25 @@ function applyResult(res) {
     renderSideBySide: true, readOnly: true, minimap: { enabled: false }
   });
   diffEditor.setModel({ original: origModel, modified: modModel });
-  $("editor").classList.add("hide"); $("diff").classList.remove("hide");
-  diffShown = true; $("btnDiff").disabled = false; $("btnDiff").textContent = "返回编辑器";
+  $("btnDiff").disabled = false;
   renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
-  const fixed = res.edits.length, human = res.problems_after.length;
+  const human = res.problems_after.length;
   $("compile").innerHTML =
     `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
     `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
   if (res.compile_after.png) {
     $("preview").className = "";
     $("preview").innerHTML = `<img src="${res.compile_after.png}&token=${T}">`;
-    $("preview").parentElement.scrollIntoView({ behavior: "smooth" });
   }
-  $("btnDiff").onclick = () => {
-    diffShown = !diffShown;
-    $("diff").classList.toggle("hide", !diffShown);
-    $("editor").classList.toggle("hide", diffShown);
-    $("btnDiff").textContent = diffShown ? "返回编辑器" : "查看修复对比";
-  };
+  if (res.compile_after.png) {
+    // 更新预览标签页并自动切过去（diff 看完看渲染效果）
+    const png = res.compile_after.png;
+    lastPreviewTag = png.split("/").pop().split("?")[0];
+    $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · 修复后文档`;
+    $("pvImgWrap").innerHTML = `<img src="${png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+    $("btnPdf").classList.remove("hide");
+    setTimeout(() => showCenter("preview"), 4000);
+  }
 }
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
