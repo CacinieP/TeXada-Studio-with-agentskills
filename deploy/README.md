@@ -26,29 +26,50 @@ PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
 
 ## 3. 模型层（Ollama 用户级）
 
-宿主机无 nvcc、不便装 vLLM 时，Ollama 用户级部署即可满足 P0（Q4 量化下两模型常驻 ~25GB）：
+宿主机无 nvcc、不便装 vLLM 时，Ollama 用户级部署即可满足 P0。
+
+**模型选型（2026-09-28 实测定稿）**：
+
+| 角色 | 模型 | 说明 |
+| --- | --- | --- |
+| 解析 + 重识别 + 仲裁（单模型） | `qwen3.8:27b-q4_K_M`（~16GB） | **Qwen3.8 原生多模态**（官方模型卡：Native support for image and video），一个模型覆盖三个角色，常驻内存减半 |
+| 兼容回退 | `qwen2.5vl:7b`（~6GB） | 管线验证用；真实回路已验证（修复 + 幻觉拦截均工作） |
+| P1 升级 | `qwen3.8:27b-nvfp4` | 原生 NVFP4；**Ollama 无法加载（需 MLX 运行时）**，走 vLLM/NGC 容器路线 |
+| P1 升级 | `stepfun-ai/Step-3.7-Flash` | 联办方模型（评审加分）。**无 GGUF**，ModelScope 拉权重 + vLLM 服务（trust_remote_code） |
 
 ```bash
 mkdir -p ~/bin ~/lib
 curl -fL -C - https://gh-proxy.com/https://github.com/ollama/ollama/releases/download/v0.34.4/ollama-linux-arm64.tar.zst -o /tmp/ollama.tar.zst
 tar --zstd -xf /tmp/ollama.tar.zst -C ~/lib          # 得到 ~/lib/bin/ollama
 tmux new-session -d -s ollama "$HOME/lib/bin/ollama serve"   # 127.0.0.1:11434
-~/lib/bin/ollama pull qwen2.5vl:7b                    # 8B 级 VLM，解析/重识别 ~6GB
-~/lib/bin/ollama pull qwen3:30b-a3b                   # 30B MoE，质检仲裁 ~18GB
+~/lib/bin/ollama pull qwen3.8:27b-q4_K_M              # 27B 原生 VL + 仲裁
+~/lib/bin/ollama pull qwen2.5vl:7b                    # 可选：回退验证模型
 ```
 
 > GitHub 直连在节点出口不可用（连接被重置），实测走 gh-proxy.com 镜像 10+ MB/s；
-> 模型权重从 registry.ollama.ai 直连 12 MB/s。大文件一律节点内直下，禁止 scp 上传（赛事守则）。
+> 模型权重从 registry.ollama.ai 直连 11-12 MB/s。大文件一律节点内直下，禁止 scp 上传（赛事守则）。
+> 注意：sympy 只兼容 antlr4-python3-runtime 4.11；节点系统 python 为 PEP 668 管理，pip 一律走 venv。
 
-## 4. 真实修复回路
+### Step-3.7-Flash 权重下载（ModelScope，节点内直下）
+
+```bash
+~/.venvs/docf/bin/pip install modelscope
+tmux new-session -d -s step '~/.venvs/docf/bin/modelscope download \
+  --model stepfun-ai/Step-3.7-Flash --local_dir ~/models/step3.7-flash'
+```
+
+## 4. 真实修复回路（已验证）
 
 ```bash
 cd ~/doc-forensics && rm -rf state/node2
 PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
-  --state state/node2 --vlm http://127.0.0.1:11434 --vlm-model qwen2.5vl:7b
+  --state state/node2 --vlm http://127.0.0.1:11434 --vlm-model <模型tag>
 ```
 
-报告 provider 将标注 `local-vlm`；此模式结果才可进 BENCHMARK.md。
+qwen2.5vl:7b 实测（2026-09-28）：f-101 定界符补全 ✓、f-003 花括号修复 ✓、
+**f-002 VLM 幻觉（瞎编下标 `a_\text{system}`）被 SymPy 仲裁拒绝转人工 ✓** ——
+「解析与仲裁互为校验」的评审叙事已有实机证据。报告 provider 标注 `local-vlm`；
+此模式结果才可进 BENCHMARK.md。表格 VLM 重提取为 P1（当前表格修复走 NEEDS_HUMAN）。
 
 ## 5. P1/P2 升级路径
 
