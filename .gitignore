@@ -5,8 +5,8 @@ node_modules/
 .env
 .env.*
 
-# 运行时状态（断点续跑），不入库
-state/
+# 运行时状态（断点续跑），仅保留占位文件
+state/*
 !state/.gitkeep
 
 # 模型权重与样本大文件
