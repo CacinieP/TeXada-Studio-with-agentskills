@@ -123,7 +123,7 @@ require(["vs/editor/editor.main"], () => {
     value: "", language: "latex", theme: "vs-dark", automaticLayout: true,
     fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, renderWhitespace: "none"
   });
-  loadFile("exam-01.tex");
+  loadFile(P.get("file") || "exam-01.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
 });
 
 async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); }
