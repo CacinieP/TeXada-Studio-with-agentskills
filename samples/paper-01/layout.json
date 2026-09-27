@@ -1,0 +1,9 @@
+{
+  "doc": "paper-01",
+  "source": "fixture page (offline test double)",
+  "nodes": [
+    {"id": "f-001", "type": "formula", "page": 1, "data": {"latex": "E = mc^2", "crop": "samples/paper-01/crops/f-001.png"}},
+    {"id": "f-002", "type": "formula", "page": 1, "data": {"latex": "a_", "crop": "samples/paper-01/crops/f-002.png"}},
+    {"id": "f-003", "type": "formula", "page": 1, "data": {"latex": "\\sqrt{2+\\frac{a}{b}", "crop": "samples/paper-01/crops/f-003.png"}}
+  ]
+}

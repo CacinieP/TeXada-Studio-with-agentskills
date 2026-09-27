@@ -1,0 +1,15 @@
+{
+  "doc": "exam-01",
+  "source": "fixture page (offline test double)",
+  "nodes": [
+    {"id": "f-101", "type": "formula", "page": 1, "data": {"latex": "\\left( a+b \\right", "crop": "samples/exam-01/crops/f-101.png"}},
+    {"id": "t-201", "type": "table", "page": 1, "data": {
+      "rows": [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.5"]],
+      "expected": {"n_rows": 4, "n_cols": 2},
+      "crop": "samples/exam-01/crops/t-201.png"}},
+    {"id": "t-202", "type": "table", "page": 1, "data": {
+      "rows": [["题号", "得分"], ["1", "8"], ["2", "10"], ["合计", "18"]],
+      "expected": {"n_rows": 4, "n_cols": 2},
+      "crop": "samples/exam-01/crops/t-202.png"}}
+  ]
+}

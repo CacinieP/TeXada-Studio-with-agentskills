@@ -1,0 +1,14 @@
+{
+  "doc": "report-01",
+  "source": "fixture pages 3-4 (offline test double, cross-page table)",
+  "nodes": [
+    {"id": "t-301", "type": "table", "page": 3, "data": {
+      "rows": [["月份", "收入", "支出"], ["1月", "100", "80"], ["2月", "120", "90"]],
+      "expected": {"n_rows": 4, "n_cols": 3},
+      "crop": "samples/report-01/crops/t-301.png"}},
+    {"id": "t-302", "type": "table", "page": 4, "data": {
+      "rows": [["季度", "营收", "利润"], ["Q1", "300", "45"], ["Q2", "350", "60"], ["合计", "650", "105"]],
+      "expected": {"n_rows": 4, "n_cols": 3},
+      "crop": "samples/report-01/crops/t-302.png"}}
+  ]
+}
