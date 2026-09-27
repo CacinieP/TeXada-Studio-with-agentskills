@@ -1,7 +1,7 @@
-"""doc-forensics 演示 Web UI 后端（FastAPI）。
+"""TeXada-WebUI 演示 Web UI 后端（FastAPI）。
 
 启动（节点上）:
-  DEMO_TOKEN=<token> ~/.venvs/docf/bin/uvicorn app:app --host 0.0.0.0 --port 8888 --app-dir ~/doc-forensics/webui
+  DEMO_TOKEN=<token> ~/.venvs/docf/bin/uvicorn app:app --host 0.0.0.0 --port 8888 --app-dir ~/TeXada-WebUI/webui
 公网经跳板映射 8888→80<NN>，token 必填（守则：公网服务必须鉴权）。
 """
 
@@ -17,11 +17,11 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
 TOKEN = os.environ.get("DEMO_TOKEN", "docf-demo")
-REPO = os.path.expanduser("~/doc-forensics")
+REPO = os.path.expanduser("~/TeXada-WebUI")
 STATE = os.path.join(REPO, "state", "demo")
 VLM_MODEL = "qwen3.8:27b-q4_K_M"
 
-app = FastAPI(title="doc-forensics demo")
+app = FastAPI(title="TeXada-WebUI demo")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 

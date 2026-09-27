@@ -7,7 +7,7 @@
 
 ```bash
 rsync -az --exclude .git --exclude .venv --exclude state --exclude dist \
-  ./ spark:~/doc-forensics/          # ssh config 别名 spark（-p <SSH_PORT>）
+  ./ spark:~/TeXada-WebUI/          # ssh config 别名 spark（-p <SSH_PORT>）
 ```
 
 ## 2. 依赖与端到端自检（无需 GPU，5 分钟）
@@ -15,8 +15,8 @@ rsync -az --exclude .git --exclude .venv --exclude state --exclude dist \
 ```bash
 ssh spark
 python3 -m venv ~/.venvs/docf
-~/.venvs/docf/bin/pip install -r ~/doc-forensics/harness/requirements.txt
-cd ~/doc-forensics && rm -rf state/node1
+~/.venvs/docf/bin/pip install -r ~/TeXada-WebUI/harness/requirements.txt
+cd ~/TeXada-WebUI && rm -rf state/node1
 PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
   --state state/node1 --fixture-repairs samples/fixture_repairs.json
 ```
@@ -61,7 +61,7 @@ tmux new-session -d -s step '~/.venvs/docf/bin/modelscope download \
 ## 4. 真实修复回路（已验证）
 
 ```bash
-cd ~/doc-forensics && rm -rf state/node2
+cd ~/TeXada-WebUI && rm -rf state/node2
 PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
   --state state/node2 --vlm http://127.0.0.1:11434 --vlm-model <模型tag>
 ```

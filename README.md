@@ -1,4 +1,4 @@
-# doc-forensics
+# TeXada-WebUI
 
 > 文档解析质检 Skill 套件 · 第三届 NVIDIA DGX Spark 黑客松（Agent Skills 方向）参赛作品
 
@@ -8,7 +8,7 @@
 ## 仓库地图
 
 ```
-doc-forensics/
+TeXada-WebUI/
 ├── README.md
 ├── docs/
 │   ├── proposal.md              # 选题定稿书（评审视角，先读这个）
@@ -44,7 +44,7 @@ echo '{"rows":[["A","1"],["B","2"]],"expected":{"n_rows":2,"n_cols":2}}' \
 ## 备份
 
 ```bash
-scripts/backup.sh   # 生成 git bundle 到 ../_backups/doc-forensics/
+scripts/backup.sh   # 生成 git bundle 到 ../_backups/TeXada-WebUI/
 ```
 
 推送远端（GitHub 私有仓）需人工审阅后执行，见 docs/submission-checklist.md 的发布前检查。

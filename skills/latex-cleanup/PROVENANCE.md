@@ -15,9 +15,9 @@
 `evaluation/`（2026-09-22 评测产物与个人语料 diff）、`examples/gtm-corpus/`（GTM 书目语料）、
 `agents/openai.yaml`、`.gitignore`
 
-## 在 doc-forensics 中的定位
+## 在 TeXada-WebUI 中的定位
 
 内部依赖（同 `spark-ops`，不单独参赛）：为 `doc-formula-verify` 的修复结果提供**编译回环**验收——
 `audit_math.cjs` 数学审计（node）+ `compile_tex.py` 实际编译（Tectonic，P1/P2，目标环境按需）+
-`format_whitespace.py` 保守空白清洗。上游宿主（doc-forensics harness）在修复后调用其检查模式，
+`format_whitespace.py` 保守空白清洗。上游宿主（TeXada-WebUI harness）在修复后调用其检查模式，
 不修改本 Skill 的契约。上游更新时从来源仓重新提取并更新本文件。
