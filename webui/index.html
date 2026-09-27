@@ -118,9 +118,11 @@ function render(d) {
   if (repairs.length) {
     repairCard.classList.remove("hide");
     document.getElementById("repairs").innerHTML = repairs.map(e =>
-      `<div>· <code>${esc(e.original ?? "")}</code> → <code>${esc(e.latex ?? "重提取")}</code>
+      `<div style="margin:8px 0">· <code>${esc(e.original ?? "")}</code> → <code>${esc(e.latex ?? "重提取")}</code>
        ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}">` : "⚠️ 缺证据"}
-       <span style="color:var(--dim)">（${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次）</span></div>`).join("");
+       <span style="color:var(--dim)">（${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次）</span>
+       <div id="render-${esc(e.node_id)}" style="margin:4px 0 0 18px;color:var(--dim);font-size:13px">LaTeX 编译检查中…</div></div>`).join("");
+    for (const e of repairs) fetchRender(e.node_id);
   }
   if (d.report_ready && !d.running && !doneShown) {
     doneShown = true;
@@ -132,6 +134,23 @@ function render(d) {
   }
 }
 function terminalOf(d){ const t={}; for(const [,info] of Object.entries(d.docs)) for(const [nid,e] of Object.entries(info.nodes)) if(e.status) t[nid]=e; return t; }
+
+const renderCache = {};
+async function fetchRender(nid) {
+  const box = document.getElementById("render-" + nid);
+  if (!box || renderCache[nid]) return;
+  try {
+    const d = await j(`/api/render/${nid}?token=${T}`);
+    renderCache[nid] = d;
+    box.innerHTML =
+      `<span style="color:${d.orig_ok ? "var(--retry)" : "var(--human)"}">修复前编译 ${d.orig_ok ? "✓" : "✗"}</span>
+       <span style="color:var(--dim)"> → </span>
+       <span style="color:var(--ok)">修复后编译 ✓</span>` +
+      (d.img ? ` <img class="crop" src="${esc(d.img)}?token=${T}" style="background:#fff">` : " 修复后编译 ✗");
+  } catch (e) {
+    box.textContent = "LaTeX 编译检查失败";
+  }
+}
 
 async function loop(){ try { render(await j(`/api/status?token=${T}`)); } catch(e){} }
 nodeinfo(); loop(); setInterval(nodeinfo, 5000); setInterval(loop, 1000);

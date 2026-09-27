@@ -5,6 +5,7 @@
 公网经跳板映射 8888→80<NN>，token 必填（守则：公网服务必须鉴权）。
 """
 
+import hashlib
 import json
 import os
 import shlex
@@ -64,6 +65,67 @@ def _events():
                 except json.JSONDecodeError:
                     pass
     return out
+
+
+RENDER = os.path.join(STATE, "render")
+
+
+def _compile_latex(latex: str, node_id: str, tag: str):
+    """公式片段 → standalone PDF → PNG。成功返回 PNG 路径，编译失败返回 None。"""
+    os.makedirs(RENDER, exist_ok=True)
+    h = hashlib.sha1((node_id + tag + latex).encode()).hexdigest()[:12]
+    png = os.path.join(RENDER, f"{node_id}-{tag}-{h}.png")
+    if os.path.exists(png):
+        return png
+    d = os.path.join(RENDER, f"tmp-{h}")
+    os.makedirs(d, exist_ok=True)
+    tex = ("\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n"
+           "\\begin{document}\n$\\displaystyle " + latex + "$\n\\end{document}\n")
+    texf = os.path.join(d, "f.tex")
+    with open(texf, "w") as f:
+        f.write(tex)
+    try:
+        r = subprocess.run([os.path.expanduser("~/bin/tectonic"), "-o", d, texf],
+                           capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        return None
+    pdf = os.path.join(d, "f.pdf")
+    if r.returncode != 0 or not os.path.exists(pdf):
+        return None
+    subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf, png[:-4]], check=True)
+    return png if os.path.exists(png) else None
+
+
+@app.get("/api/render/{node_id}")
+def render(node_id: str, token: str = Query("")):
+    _guard(token)
+    ev = None
+    for e in _events():
+        if e.get("node_id") == node_id and e.get("status") == "OK":
+            ev = e
+    if not ev:
+        raise HTTPException(status_code=404, detail="node not repaired")
+    orig = ev.get("original")
+    rep = ev.get("latex")
+    orig_png = _compile_latex(orig, node_id, "orig") if orig else None
+    rep_png = _compile_latex(rep, node_id, "rep") if rep else None
+    return {
+        "orig_ok": orig_png is not None,
+        "rep_ok": rep_png is not None,
+        "original": orig, "latex": rep,
+        "img": f"/api/render-img/{os.path.basename(rep_png)}" if rep_png else None,
+    }
+
+
+@app.get("/api/render-img/{name}")
+def render_img(name: str, token: str = Query("")):
+    _guard(token)
+    if "/" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="bad name")
+    path = os.path.join(RENDER, name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="no render")
+    return FileResponse(path)
 
 
 @app.get("/")
