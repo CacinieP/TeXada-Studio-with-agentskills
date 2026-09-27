@@ -1,0 +1,18 @@
+{
+  "skill": "doc-table-audit",
+  "design": "with/without 对照：同批含错表格，度量结构错误检出率与误报率",
+  "dataset": {
+    "source": "自建错误注入集（报表/试卷）",
+    "counts": { "table_errors_injected": 5, "clean_controls": 3 },
+    "error_types": ["sum_mismatch", "shape_mismatch", "bad_number", "cross_page_continuation"]
+  },
+  "cases": [
+    { "id": "t-001", "input": "samples/table-sum-err-01.json", "inject": "合计列与行和不符", "expect": "RETRY sum_mismatch", "metric": "detection_rate" },
+    { "id": "t-002", "input": "samples/table-clean-01.json", "inject": null, "expect": "OK", "metric": "false_positive_rate" }
+  ],
+  "benchmark": {
+    "with_skill": null,
+    "without_skill": null,
+    "note": "TODO: 跑通后回填，产出 BENCHMARK.md"
+  }
+}

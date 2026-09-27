@@ -1,0 +1,17 @@
+{
+  "skill": "doc-layout-parse",
+  "design": "版面还原质量：结构树与人工标注的节点级 F1（类型+bbox IoU>0.5），以及 suspect 标记召回",
+  "dataset": {
+    "source": "OmniDocBench 子集（3 类页型：论文/试卷/报表）",
+    "counts": { "pages": 15 }
+  },
+  "cases": [
+    { "id": "l-001", "input": "samples/paper-01.pdf", "expect": "reading_order 正确率>=0.9", "metric": "order_accuracy" },
+    { "id": "l-002", "input": "samples/exam-01.pdf", "expect": "formula/table 节点不漏检", "metric": "node_recall" }
+  ],
+  "benchmark": {
+    "with_skill": null,
+    "without_skill": null,
+    "note": "TODO: 目标环境回填"
+  }
+}
