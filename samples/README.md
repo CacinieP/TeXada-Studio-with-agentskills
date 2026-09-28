@@ -15,8 +15,8 @@ Studio 自带 `docs/report-01.tex` 和 `docs/exam-01.tex`，有意包含合计�
 
 ## 诚实性声明
 
-- `layout.json` 是 **VLM 解析结果的测试替身**（真实运行由 `doc-layout-parse` 调本地 VLM 产出）；
-  crop 为占位灰块（真实运行是 bbox 裁剪图）。
+- `layout.json` 是 **VLM 解析结果的测试替身**（当前没有接入真实图像解析器）；
+  crop 为占位灰块，不能作为真实视觉模型证据。
 - `fixture_repairs.json` 是**修复测试替身**（模拟 VLM 重识别结果）。用 `--fixture-repairs` 跑时报告会
   如实标注 `provider: fixture (offline test double)`；真实修复用 `--vlm http://127.0.0.1:<port>` 接本地
   Ollama/vLLM，两者不得混淆，BENCHMARK 只认真实模式。
@@ -27,5 +27,5 @@ Studio 自带 `docs/report-01.tex` 和 `docs/exam-01.tex`，有意包含合计�
 PYTHONPATH=harness python3 -m docforensics run samples --state state/run1 \
   --fixture-repairs samples/fixture_repairs.json     # 离线演示
 PYTHONPATH=harness python3 -m docforensics run samples --state state/run2 \
-  --vlm http://127.0.0.1:11434 --vlm-model qwen2.5vl:7b   # 真实 VLM
+  --vlm http://127.0.0.1:11434 --vlm-model qwen2.5vl:7b   # 真实文本模型
 ```

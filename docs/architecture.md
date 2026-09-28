@@ -1,61 +1,40 @@
-# 架构与内存预算
+# 当前架构与运行边界
 
-## 总体架构（可直接画成评审图）
+TeXada 包含 Studio 交互界面和读取已有结构树的 CLI。两条路径共用公式校验脚本和本地模型提供方，但不是完全相同的执行管线。
 
 ```text
-用户入口（CLI：python -m docforensics run ./samples/）
-        │
-Agent Harness（规划循环、三态协议、state.jsonl 断点续跑）
-        │
-Skills 层
- ├─ doc-layout-parse  → 结构树 JSON（带 bbox、node.type、confidence）
- ├─ doc-table-audit   → 表格节点三态判定（scripts 交叉验算）
- ├─ doc-formula-verify→ 公式节点三态判定（SymPy + VLM 重识别）
- └─ doc-report        → 报告 + diff + 证据链
-        │
-工具层：本地文件 / OpenCV（重裁剪）/ SymPy（CPU）
-        │
-模型层：LiteLLM 网关
- ├─ vLLM：30B MoE（NVFP4）—— 质检仲裁（常驻）
- ├─ vLLM：8B VLM —— 版面解析与重识别（常驻）
- ├─ embedding 0.6B + reranker 0.6B（常驻）
- └─ llama-swap：按需装卸，重负载串行排队
-        │
-DGX Spark · 128GB 统一内存 · 常驻总量 < 60GB 安全线
+Studio 浏览器
+  Monaco 本站资源 → FastAPI → 行内公式与简单 tabular 检查
+                          → 本地 Ollama 文本候选 → SymPy 回判
+                          → Tectonic 编译 → diff → 人工采用 → 导出
+
+CLI 已有 layout.json
+  Python harness → formula / table checker → 最多两次修复尝试
+                 → state.jsonl → report.md → 下次运行跳过终态节点
 ```
 
-## 内存预算表（2026-09-28 定稿：单模型方案）
+## Skills 与脚本
 
-| 组件 | 精度 | 常驻占用 | 说明 |
-| --- | --- | --- | --- |
-| qwen3.8:27b（解析/重识别/仲裁三合一） | Q4_K_M | ~16 GB | 最新代**原生多模态**，单模型三角色 |
-| embedding + reranker | 原生 | ~2–3 GB | 0.6B × 2（证据匹配） |
-| KV cache 并发预算 | — | ~40–70 GB | **16 路并发文档流**同时预填与仲裁 |
-| 系统 + Agent harness | — | ~8 GB | DGX OS + Python 栈 |
-| **合计** | | **< 60 GB 安全线** | 128GB 内留 2× 余量 |
+`SKILL.md` 提供触发说明、步骤、输入和限制；Python harness 按节点类型执行预先编排的循环。当前不是自主规划任意工具的通用 Agent，也不使用 MCP。
 
-关键论证（对评审「为什么是这台机器」）：
-- **并发吞吐**：16GB 权重 + ~100GB KV 预算支持十几路文档流并行质检；24GB 消费卡装下模型却装不下并发 —— 批量文档场景（试卷库/论文库）的吞吐差距是数量级的
-- **符号仲裁**：SymPy 解析回判 + 表格精确验算（CPU 确定性工具）与视觉模型互为校验，实机已验证拦截 VLM 幻觉（`a_` → `a_\text{system}` 被拒）；仲裁质量不靠更大的模型，靠确定性工具，这是与「更大模型更好」路线的本质区别
-- 单流 decode 慢不作为叙事点，用并发吞吐与仲裁质量说话
+- `doc-formula-verify`：SymPy 语法校验脚本；检查器故障不得显示为通过。
+- `doc-table-audit`：CLI 对结构化数据做合计校验；Studio 另有面向简单 LaTeX 表格的行解析和重算。
+- `doc-report`：CLI 状态报告和 Studio 候选导出约定。
+- `doc-layout-parse`：已有 layout 输入的准备说明；没有自动 PDF/OCR 解析器。
+- `latex-cleanup`：独立 LaTeX 整理、编译和验证工具集；Studio 当前直接调用 Tectonic，未调用整个 Skill 工具链。
 
-P1 可选：追加 `qwen3:30b-a3b`（18GB）作文本仲裁二意见，恢复双模型常驻（合计 ~37GB 仍在预算内）；对提交非必需。
+## Spark 上的实际使用
 
-## 断点续跑协议（state.jsonl）
+实测节点为 ARM64，GPU 报告 NVIDIA GB10。当前 Studio 配置的本地模型标签为 `qwen3.8:27b-q4_K_M`，标签和文件存在由节点 Ollama 查询得到，不据此断言模型官方架构。当前请求只有文本，没有传入图像。模型在节点内执行，浏览器通过受保护的服务访问结果。
 
-每行一条决策事件：
+没有实现 embedding、reranker、LiteLLM、llama-swap 或 16 路并发调度，也没有这些功能的吞吐评测。统一内存有利于在同一节点放置模型和工具，但不能据此推算相对消费级 GPU 的性能倍数。
 
-```json
-{"ts": "...", "doc": "samples/exam-01", "node_id": "f-014", "skill": "doc-formula-verify",
- "action": "RETRY", "attempt": 2, "reason": "sympy parse error: unexpected token", "evidence": "state/crops/f-014-a2.png"}
-```
+## 状态和审阅
 
-- 启动时读入已有事件，跳过已完成节点（幂等）
-- `NEEDS_HUMAN` 不阻塞流水线，仅进报告
-- 中断恢复演示 = 杀进程 → 重跑 → 从断点继续（demo 脚本第 5 段）
+CLI 以文档及节点标识查找已完成状态；相同输入重跑跳过终态节点。输入改变时必须新建状态目录。Studio 任务状态在进程内存中，服务重启后不能恢复；只支持可信用户、一个 worker 的演示部署。
 
-## 安全边界（对应官方 Scanned 检查）
+Studio 保留原文和候选模型；候选先进入 diff，用户点击采用后才进入编辑器。报告记录修改、内容哈希、编译结果、耗时与检查范围。语法可解析、PDF 可生成与数学含义正确是不同判断。
 
-- Skill 不发起网络请求；模型推理仅指向 127.0.0.1 网关
-- 无硬编码路径、无密钥；文件读写限定工作目录
-- 声明的工具边界与实际行为一致（不越权执行 shell）
+## 外部依赖
+
+Monaco 固定版本资源随仓库分发，浏览器访问本站资源。Tectonic 首次可能下载 TeX 包；依赖安装和模型下载也需要网络。旧仪表盘含 KaTeX CDN，因此未宣称整套系统断网可用。

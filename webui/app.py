@@ -355,20 +355,29 @@ def studio_preview(name: str, tag: str, token: str = Query("")):
     return FileResponse(p)
 
 
+def _verify_formula(latex: str):
+    """Verifier failures are environment problems, never a successful check."""
+    try:
+        result = subprocess.run([_sys.executable, VERIFY, latex],
+                                capture_output=True, text=True, timeout=30)
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+        if result.returncode != 0 or data.get("status") not in ("OK", "RETRY", "NEEDS_ENV"):
+            raise ValueError("verifier did not complete")
+        return data
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError, AttributeError):
+        return {"status": "NEEDS_ENV", "reason": "公式检查器不可用，请检查 SymPy / antlr 依赖与服务日志"}
+
+
 def _formula_problems(content: str):
     problems, nid = [], 0
     for i, line in enumerate(content.splitlines(), 1):
         for m in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
             nid += 1
-            fid = f"f-{i:03d}-{nid}"
-            v = subprocess.run([_sys.executable, VERIFY, m.group(1)], capture_output=True, text=True)
-            try:
-                vj = json.loads(v.stdout.strip().splitlines()[-1])
-            except Exception:
-                vj = {"status": "OK"}
+            vj = _verify_formula(m.group(1))
             if vj.get("status") != "OK":
-                problems.append({"id": fid, "type": "formula", "line": i, "latex": m.group(1),
-                                 "status": vj.get("status", "RETRY"), "reason": vj.get("reason", "")})
+                problems.append({"id": f"f-{i:03d}-{nid}", "type": "formula", "line": i,
+                                 "latex": m.group(1), "status": vj["status"],
+                                 "reason": vj.get("reason", "")})
     return problems
 
 
@@ -419,20 +428,19 @@ def _apply_fixes(content: str, log):
     edits = []
     fp = _formula_problems(content)
     for p in fp:
+        if p["status"] == "NEEDS_ENV":
+            log.append(f"[doc-formula-verify] {p['id']} 检查器不可用，保留原文并转人工")
+            continue
         li = p["line"] - 1
         latex = p["latex"]
         fixed, ok = None, False
         for attempt in (1, 2):
-            log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → VLM 重识别（第 {attempt} 次）")
+            log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 本地模型文本修复（第 {attempt} 次）")
             cand = PROVIDER.repair_formula({"id": p["id"], "data": {"latex": latex}})
             if not cand:
-                log.append(f"[doc-formula-verify] {p['id']} VLM 无有效修复")
+                log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选")
                 continue
-            v = subprocess.run([_sys.executable, VERIFY, cand], capture_output=True, text=True)
-            try:
-                vj = json.loads(v.stdout.strip().splitlines()[-1])
-            except Exception:
-                vj = {"status": "RETRY"}
+            vj = _verify_formula(cand)
             if vj.get("status") == "OK":
                 fixed, ok = cand, True
                 log.append(f"[doc-formula-verify] {p['id']} 修复 → SymPy 回判 ✓ ：{cand}")
@@ -463,11 +471,12 @@ def _apply_fixes(content: str, log):
 
 def _studio_job(name: str, content: str, job_id: str):
     job = _jobs[job_id]
+    started = time.monotonic()
     log = job["log"]
     try:
         log.append(f"[studio] 编译修复前版本（原始文档）…")
         before = _studio_compile(content, name, "before")
-        log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败（存在注入错误）'}")
+        log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败，请检查编译日志'}")
         fixed, edits = _apply_fixes(content, log)
         log.append(f"[studio] 共应用 {len(edits)} 处修复")
         log.append(f"[studio] 编译修复后版本…")
@@ -475,7 +484,13 @@ def _studio_job(name: str, content: str, job_id: str):
         log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
-                         "problems_after": _analyze(fixed)}
+                         "problems_after": _analyze(fixed),
+                         "model": VLM_MODEL, "provider": "local-model-text",
+                         "elapsed_seconds": round(time.monotonic() - started, 2),
+                         "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                         "candidate_sha256": hashlib.sha256(fixed.encode()).hexdigest(),
+                         "requires_review": True,
+                         "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像"}
         job["done"] = True
     except Exception as e:  # noqa: BLE001
         log.append(f"[studio] 出错：{e}")

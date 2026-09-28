@@ -1,24 +1,18 @@
 ---
 name: doc-table-audit
-description: Audit extracted tables for structural and numeric errors — merged-cell integrity, row/column count consistency, cross-page continuation, and cross-checking totals against row sums. Use when a document contains tables (reports, exam papers, financial scans) and the extracted table needs verification before it is trusted or exported.
+description: Check supplied table grids for declared row and column counts and numeric totals. Use for simple extracted reports or LaTeX tables that have explicit totals. This repository does not implement merged-cell or cross-page reconstruction.
 ---
 
 # Table Audit
 
 ## Workflow
 
-1. Collect nodes typed `table` from the layout tree produced by `doc-layout-parse`.
-2. For each node run `scripts/audit_table.py` with the extracted grid and any expected metadata
-   (declared dimensions, footer totals). The script is deterministic — do not re-derive checks via the model.
-3. Interpret the verdict:
-   - `OK` — record and continue.
-   - `RETRY` with `reason=page_break` — trigger re-parse of the two adjacent pages, then re-audit the merged grid.
-   - `RETRY` with `reason=sum_mismatch` — re-crop the table region and re-invoke the VLM; after two failures mark `NEEDS_HUMAN`.
-4. Never modify table data directly; repairs must go through re-extraction so evidence stays traceable.
-5. Append every verdict to `state.jsonl` with the failing cell indices.
+1. For CLI input, collect table nodes from an existing layout tree and run `scripts/audit_table.py` with `rows` and any `expected` dimensions or totals.
+2. The script compares Decimal values. Read the reason and cell location when a declared shape or sum fails; do not infer a correct value from appearance alone.
+3. The CLI supports fixture replacement grids for testing. Its real provider does not re-extract table images; an unresolved table becomes `NEEDS_HUMAN`.
+4. Studio separately checks simple `tabular` rows and can generate a recomputed total as a candidate. It assumes the data rows are correct and the final row is the total; it cannot decide which source cell was misrecognized.
+5. Review the original evidence before adopting any change. Preserve the original table and record every candidate in the diff and report.
 
-## Guardrails
+## Boundaries
 
-- Numeric comparisons use exact decimal semantics (the script handles this); do not eyeball totals.
-- A table flagged `suspect` by the parser MUST be audited even if it looks fine.
-- At most 3 VLM re-invocations per table node; never block the pipeline.
+No merged-cell verification, cross-page joining, or image re-cropping is implemented here. Unsupported macros, mixed units and complex numeric formatting require manual review. At most two repair attempts are allowed in the CLI. Do not invent source evidence or silently change a document.

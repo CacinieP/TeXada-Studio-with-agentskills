@@ -1,25 +1,22 @@
 ---
 name: doc-layout-parse
-description: Parse scanned documents or page images into a structured layout tree with bounding boxes, reading order, and node types (text/table/formula). Use when processing scanned papers, textbooks, exam papers, forms, or when the user asks to extract structured content from document images before quality checks.
+description: Prepare or inspect a supplied layout.json document tree before formula and table checks. Use when structured OCR output is already available or when planning a document layout integration. This repository does not implement PDF or image OCR.
 ---
 
-# Layout Parse
+# Layout Input Preparation
 
-## Workflow
+## Current workflow
 
-1. Receive one or more page images (or a PDF path) plus an output directory.
-2. Invoke the local VLM endpoint (`vlm-8b`, 127.0.0.1) via `scripts/parse.py` to obtain per-page blocks:
-   `{page, bbox:[x0,y0,x1,y1], type: text|table|formula|figure, order, text?, confidence}`.
-3. Merge cross-page reading order; emit a single `layout.json` structure tree.
-4. Nodes with `confidence < 0.8` MUST be flagged `"suspect": true` — do not silently pass them on.
-5. Append a decision line to `state.jsonl` (action=PARSE, nodes=n, suspects=m).
+1. Request a supplied layout tree or an authorized OCR export. The CLI consumes an existing `layout.json`; it does not run a page parser.
+2. Inspect the examples under `samples/` for the expected schema: a document identifier and nodes with `id`, `type`, and `data`. Formula data contains `latex`; table data contains `rows` and `expected`.
+3. Preserve source locations and existing crop paths when available. Never invent coordinates, confidence, or image evidence.
+4. Confirm that the document and node identifiers are stable before resuming an existing state directory. A changed input should use a new state directory.
+5. If only PDF or page images are available, explain that OCR integration is required and stop this step without claiming extraction succeeded.
+
+## Planned integration
+
+`references/vlm-prompts.md` contains prompt drafts for a future local image parser. There is no `scripts/parse.py` implementation in this repository. Cross-page reading order, crop regeneration, and confidence-based routing remain unimplemented.
 
 ## Guardrails
 
-- Read-only on inputs; all output goes to the run's state directory.
-- If the VLM endpoint is unreachable, emit `NEEDS_HUMAN` for the whole doc — never fall back to a cloud API.
-- Full prompt templates and tuning notes live in `references/vlm-prompts.md`; read only when adjusting.
-
-## Outputs
-
-- `state/<doc>/layout.json` — the structure tree consumed by `doc-table-audit` and `doc-formula-verify`.
+Keep inputs read-only. Write derived outputs to a separate state directory. Do not fetch private documents or send them to external services without authorization.

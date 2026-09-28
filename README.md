@@ -7,9 +7,14 @@ LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。�
 参赛作品名：**TeXada Studio with Agent Skills · 文档质检与修复**。仓库名：`TeXada-Studio-with-agentskills`。
 本仓库承接已经清理的项目历史，原仓库保留私有；命名依据与迁移范围见 [仓库说明](docs/repository-migration.md)。
 
+团队：LinguistsWantTech · 队长邓一纯 · 队员刘风华。
+材料入口：[项目报告](docs/project-report.md) · [技术征文](docs/technical-article.md) · [实际提交字段](docs/submission-checklist.md)。
+
+![Studio 的源码、预览与人工采用流程](docs/images/studio-overview.png)
+
 ## 当前能力
 
-- Studio：编辑 / 上传 / 导出 `.tex`，并排预览第一页 PDF，查看修复前后 diff。
+- Studio：编辑 / 上传 / 导出 `.tex`，并排预览第一页 PDF，查看候选 diff，人工采用后导出质检报告。
 - 公式：用 SymPy 检查部分 LaTeX 语法，调用本地模型尝试修复，再做语法回判。
 - 表格：检查简单 `tabular` 合计值；复杂跨页表格和任意 LaTeX 宏不在支持范围。
 - CLI：读取已有 `layout.json`，输出 `OK / RETRY / NEEDS_HUMAN`、事件日志和 Markdown 报告；重跑跳过已完成节点。

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-28 Submission preparation
+
+- Fail closed when formula verification crashes or dependencies are missing; reject partial LaTeX parses while supporting delimiter sizing commands.
+- Present repair candidates for review before adopting them into the editor; export audit records with hashes and compile results.
+- Reset failed task controls and discard stale file / preview responses.
+- Align Skills, architecture, deployment notes and submission documents with actual implementation and the verified form.
+
 ## Unreleased
 
 - 参赛仓库使用 `TeXada-Studio-with-agentskills`，作品显示名统一为 TeXada Studio with Agent Skills；更新安装目录、源码链接和打包名称。

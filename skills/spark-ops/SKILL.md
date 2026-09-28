@@ -1,21 +1,24 @@
 ---
 name: spark-ops
-description: Plan memory budgets and manage model services for DGX Spark local inference — resident-model sizing, vLLM launch parameters, OOM diagnosis and graceful degradation. Use when preparing the model layer for a pipeline that keeps several models resident on a 128GB unified-memory device, or when a run fails with out-of-memory errors during document processing.
+description: Inspect a DGX Spark node and prepare user-level model and document-tool services. Use when deploying this repository or diagnosing local inference failures on the node assigned to the team.
 ---
 
-# Spark Ops（内部依赖 · 不单独参赛）
+# Spark Operations
 
-> 本 Skill 是 TeXada Studio with Agent Skills 的运维底座，为评审回答「为什么需要这台机器」提供数据支撑。
+Read the team's node access manual before deployment. Use only the allocated node. Keep credentials and allocated network details out of published material.
 
 ## Workflow
 
-1. On pipeline start, run `scripts/budget_check.py` (TODO P1) against the declared resident set
-   (vlm-8b / 30b-moe / embed / rerank) and the device memory ceiling; refuse to start if projected > 60GB.
-2. Expose `nvidia-smi`/`tegrastats` snapshots into the demo overlay so residency claims are visible on screen.
-3. On OOM: log the failing allocation, unload the lowest-priority model via llama-swap, retry once, then degrade
-   (serialize the two vision-heavy stages) and record the degradation in state.jsonl.
+1. Read the node architecture, available disk space and GPU identity using read-only system commands. Keep at least 20 percent disk space available.
+2. Inspect existing user-level environments and services before installing anything. Reuse working dependencies when appropriate.
+3. Use a virtual environment, user directory or permitted container. Run persistent tasks in tmux. Keep model endpoints local and protect any externally accessible application with authentication.
+4. Set the actual installed model tag explicitly. Monitor measured use and errors; do not invent a memory budget, throughput multiplier or concurrent stream count.
+5. On resource failure, report the error and propose a smaller workload. Do not kill unrelated jobs or change system configuration.
+
+## Not implemented
+
+Automatic memory scheduling, llama-swap integration and a budget-check script are future work. This Skill does not claim they run at application startup.
 
 ## Guardrails
 
-- Monitoring commands are read-only; never kill user processes.
-- Degradation must be reversible and reported — silent performance loss is a failure mode, not a workaround.
+Do not reboot or shut down the node, alter accounts, firewall, drivers or networking, or access another team's node. Do not upload files larger than 1 GB using SCP. Back up project outputs before the organizer reclaims the machine.

@@ -1,0 +1,52 @@
+{
+  "table": {
+    "edits": [
+      {
+        "line": 21,
+        "before": "115 \\\\",
+        "after": "105",
+        "skill": "doc-table-audit"
+      }
+    ],
+    "problems_after": [],
+    "model": "qwen3.8:27b-q4_K_M",
+    "provider": "local-model-text",
+    "elapsed_seconds": 6.94,
+    "original_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
+    "candidate_sha256": "ead358180d7aafbb1b47656548c2d9fb130fe129d701b45354bae4da07233ba7",
+    "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像",
+    "compile_before_ok": true,
+    "compile_after_ok": true
+  },
+  "exam": {
+    "edits": [
+      {
+        "line": 14,
+        "before": "a_",
+        "after": "a_1",
+        "skill": "doc-formula-verify"
+      },
+      {
+        "line": 16,
+        "before": "\\left( a+b \\right",
+        "after": "\\left( a+b \\right)",
+        "skill": "doc-formula-verify"
+      },
+      {
+        "line": 25,
+        "before": "4.5 \\\\",
+        "after": "4",
+        "skill": "doc-table-audit"
+      }
+    ],
+    "problems_after": [],
+    "model": "qwen3.8:27b-q4_K_M",
+    "provider": "local-model-text",
+    "elapsed_seconds": 105.73,
+    "original_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+    "candidate_sha256": "8068f2aa35d1d2f7e53f8368e185e2256090e5fc0f5bf02382c92a2703dad76f",
+    "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像",
+    "compile_before_ok": false,
+    "compile_after_ok": true
+  }
+}

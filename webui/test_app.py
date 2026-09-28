@@ -112,6 +112,51 @@ class AppTest(unittest.TestCase):
             self.assertTrue(studio._run["done"])
             self.assertEqual(studio._run["code"], 7)
 
+class VerificationFailureTest(unittest.TestCase):
+    def test_verifier_failure_is_not_green(self):
+        failures = [SimpleNamespace(returncode=1, stdout='', stderr='crash'),
+                    SimpleNamespace(returncode=0, stdout='not json', stderr=''),
+                    SimpleNamespace(returncode=0, stdout='{"status":"UNKNOWN"}', stderr='')]
+        for result in failures:
+            with self.subTest(result=result), patch.object(studio.subprocess, 'run', return_value=result):
+                self.assertEqual(studio._formula_problems('$a_$')[0]['status'], 'NEEDS_ENV')
+        with patch.object(studio.subprocess, 'run', side_effect=subprocess.TimeoutExpired('verify', 30)):
+            self.assertEqual(studio._verify_formula('x')['status'], 'NEEDS_ENV')
 
-if __name__ == "__main__":
+    def test_environment_failure_never_calls_model_or_changes_text(self):
+        content = 'Original $a_$ text.\n'
+        with patch.object(studio, '_verify_formula', return_value={'status': 'NEEDS_ENV'}), \
+             patch.object(studio.PROVIDER, 'repair_formula') as repair:
+            fixed, edits = studio._apply_fixes(content, [])
+        repair.assert_not_called()
+        self.assertEqual(fixed, content)
+        self.assertEqual(edits, [])
+
+    def test_report_total_preserves_table_and_other_cells(self):
+        content = (ROOT / 'samples/docs/report-01.tex').read_text()
+        with patch.object(studio, '_formula_problems', return_value=[]), \
+             patch.object(studio.PROVIDER, 'repair_formula') as repair:
+            fixed, edits = studio._apply_fixes(content, [])
+        repair.assert_not_called()
+        self.assertEqual(fixed, content.replace('650 & 115', '650 & 105'))
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(studio._table_problems(fixed), [])
+
+
+class RealVerifierTest(unittest.TestCase):
+    def test_strict_checker_rejects_partial_parse(self):
+        self.assertEqual(studio._verify_formula('x+')['status'], 'RETRY')
+        self.assertEqual(studio._verify_formula(r'\frac{1}{2}')['status'], 'OK')
+        self.assertEqual(studio._verify_formula(r'\left(a+b\right)')['status'], 'OK')
+        self.assertEqual(studio._verify_formula(r'\left(a+b\right')['status'], 'RETRY')
+
+    def test_missing_antlr_is_environment_problem(self):
+        spec = importlib.util.spec_from_file_location('formula_verifier', studio.VERIFY)
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+        with patch('sympy.parsing.latex.parse_latex', side_effect=ImportError('antlr unavailable')):
+            self.assertEqual(verifier.check('x')[0], 'NEEDS_ENV')
+
+
+if __name__ == '__main__':
     unittest.main()

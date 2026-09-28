@@ -1,19 +1,22 @@
 ---
 name: doc-formula-verify
-description: Verify and repair OCR-extracted mathematical formulas by round-tripping through a symbolic parser and visual re-render. Use when processing scanned papers, textbooks, exam papers, or any document containing LaTeX/handwritten formulas, or when the user mentions formula OCR errors, MathML, or TeX conversion.
+description: Check LaTeX formula syntax with SymPy and review repair candidates from a local text model. Use when a LaTeX formula fails to parse or OCR-derived formula text needs syntax checks. Parsing does not validate mathematical meaning.
 ---
 
 # Formula Verification
 
 ## Workflow
 
-1. Read the parse tree produced by `doc-layout-parse`; collect nodes typed `formula`.
-2. For each node run `scripts/verify.py` — SymPy parse; on failure emit `RETRY` with the failure reason.
-3. On `RETRY`, re-crop with 20% padding and re-invoke the local VLM at higher resolution (see `references/vlm-prompts.md`).
-4. After two failed retries mark `needs_human` and continue — never block the pipeline.
-5. Append every decision to `state.jsonl` so an interrupted run can resume.
+1. Read formula text from a supplied layout tree or the user's LaTeX source. Preserve the original text and location.
+2. Run `scripts/verify.py` with the formula as one command argument, or send JSONL records on stdin. Never build a shell command from document text.
+3. `OK` means the parser accepted the expression; it is not a semantic proof. `RETRY` means parsing failed. `NEEDS_ENV` means dependencies or the checker need attention; do not call the model for an environment error.
+4. For `RETRY`, the supplied harness can ask the explicitly configured local Ollama text model for a candidate and run the checker again. Limit this to two attempts. The current provider sends text only and does not inspect crops.
+5. Preserve a diff and the source evidence. Ask the reviewer to verify meaning, especially when an index or symbol was missing. After unsuccessful attempts, keep the original and mark `NEEDS_HUMAN`.
+6. The CLI records decisions in `state.jsonl`; Studio presents a candidate and waits for the user to adopt it into the editor.
 
-## Guardrails
+## Boundaries
 
-- Never silently rewrite a formula; every edit must carry the original crop as evidence.
-- Do not exceed 3 VLM calls per formula node.
+- Do not invent an original image, confidence score, or semantic validation result.
+- Existing crop files can accompany CLI evidence; missing crops must be disclosed.
+- Re-cropping and image-based repair are future integration work, not implemented by these scripts.
+- Use only the configured local model service. Do not send document content to a cloud provider without authorization.

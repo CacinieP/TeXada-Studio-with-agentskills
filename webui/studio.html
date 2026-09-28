@@ -104,11 +104,11 @@
     <div id="sidebar">
       <h4>资源管理器 · 文档</h4>
       <div id="files"></div>
-      <h4 style="margin-top:12px">Skills · 已启用</h4>
-      <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>版面结构树解析</i></div></div>
+      <h4 style="margin-top:12px">工作流与 Skills</h4>
+      <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>工作流说明 · 尚未接入 OCR</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-table-audit</b><i>表格合计交叉验算</i></div></div>
-      <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>编译回环 · Tectonic</i></div></div>
+      <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>工具集 · Studio 调用 Tectonic</i></div></div>
     </div>
     <div class="vsep" id="sepL" title="拖拽调整 · 双击折叠">
       <button class="sep-btn left" id="sepBtnL" title="折叠/展开侧栏">◀</button>
@@ -143,6 +143,9 @@
     </div>
     <div id="rightpanel">
       <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
+      <div class="panel"><h4>修复候选</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。修复后请查看对比，再决定是否采用。</div>
+        <button class="act" id="btnAccept" disabled>采用候选到编辑器</button>
+        <button class="act ghost" id="btnReport" disabled style="margin-top:8px">导出质检报告</button></div>
       <div class="panel"><h4>编译 · Tectonic</h4><div id="compile" class="kv hint">修复时自动编译对比</div></div>
       <div class="panel"><h4>预览 · Preview</h4><div id="preview" class="hint">修复后显示渲染页面</div></div>
     </div>
@@ -279,7 +282,16 @@ async function loadFiles() {
     `<div class="file${f === curName ? " active" : ""}" onclick="loadFile('${f}')">${f}</div>`).join("");
 }
 
+let fileEpoch = 0, previewEpoch = 0, lastResult = null;
 async function loadFile(name) {
+  if (busy) return;
+  const epoch = ++fileEpoch;
+  ++previewEpoch; lastResult = null; lastPreviewTag = null;
+  $("btnAccept").disabled = true; $("btnReport").disabled = true;
+  $("btnPdf").classList.add("hide");
+  $("preview").textContent = "修复后显示候选预览";
+  $("compile").textContent = "修复时自动编译对比";
+  $("reviewHint").textContent = "语法通过不代表含义正确，请核对修改。";
   curName = name; preFix = null;
   $("tabname").textContent = name;
   $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
@@ -290,6 +302,7 @@ async function loadFile(name) {
     if (! $("previewPane").style.width) $("previewPane").style.width = "38%";
   }
   const d = await j(`/api/studio/file?token=${T}&name=${name}`);
+  if (epoch !== fileEpoch) return;
   if (editor.getModel()) editor.getModel().setValue(d.content);
   else editor.setValue(d.content);
   showCenter("edit");
@@ -300,24 +313,26 @@ async function loadFile(name) {
 }
 
 async function analyze() {
+  const epoch = fileEpoch;
+  const content = currentContent();
   const d = await j(`/api/studio/analyze?token=${T}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: curName, content: editor.getValue() })
+    body: JSON.stringify({ name: curName, content })
   });
-  renderProblems(d.problems);
+  if (epoch === fileEpoch && content === currentContent()) renderProblems(d.problems);
 }
 
 function renderProblems(problems) {
   $("probCount").textContent = problems.length;
   $("probCount").style.display = problems.length ? "inline-block" : "none";
   if (!problems.length) {
-    $("problems").innerHTML = `<div class="prob fixed">✓ 未发现问题，文档干净</div>`;
+    $("problems").innerHTML = `<div class="prob fixed">✓ 支持范围内未检出问题；数学含义仍需核对</div>`;
     return;
   }
   $("problems").innerHTML = problems.map(p => `
     <div class="prob ${p.type === "formula" ? "f" : "t"}" onclick="gotoLine(${p.line})">
       <div>${p.type === "formula" ? "公式" : "表格合计"} · <span class="loc">L${p.line}</span>
-        ${p.status === "RETRY" ? "⚠ 可自动修复" : "✗ 需人工"}</div>
+        ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</div>
       <div class="loc">${esc((p.latex ?? p.reason ?? "").slice(0, 60))}</div>
     </div>`).join("");
 }
@@ -405,6 +420,8 @@ function setPvImg(src) {
 $("pvZoomFit").onclick = () => { pvZoom = "fit"; if ($("pvImg")) $("pvImg").click = null, setPvImg($("pvImg").src); };
 $("pvZoom100").onclick = () => { pvZoom = "raw"; if ($("pvImg")) setPvImg($("pvImg").src); };
 async function compilePreview(content) {
+  const epoch = ++previewEpoch, name = curName;
+  lastPreviewTag = null; $("btnPdf").classList.add("hide");
   $("pvStatus").innerHTML = `<span class="spin"></span>Tectonic 编译中…`;
   $("pvTabStatus").innerHTML = `<span class="spin"></span>`;
   $("pvLog").classList.add("hide"); $("pvImgWrap").innerHTML = "";
@@ -413,6 +430,7 @@ async function compilePreview(content) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: curName, content })
     });
+    if (epoch !== previewEpoch || name !== curName) return;
     if (d.ok && d.png) {
       lastPreviewTag = d.png.split("/").pop().split("?")[0];
       $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
@@ -427,7 +445,7 @@ async function compilePreview(content) {
       $("pvLog").textContent = d.log || "unknown";
       $("btnPdf").classList.add("hide");
     }
-  } catch (e) { $("pvStatus").textContent = "编译请求失败: " + e.message; }
+  } catch (e) { if (epoch === previewEpoch) $("pvStatus").textContent = "编译请求失败: " + e.message; }
 }
 $("btnCompile").onclick = () => compilePreview(currentContent());
 
@@ -435,7 +453,10 @@ $("btnAnalyze").onclick = () => analyze().catch(e => alert(e.message));
 
 $("btnFix").onclick = async () => {
   if (busy) return;
-  busy = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
+  showCenter("edit"); ++previewEpoch;
+  busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
+  $("btnAnalyze").disabled = true; $("btnCompile").disabled = true;
+  $("btnAccept").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
   preFix = editor.getValue();
   $("joblog").innerHTML = "";
   try {
@@ -454,7 +475,11 @@ $("btnFix").onclick = async () => {
       if (s.done && s.result) applyResult(s.result);
     }
   } catch (e) { alert(e.message); }
-  busy = false; $("btnFix").disabled = false; $("btnFix").innerHTML = "✨ Skill 一键修复";
+  finally {
+    busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
+    $("btnAnalyze").disabled = false; $("btnCompile").disabled = false;
+    $("btnFix").disabled = false; $("btnFix").innerHTML = "✨ Skill 一键修复";
+  }
 };
 
 function lineStyle(l) {
@@ -465,6 +490,9 @@ function lineStyle(l) {
 }
 
 function applyResult(res) {
+  ++previewEpoch; lastResult = res;
+  $("btnAccept").disabled = false; $("btnReport").disabled = false;
+  $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。";
   disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
   origModel = monaco.editor.createModel(preFix, "latex");
@@ -476,7 +504,7 @@ function applyResult(res) {
   $("btnDiff").disabled = false;
   $("tab-diff").setAttribute("aria-disabled", "false");
   renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
-  const human = res.problems_after.length;
+  showCenter("diff");
   $("compile").innerHTML =
     `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
     `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
@@ -493,6 +521,29 @@ function applyResult(res) {
     $("btnPdf").classList.remove("hide");
   }
 }
+
+$("btnAccept").onclick = () => {
+  if (!lastResult || busy) return;
+  editor.setValue(lastResult.fixed_content);
+  showCenter("edit");
+  $("btnAccept").disabled = true;
+  $("reviewHint").textContent = "已采用候选到编辑器，可继续编辑或导出。报告保留此次修复记录。";
+  analyze(); compilePreview(editor.getValue());
+};
+$("btnReport").onclick = () => {
+  if (!lastResult) return;
+  const r = lastResult;
+  const report = ["# TeXada Studio 质检报告", "", `文档：${curName}`,
+    `本地模型：${r.model}；输入：文本；耗时：${r.elapsed_seconds} 秒`,
+    `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
+    "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
+    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,
+    `候选编译：${r.compile_after.ok ? "通过" : "失败"}`,
+    `修改数：${(r.edits || []).length}；剩余问题：${r.problems_after.length}`, "", "## 修改记录", ""];
+  for (const e of (r.edits || [])) report.push(`L${e.line} · ${e.skill}`, "", "原文：", "~~~~latex", e.before, "~~~~", "候选：", "~~~~latex", e.after, "~~~~", "");
+  for (const p of r.problems_after) report.push(`待处理 L${p.line}：${p.reason || p.status}`);
+  download(curName.replace(/\.tex$/, "") + ".audit.md", new Blob([report.join("\n")], {type:"text/markdown"}));
+};
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
 

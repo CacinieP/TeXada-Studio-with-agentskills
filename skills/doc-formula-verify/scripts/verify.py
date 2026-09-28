@@ -15,6 +15,7 @@
 """
 
 import json
+import re
 import sys
 
 EXIT_OK = 0
@@ -32,7 +33,13 @@ def check(latex: str):
         return "RETRY", "empty latex"
 
     try:
-        expr = parse_latex(latex)
+        # Validate original delimiters first. ANTLR skips sizing commands, so its
+        # strict start/end offset test otherwise rejects valid \left(...\right).
+        parse_latex(latex)
+        normalized = re.sub(r"\\(?:left|right)(?![A-Za-z])", "", latex).strip()
+        expr = parse_latex(normalized, strict=True)
+    except ImportError as e:
+        return "NEEDS_ENV", f"missing parser dependency: {e}"
     except Exception as e:  # antlr/LaTeX ParseException 及其包装
         return "RETRY", f"parse error: {type(e).__name__}: {e}"
 
