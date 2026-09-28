@@ -32,7 +32,7 @@ body = re.sub(r"(?:\\item .+\n)+", lambda m: "\\begin{enumerate}\n" + m.group(0)
 # $$ 块 → equation*
 body = re.sub(r"\$\$\n(.*?)\n\$\$", lambda m: "\\[\n" + m.group(1) + "\n\\]", body, flags=re.S)
 
-tex = f"""% TeXada Agent Skills 样本 · 由 MinerU 解析转换（{title}）
+tex = f"""% TeXada Studio with Agent Skills 样本 · 由 MinerU 解析转换（{title}）
 % 源页: {p1}-{p2} · 转换: scripts/gmd2tex.py
 \\documentclass[11pt]{{article}}
 \\usepackage{{amsmath,amssymb,amsthm}}
@@ -42,7 +42,7 @@ tex = f"""% TeXada Agent Skills 样本 · 由 MinerU 解析转换（{title}）
 \\allowdisplaybreaks
 \\begin{{document}}
 \\begin{{center}}{{\\Large \\textbf{{{title}}}}}\\\\[2pt]
-{{\\small 源页 {p1}--{p2} · MinerU 解析 → TeXada Agent Skills}}
+{{\\small 源页 {p1}--{p2} · MinerU 解析 → TeXada Studio with Agent Skills}}
 \\end{{center}}
 
 {body}

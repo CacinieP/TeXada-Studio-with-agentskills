@@ -9,7 +9,7 @@
 
 ```bash
 rsync -az --exclude .git --exclude .venv --exclude state --exclude dist \
-  ./ spark:~/texada-agent-skills/          # SSH 主机别名
+  ./ spark:~/TeXada-Studio-with-agentskills/          # SSH 主机别名
 ```
 
 ## 2. 依赖与端到端自检（无需 GPU，5 分钟）
@@ -17,8 +17,8 @@ rsync -az --exclude .git --exclude .venv --exclude state --exclude dist \
 ```bash
 ssh spark
 python3 -m venv ~/.venvs/docf
-~/.venvs/docf/bin/pip install -r ~/texada-agent-skills/harness/requirements.txt
-cd ~/texada-agent-skills && rm -rf state/node1
+~/.venvs/docf/bin/pip install -r ~/TeXada-Studio-with-agentskills/harness/requirements.txt
+cd ~/TeXada-Studio-with-agentskills && rm -rf state/node1
 PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
   --state state/node1 --fixture-repairs samples/fixture_repairs.json
 ```
@@ -63,7 +63,7 @@ tmux new-session -d -s step '~/.venvs/docf/bin/modelscope download \
 ## 4. 真实修复回路（已验证）
 
 ```bash
-cd ~/texada-agent-skills && rm -rf state/node2
+cd ~/TeXada-Studio-with-agentskills && rm -rf state/node2
 PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples \
   --state state/node2 --vlm http://127.0.0.1:11434 --vlm-model <模型tag>
 ```
@@ -84,7 +84,7 @@ qwen2.5vl:7b 实测（2026-09-28）：f-101 定界符补全 ✓、f-003 花括�
 ### WebUI 启动与升级
 
 ```bash
-cd ~/texada-agent-skills
+cd ~/TeXada-Studio-with-agentskills
 ~/.venvs/docf/bin/python -m pip install -r webui/requirements.txt
 export PATH="$HOME/bin:$HOME/lib/bin:$PATH"
 export DEMO_TOKEN="$(~/.venvs/docf/bin/python -c 'import secrets; print(secrets.token_urlsafe(32))')"

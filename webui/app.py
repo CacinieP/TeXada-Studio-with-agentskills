@@ -1,4 +1,4 @@
-"""TeXada Agent Skills 演示 Web UI 后端（FastAPI）。
+"""TeXada Studio with Agent Skills 演示 Web UI 后端（FastAPI）。
 
 启动（仓库根目录，先设置 DEMO_TOKEN）:
   python -m uvicorn app:app --host 127.0.0.1 --port 8888 --app-dir webui
@@ -27,7 +27,7 @@ STATE = os.path.join(REPO, "state", "demo")
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen3.8:27b-q4_K_M")
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
-app = FastAPI(title="TeXada Agent Skills demo")
+app = FastAPI(title="TeXada Studio with Agent Skills demo")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- 参赛仓库使用 `texada-agent-skills`，作品显示名统一为 TeXada Agent Skills；更新安装目录、源码链接和打包名称。
+- 参赛仓库使用 `TeXada-Studio-with-agentskills`，作品显示名统一为 TeXada Studio with Agent Skills；更新安装目录、源码链接和打包名称。
 
 - 主项目采用 AGPL-3.0-only，补充第三方许可、贡献和安全说明、安装与测试文档。
 - Monaco 0.52.2 资源本地化，保留上游 MIT 许可和完整性清单；静态资源使用限路径签名 Cookie。

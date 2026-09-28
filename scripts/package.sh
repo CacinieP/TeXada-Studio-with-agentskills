@@ -10,6 +10,6 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 REV="$(git rev-parse --short HEAD)"
-ARCHIVE="$DIST/texada-agent-skills-$REV.zip"
-git archive --format=zip --prefix="texada-agent-skills-$REV/" --output="$ARCHIVE" HEAD
+ARCHIVE="$DIST/TeXada-Studio-with-agentskills-$REV.zip"
+git archive --format=zip --prefix="TeXada-Studio-with-agentskills-$REV/" --output="$ARCHIVE" HEAD
 echo "源码包: $ARCHIVE"

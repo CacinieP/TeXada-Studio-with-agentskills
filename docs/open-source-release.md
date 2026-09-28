@@ -22,11 +22,11 @@
 
 这里的清理指分支和标签可达的 Git 历史。原仓库 `CacinieP/TeXada-WebUI` 推送后重新 mirror clone 已确认不含教材路径或其两个 blob；但通过该原仓库的已登录 GitHub API 按旧 blob SHA 查询，两个对象仍可读取。这些后台对象不由强制推送或本地 GC 删除。
 
-[GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)指出，Support 不清除非敏感数据，只处理符合条件的敏感数据，因此不能承诺教材内容的清理申请会被受理。本项目据此迁入独立仓库 `CacinieP/texada-agent-skills`，仅推送已清理的历史；原仓库继续私有，新仓库也按维护者要求保持私有。迁移核验见 [仓库说明](repository-migration.md)。
+[GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)指出，Support 不清除非敏感数据，只处理符合条件的敏感数据，因此不能承诺教材内容的清理申请会被受理。本项目据此迁入独立仓库 `CacinieP/TeXada-Studio-with-agentskills`，仅推送已清理的历史；原仓库继续私有，新仓库也按维护者要求保持私有。迁移核验见 [仓库说明](repository-migration.md)。
 
 ## 改为公开之前必须完成
 
-- [ ] 确认新仓库已与原仓库的旧对象隔离；检查新仓库旧 SHA 查询结果，而不是将原仓库直接改为公开。
+- [x] 新仓库为独立仓库；重新 mirror clone 不含教材内容，在新仓库通过 API 查询两个旧 blob 均返回 404。
 - [ ] 最后审阅拟公开的 refs、附件与 Git 历史；确认无真实用户文档、凭证或不应公开的材料。
 - [ ] 审阅 AGPL 的授权范围，以及来源快照和品牌资源的权属。
 - [ ] 确认实际部署版本的对应源码可公开访问；如有本地修改，提供该版本源码，并更新界面源码链接。

@@ -1,4 +1,4 @@
-# TeXada Agent Skills · 选题定稿书
+# TeXada Studio with Agent Skills · 选题定稿书
 
 定稿日期：2026-09-28 · 提交截止：2026-09-29 · 决策状态：**已定稿（方案 A）**
 

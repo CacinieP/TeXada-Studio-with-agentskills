@@ -5,7 +5,7 @@ description: Plan memory budgets and manage model services for DGX Spark local i
 
 # Spark Ops（内部依赖 · 不单独参赛）
 
-> 本 Skill 是 TeXada Agent Skills 的运维底座，为评审回答「为什么需要这台机器」提供数据支撑。
+> 本 Skill 是 TeXada Studio with Agent Skills 的运维底座，为评审回答「为什么需要这台机器」提供数据支撑。
 
 ## Workflow
 
