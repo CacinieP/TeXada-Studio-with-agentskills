@@ -114,16 +114,19 @@
         <div class="tab" id="tab-diff" onclick="showCenter('diff')" style="color:var(--dim)">修复对比</div>
         <div class="tab" id="tab-preview" onclick="showCenter('preview')" style="color:var(--dim)">预览</div>
       </div>
-      <div id="editor"></div>
-      <div id="diff" class="hide"></div>
-      <div id="previewPane" class="hide" style="flex:1;overflow:auto;background:#0e1d36;padding:14px;">
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-          <button class="act" id="btnCompile">⟳ 编译当前文档</button>
-          <span id="pvStatus" style="color:var(--dim);font-size:12.5px">将当前 .tex 用 Tectonic 编译并渲染整页</span>
+      <div id="duo" style="flex:1;display:flex;min-height:0;">
+        <div id="editor" style="flex:1;min-width:0;"></div>
+        <div class="vsep" id="sepE" title="拖拽调整源码/预览分栏"><button class="sep-btn left" id="sepBtnE" title="折叠/展开预览">▶</button></div>
+        <div id="previewPane" style="width:38%;min-width:200px;max-width:75%;overflow:auto;background:#091223;padding:14px;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+            <button class="act" id="btnCompile" style="padding:3px 10px;font-size:11.5px">⟳ 编译预览</button>
+            <span id="pvStatus" style="color:var(--dim);font-size:12px">用 Tectonic 渲染整页</span>
+          </div>
+          <div id="pvLog" class="kv hide" style="background:#0e1d36;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err)"></div>
+          <div id="pvImgWrap" style="text-align:center"></div>
         </div>
-        <div id="pvLog" class="kv hide" style="background:#091223;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err)"></div>
-        <div id="pvImgWrap" style="text-align:center"></div>
       </div>
+      <div id="diff" class="hide" style="flex:1;"></div>
     </div>
     <div class="vsep" id="sepR" title="拖拽调整 · 双击折叠">
       <button class="sep-btn right" id="sepBtnR" title="折叠/展开右栏">▶</button>
@@ -184,6 +187,19 @@ window.addEventListener("load", () => {
   $("hsep").ondblclick = () => toggle("bottom");
   // 手柄上的箭头按钮（单击折叠/展开）
   $("sepBtnL").onclick = () => toggle("sidebar");
+  dragSep($("sepE"), (ev) => {
+    const duo = $("duo"); const r = duo.getBoundingClientRect();
+    const w = Math.min(duo.offsetWidth - 200, Math.max(160, ev.clientX - r.left));
+    $("editor").style.flex = "none"; $("editor").style.width = w + "px";
+    if (editor) editor.layout();
+  });
+  $("sepBtnE").onclick = () => {
+    const pp = $("previewPane");
+    const collapsed = pp.classList.contains("collapsed") || pp.style.width === "0px";
+    if (collapsed) { pp.classList.remove("collapsed"); pp.style.width = "38%"; pp.style.minWidth = "200px"; pp.style.border = ""; pp.style.overflow = "auto"; }
+    else { saved["previewPane"] = pp.style.width; pp.classList.add("collapsed"); pp.style.width = "0"; pp.style.minWidth = "0"; pp.style.overflow = "hidden"; }
+    if (editor) editor.layout();
+  };
   $("sepBtnR").onclick = () => toggle("rightpanel");
   $("sepBtnH").onclick = () => toggle("bottom");
   // 折叠后点 tab 也自动展开右栏对应的面板
@@ -258,6 +274,7 @@ async function loadFile(name) {
   showCenter("edit");
   loadFiles();
   analyze();
+  compilePreview(d.content);
 }
 
 async function analyze() {
@@ -292,16 +309,14 @@ function gotoLine(line) {
 
 function showCenter(mode) {
   diffShown = (mode === "diff");
-  $("editor").classList.toggle("hide", mode !== "edit");
+  $("duo").classList.toggle("hide", mode === "diff");
   $("diff").classList.toggle("hide", mode !== "diff");
-  $("previewPane").classList.toggle("hide", mode !== "preview");
-  $("tab-edit").classList.toggle("active", mode === "edit");
+  $("tab-edit").classList.toggle("active", mode !== "diff");
   $("tab-diff").classList.toggle("active", mode === "diff");
-  $("tab-preview").classList.toggle("active", mode === "preview");
-  $("tab-edit").style.color = mode === "edit" ? "var(--fg)" : "var(--dim)";
+  $("tab-edit").style.color = mode !== "diff" ? "var(--fg)" : "var(--dim)";
   $("tab-diff").style.color = mode === "diff" ? "var(--fg)" : "var(--dim)";
-  $("tab-preview").style.color = mode === "preview" ? "var(--fg)" : "var(--dim)";
   if (!$("btnDiff").disabled) $("btnDiff").textContent = mode === "diff" ? "返回编辑器" : "查看修复对比";
+  if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
 }
 $("btnDiff").onclick = () => showCenter(diffShown ? "edit" : "diff");
 
@@ -347,6 +362,7 @@ $("fileInput").onchange = async (ev) => {
 let lastPreviewTag = null;
 async function compilePreview(content) {
   $("pvStatus").innerHTML = `<span class="spin"></span>Tectonic 编译中…`;
+  $("pvTabStatus").innerHTML = `<span class="spin"></span>`;
   $("pvLog").classList.add("hide"); $("pvImgWrap").innerHTML = "";
   try {
     const d = await j(`/api/studio/preview?token=${T}`, {
@@ -356,11 +372,13 @@ async function compilePreview(content) {
     if (d.ok && d.png) {
       lastPreviewTag = d.png.split("/").pop().split("?")[0];
       $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
+      $("pvTabStatus").innerHTML = `<span style="color:var(--ok)">✓</span>`;
       $("pvImgWrap").innerHTML = `<img src="${d.png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
       $("btnPdf").classList.remove("hide");
     } else {
       lastPreviewTag = null;
-      $("pvStatus").innerHTML = `<span style="color:var(--err)">编译 ✗ 失败</span> · 错误详情如下（这通常就是文档中的问题）`;
+      $("pvStatus").innerHTML = `<span style="color:var(--err)">编译 ✗ 失败</span> · 错误详情（通常即文档中的问题）`;
+      $("pvTabStatus").innerHTML = `<span style="color:var(--err)">✗</span>`;
       $("pvLog").classList.remove("hide");
       $("pvLog").textContent = d.log || "unknown";
       $("btnPdf").classList.add("hide");
@@ -427,7 +445,6 @@ function applyResult(res) {
     $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · 修复后文档`;
     $("pvImgWrap").innerHTML = `<img src="${png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
     $("btnPdf").classList.remove("hide");
-    setTimeout(() => showCenter("preview"), 4000);
   }
 }
 
