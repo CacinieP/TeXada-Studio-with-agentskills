@@ -50,7 +50,8 @@
   #tabs { height:34px; background:var(--panel); display:flex; align-items:stretch; border-bottom:1px solid var(--line); flex:none; }
   .tab { padding:0 16px; display:flex; align-items:center; font-family:Menlo,monospace; font-size:12.5px;
          background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
-  #editor, #diff { flex:1; min-height:0; }
+  #editor, #diff { flex:1; min-height:0; position:relative; overflow:hidden; }
+  #duo { position:relative; }
   #rightpanel { width:300px; min-width:180px; max-width:520px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
   .panel { border-bottom:1px solid var(--line); padding:10px 12px; }
   .panel h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
@@ -165,7 +166,11 @@ function dragSep(sep, apply) {
     document.addEventListener("mouseup", up);
   });
 }
+window.addEventListener("resize", () => { if (editor) editor.layout(); if (diffEditor) diffEditor.layout(); });
 window.addEventListener("load", () => {
+  // Monaco 测高兜底：容器尺寸变化时强制重排
+  const ro = new ResizeObserver(() => { if (editor) editor.layout(); if (diffEditor) diffEditor.layout(); });
+  ro.observe($("editor")); ro.observe($("diff"));
   // 记住拖拽前的宽度，折叠/展开互逆
   const saved = {};
   dragSep($("sepL"), (ev) => { $("sidebar").classList.remove("collapsed");
@@ -277,6 +282,7 @@ async function loadFile(name) {
   loadFiles();
   analyze();
   compilePreview(d.content);
+  setTimeout(() => { editor.layout(); if (diffEditor) diffEditor.layout(); }, 60);
 }
 
 async function analyze() {
