@@ -22,8 +22,25 @@
   button.act.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
   #main { flex:1; display:flex; min-height:0; }
   #sidebar { width:200px; min-width:140px; max-width:420px; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; overflow-y:auto; }
-  .vsep { width:5px; cursor:col-resize; background:transparent; flex:none; }
+  .vsep { width:5px; cursor:col-resize; background:transparent; flex:none; position:relative; }
   .vsep:hover, .vsep.on { background:var(--accent); opacity:.5; }
+  .sep-btn { position:absolute; top:50%; transform:translateY(-50%); width:14px; height:34px;
+             background:var(--panel); border:1px solid var(--line); color:var(--dim);
+             border-radius:0 6px 6px 0; cursor:pointer; font-size:9px; line-height:1; z-index:5;
+             display:flex; align-items:center; justify-content:center; }
+  .sep-btn:hover { color:var(--fg); background:var(--accent); border-color:var(--accent); }
+  .sep-btn.left { left:-1px; border-radius:0 6px 6px 0; }
+  .sep-btn.right { right:-1px; border-radius:6px 0 0 6px; }
+  #sidebar.collapsed { width:0 !important; min-width:0; padding:0; overflow:hidden; border:none; }
+  #rightpanel.collapsed { width:0 !important; min-width:0; overflow:hidden; border:none; }
+  #bottom.collapsed { height:32px !important; overflow:hidden; }
+  #bottom.collapsed #joblog { visibility:hidden; }
+  .hsep-btn { position:absolute; right:14px; top:-2px; width:34px; height:9px;
+              background:var(--panel); border:1px solid var(--line); border-top:none; color:var(--dim);
+              border-radius:0 0 6px 6px; cursor:pointer; font-size:8px; z-index:5;
+              display:flex; align-items:center; justify-content:center; }
+  .hsep-btn:hover { color:var(--fg); background:var(--accent); }
+  #hsep { position:relative; }
   #main { position:relative; }
   #sidebar h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; padding:4px 14px; }
   .file { padding:5px 14px; cursor:pointer; color:var(--fg); font-family:Menlo,monospace; font-size:12.5px; }
@@ -88,7 +105,9 @@
       <div class="skill"><span class="dot"></span><div><b>doc-table-audit</b><i>表格合计交叉验算</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>编译回环 · Tectonic</i></div></div>
     </div>
-    <div class="vsep" id="sepL" title="拖拽调整侧栏宽度"></div>
+    <div class="vsep" id="sepL" title="拖拽调整 · 双击折叠">
+      <button class="sep-btn left" id="sepBtnL" title="折叠/展开侧栏">◀</button>
+    </div>
     <div id="center">
       <div id="tabs">
         <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
@@ -106,15 +125,19 @@
         <div id="pvImgWrap" style="text-align:center"></div>
       </div>
     </div>
-    <div class="vsep" id="sepR" title="拖拽调整右栏宽度"></div>
+    <div class="vsep" id="sepR" title="拖拽调整 · 双击折叠">
+      <button class="sep-btn right" id="sepBtnR" title="折叠/展开右栏">▶</button>
+    </div>
     <div id="rightpanel">
       <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
       <div class="panel"><h4>编译 · Tectonic</h4><div id="compile" class="kv hint">修复时自动编译对比</div></div>
       <div class="panel"><h4>预览 · Preview</h4><div id="preview" class="hint">修复后显示渲染页面</div></div>
     </div>
   </div>
-  <div id="hsep" style="height:5px;cursor:row-resize;background:transparent;flex:none" title="拖拽调整日志高度"></div>
-  <div id="bottom"><h4>Skill 活动日志</h4><div id="joblog">待命。</div></div>
+  <div id="hsep" style="height:12px;cursor:row-resize;background:transparent;flex:none" title="拖拽调整 · 双击折叠">
+      <button class="hsep-btn" id="sepBtnH" title="折叠/展开日志">▾ 日志</button>
+    </div>
+  <div id="bottom"><h4 style="cursor:pointer" onclick="document.getElementById('sepBtnH').click()" title="点击折叠/展开">Skill 活动日志 ▴▾</h4><div id="joblog">待命。</div></div>
   <div id="statusbar">
     <span id="sb-node">demo-node</span><span>GB10 · 128GB 统一内存</span><span id="sb-model" style="background:#ffffff22;padding:1px 8px;border-radius:9px">qwen3.8:27b-q4_K_M</span>
     <div style="flex:1"></div><span id="sb-right">TeXada-WebUI · Agent Skills</span>
@@ -138,9 +161,35 @@ function dragSep(sep, apply) {
   });
 }
 window.addEventListener("load", () => {
-  dragSep($("sepL"), (ev) => { $("sidebar").style.width = Math.min(420, Math.max(140, ev.clientX)) + "px"; });
-  dragSep($("sepR"), (ev) => { $("rightpanel").style.width = Math.min(520, Math.max(180, window.innerWidth - ev.clientX)) + "px"; });
-  dragSep($("hsep"), (ev) => { $("bottom").style.height = Math.min(window.innerHeight * 0.5, Math.max(32, window.innerHeight - ev.clientY)) + "px"; });
+  // 记住拖拽前的宽度，折叠/展开互逆
+  const saved = {};
+  dragSep($("sepL"), (ev) => { $("sidebar").classList.remove("collapsed");
+    $("sidebar").style.width = Math.min(420, Math.max(140, ev.clientX)) + "px"; });
+  dragSep($("sepR"), (ev) => { $("rightpanel").classList.remove("collapsed");
+    $("rightpanel").style.width = Math.min(520, Math.max(180, window.innerWidth - ev.clientX)) + "px"; });
+  dragSep($("hsep"), (ev) => { $("bottom").classList.remove("collapsed");
+    $("bottom").style.height = Math.min(window.innerHeight * 0.5, Math.max(32, window.innerHeight - ev.clientY)) + "px"; });
+
+  const toggle = (panel, cls="collapsed") => {
+    const el = $(panel);
+    const isCollapsed = el.classList.toggle(cls);
+    if (!isCollapsed) { if (saved[panel]) el.style[panel === "bottom" ? "height" : "width"] = saved[panel]; }
+    else { saved[panel] = el.style[panel === "bottom" ? "height" : "width"] || ""; }
+    if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
+    return isCollapsed;
+  };
+  // 双击分隔条折叠/展开
+  $("sepL").ondblclick = () => toggle("sidebar");
+  $("sepR").ondblclick = () => toggle("rightpanel");
+  $("hsep").ondblclick = () => toggle("bottom");
+  // 手柄上的箭头按钮（单击折叠/展开）
+  $("sepBtnL").onclick = () => toggle("sidebar");
+  $("sepBtnR").onclick = () => toggle("rightpanel");
+  $("sepBtnH").onclick = () => toggle("bottom");
+  // 折叠后点 tab 也自动展开右栏对应的面板
+  const origShow = showCenter;
+  showCenter = (mode) => { origShow(mode);
+    if (mode === "preview" && $("rightpanel").classList.contains("collapsed")) toggle("rightpanel"); };
 });
 
 // ---- 编辑器字号缩放 ----
