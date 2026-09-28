@@ -112,7 +112,9 @@
       <div id="tabs">
         <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
         <div class="tab" id="tab-diff" onclick="showCenter('diff')" style="color:var(--dim)">修复对比</div>
-        <div class="tab" id="tab-preview" onclick="showCenter('preview')" style="color:var(--dim)">预览</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;padding-right:10px">
+          <span id="pvTabStatus" style="font-size:12px"></span>
+        </div>
       </div>
       <div id="duo" style="flex:1;display:flex;min-height:0;">
         <div id="editor" style="flex:1;min-width:0;"></div>
