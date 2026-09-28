@@ -1,7 +1,8 @@
 # 用 Agent Skills 构建可审阅的 LaTeX 修复工作流
 
 作者：LinguistsWantTech 团队  
-队长：邓一纯　队员：刘风华  
+队长：邓一纯　队员：刘丰华
+
 项目：TeXada Studio with Agent Skills  
 投稿类型：第三届 NVIDIA DGX Spark Hackathon 参赛技术征文  
 代码：https://github.com/CacinieP/TeXada-Studio-with-agentskills

@@ -109,6 +109,8 @@ windowListeners.get('load')();
   run("preFix = editor.getValue(); applyResult(result); showCenter('diff');");
   assert.equal(run('diffShown'), true, 'new file can get its own valid diff');
 
+  get('sepE').listeners.get('mousedown')({ target: { closest: () => get('sepBtnE') }, preventDefault() { throw new Error('button started drag'); } });
+  assert.equal(documentListeners.has('mousemove'), false);
   get('sepBtnE').onclick();
   assert.equal(get('previewPane').classList.contains('collapsed'), true);
   assert.equal(get('previewPane').style.overflow, 'hidden');

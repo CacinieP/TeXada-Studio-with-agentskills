@@ -7,7 +7,7 @@ LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。�
 参赛作品名：**TeXada Studio with Agent Skills · 文档质检与修复**。仓库名：`TeXada-Studio-with-agentskills`。
 本仓库承接已经清理的项目历史，原仓库保留私有；命名依据与迁移范围见 [仓库说明](docs/repository-migration.md)。
 
-团队：LinguistsWantTech · 队长邓一纯 · 队员刘风华。
+团队：LinguistsWantTech · 队长邓一纯 · 队员刘丰华。
 材料入口：[项目报告](docs/project-report.md) · [技术征文](docs/technical-article.md) · [实际提交字段](docs/submission-checklist.md)。
 
 ![Studio 的源码、预览与人工采用流程](docs/images/studio-overview.png)

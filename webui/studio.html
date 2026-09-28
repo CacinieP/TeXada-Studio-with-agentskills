@@ -31,6 +31,8 @@
              border-radius:0 6px 6px 0; cursor:pointer; font-size:9px; line-height:1; z-index:5;
              display:flex; align-items:center; justify-content:center; }
   .sep-btn:hover { color:var(--fg); background:var(--accent); border-color:var(--accent); }
+  #sepBtnE { top:42%; left:auto; right:0; } /* Stay inside the center pane when the preview is collapsed. */
+  #sepE { z-index:6; } /* Keep the handle above Monaco's scrollbars. */
   .sep-btn.left { left:-1px; border-radius:0 6px 6px 0; }
   .sep-btn.right { right:-1px; border-radius:6px 0 0 6px; }
   #sidebar.collapsed { width:0 !important; min-width:0; padding:0; overflow:hidden; border:none; }
@@ -55,6 +57,7 @@
          background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
   .tab[aria-disabled="true"] { cursor:not-allowed; }
   #editor, #diff { flex:1; min-height:0; position:relative; overflow:hidden; }
+  #editor { z-index:0; } /* Contain Monaco's overlay stacking below panel controls. */
   #duo { position:relative; }
   #rightpanel { width:300px; min-width:0; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
   .panel { border-bottom:1px solid var(--line); padding:10px 12px; }
@@ -168,6 +171,7 @@ const $ = id => document.getElementById(id);
 // ---- 面板拖拽调整（侧栏宽 / 右栏宽 / 日志高）----
 function dragSep(sep, apply) {
   sep.addEventListener("mousedown", (e) => {
+    if (e.target?.closest?.("button")) return;
     e.preventDefault();
     sep.classList.add("on");
     const move = (ev) => apply(ev);
@@ -223,6 +227,9 @@ window.addEventListener("load", () => {
   };
   $("sepBtnR").onclick = () => toggle("rightpanel");
   $("sepBtnH").onclick = () => toggle("bottom");
+  for (const id of ["sepBtnL", "sepBtnR", "sepBtnE", "sepBtnH"]) {
+    $(id).ondblclick = e => e.stopPropagation();
+  }
   // 折叠后点 tab 也自动展开右栏对应的面板
   const origShow = showCenter;
   showCenter = (mode) => { origShow(mode);
