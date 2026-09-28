@@ -21,7 +21,10 @@
   button.act.star { background:#2d6cc9; }
   button.act.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
   #main { flex:1; display:flex; min-height:0; }
-  #sidebar { width:200px; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; }
+  #sidebar { width:200px; min-width:140px; max-width:420px; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; overflow-y:auto; }
+  .vsep { width:5px; cursor:col-resize; background:transparent; flex:none; }
+  .vsep:hover, .vsep.on { background:var(--accent); opacity:.5; }
+  #main { position:relative; }
   #sidebar h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; padding:4px 14px; }
   .file { padding:5px 14px; cursor:pointer; color:var(--fg); font-family:Menlo,monospace; font-size:12.5px; }
   .file:hover { background:#16304f; }
@@ -31,7 +34,7 @@
   .tab { padding:0 16px; display:flex; align-items:center; font-family:Menlo,monospace; font-size:12.5px;
          background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
   #editor, #diff { flex:1; min-height:0; }
-  #rightpanel { width:300px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
+  #rightpanel { width:300px; min-width:180px; max-width:520px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
   .panel { border-bottom:1px solid var(--line); padding:10px 12px; }
   .panel h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
   .prob { padding:5px 8px; border-radius:4px; cursor:pointer; margin-bottom:4px; font-size:12.5px; }
@@ -42,7 +45,7 @@
   .prob.fixed { border-left:2px solid var(--ok); opacity:.75; }
   .kv { font-family:Menlo,monospace; font-size:12px; color:var(--fg); white-space:pre-wrap; }
   #preview img { width:100%; border:1px solid var(--line); border-radius:4px; background:#fff; }
-  #bottom { height:130px; background:var(--panel); border-top:1px solid var(--line); flex:none;
+  #bottom { height:130px; min-height:32px; max-height:50vh; background:var(--panel); border-top:1px solid var(--line); flex:none;
             display:flex; flex-direction:column; }
   #bottom h4 { font-size:11px; color:var(--dim); padding:4px 12px; text-transform:uppercase; letter-spacing:1px; }
   #joblog { flex:1; overflow-y:auto; font-family:Menlo,monospace; font-size:11.5px; padding:0 12px 8px; color:var(--dim); }
@@ -68,6 +71,8 @@
     <button class="act ghost" id="btnAnalyze"> ⟲ 质检分析</button>
     <button class="act star" id="btnFix">✨ Skill 一键修复</button>
     <button class="act ghost" id="btnDiff" disabled>查看修复对比</button>
+    <button class="act ghost" id="btnZoomOut" title="缩小字号">A−</button>
+    <button class="act ghost" id="btnZoomIn" title="放大字号">A+</button>
     <button class="act ghost" id="btnUpload">⬆ 上传 .tex</button>
     <button class="act ghost" id="btnExport">⬇ 导出 .tex</button>
     <button class="act ghost hide" id="btnPdf">⬇ 导出 PDF</button>
@@ -83,6 +88,7 @@
       <div class="skill"><span class="dot"></span><div><b>doc-table-audit</b><i>表格合计交叉验算</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>编译回环 · Tectonic</i></div></div>
     </div>
+    <div class="vsep" id="sepL" title="拖拽调整侧栏宽度"></div>
     <div id="center">
       <div id="tabs">
         <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
@@ -100,12 +106,14 @@
         <div id="pvImgWrap" style="text-align:center"></div>
       </div>
     </div>
+    <div class="vsep" id="sepR" title="拖拽调整右栏宽度"></div>
     <div id="rightpanel">
       <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
       <div class="panel"><h4>编译 · Tectonic</h4><div id="compile" class="kv hint">修复时自动编译对比</div></div>
       <div class="panel"><h4>预览 · Preview</h4><div id="preview" class="hint">修复后显示渲染页面</div></div>
     </div>
   </div>
+  <div id="hsep" style="height:5px;cursor:row-resize;background:transparent;flex:none" title="拖拽调整日志高度"></div>
   <div id="bottom"><h4>Skill 活动日志</h4><div id="joblog">待命。</div></div>
   <div id="statusbar">
     <span id="sb-node">demo-node</span><span>GB10 · 128GB 统一内存</span><span id="sb-model" style="background:#ffffff22;padding:1px 8px;border-radius:9px">qwen3.8:27b-q4_K_M</span>
@@ -116,6 +124,35 @@
 <script>
 const P = new URLSearchParams(location.search); const T = P.get("token") || "";
 const $ = id => document.getElementById(id);
+
+// ---- 面板拖拽调整（侧栏宽 / 右栏宽 / 日志高）----
+function dragSep(sep, apply) {
+  sep.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    sep.classList.add("on");
+    const move = (ev) => apply(ev);
+    const up = () => { sep.classList.remove("on");
+      document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+}
+window.addEventListener("load", () => {
+  dragSep($("sepL"), (ev) => { $("sidebar").style.width = Math.min(420, Math.max(140, ev.clientX)) + "px"; });
+  dragSep($("sepR"), (ev) => { $("rightpanel").style.width = Math.min(520, Math.max(180, window.innerWidth - ev.clientX)) + "px"; });
+  dragSep($("hsep"), (ev) => { $("bottom").style.height = Math.min(window.innerHeight * 0.5, Math.max(32, window.innerHeight - ev.clientY)) + "px"; });
+});
+
+// ---- 编辑器字号缩放 ----
+let editorFontSize = 14;
+function setFontSize(delta) {
+  editorFontSize = Math.min(28, Math.max(10, editorFontSize + delta));
+  if (editor) editor.updateOptions({ fontSize: editorFontSize });
+  if (diffEditor) { diffEditor.getOriginalEditor().updateOptions({ fontSize: editorFontSize });
+                    diffEditor.getModifiedEditor().updateOptions({ fontSize: editorFontSize }); }
+}
+$("btnZoomIn").onclick = () => setFontSize(1);
+$("btnZoomOut").onclick = () => setFontSize(-1);
 let editor, diffEditor, origModel, modModel, curName = "", preFix = null, diffShown = false, busy = false;
 
 require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" }});
