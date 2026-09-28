@@ -1,0 +1,767 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "title": "TeXada checker contract and boundary cases",
+  "scope": "Local deterministic checker behavior only; no model inference, OCR, source correctness, or mathematical accuracy benchmark.",
+  "cases": [
+    {
+      "id": "F01",
+      "checker": "formula",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "完整多项式",
+      "input": {
+        "transport": "argv",
+        "latex": "x^2 + 2 x + 1"
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "完整的支持范围内代数表达式应通过语法解析。"
+    },
+    {
+      "id": "F02",
+      "checker": "formula",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "分数与上下标",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F02",
+          "latex": "\\frac{x_1^2}{2}"
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "分子、分母与上下标均完整，检查组合语法。"
+    },
+    {
+      "id": "F03",
+      "checker": "formula",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "配对的伸缩定界符",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F03",
+          "latex": "\\left(a+b\\right)"
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "先验证原始定界符，再归一化尺寸命令，完整配对应通过。"
+    },
+    {
+      "id": "F04",
+      "checker": "formula",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "尾部运算符",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F04",
+          "latex": "x+"
+        }
+      },
+      "expected": {
+        "status": "RETRY"
+      },
+      "why": "严格解析不能仅接受前缀 x 并忽略缺少右操作数的加号。"
+    },
+    {
+      "id": "F05",
+      "checker": "formula",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "缺失下标",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F05",
+          "latex": "a_"
+        }
+      },
+      "expected": {
+        "status": "RETRY"
+      },
+      "why": "下标操作符后没有内容，应请求修复而不是推测原意。"
+    },
+    {
+      "id": "F06",
+      "checker": "formula",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "缺少分母右花括号",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F06",
+          "latex": "\\frac{1}{2"
+        }
+      },
+      "expected": {
+        "status": "RETRY"
+      },
+      "why": "不完整的分数结构不能通过语法检查。"
+    },
+    {
+      "id": "F07",
+      "checker": "formula",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "空白公式",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F07",
+          "latex": " \t "
+        }
+      },
+      "expected": {
+        "status": "RETRY"
+      },
+      "why": "脚本显式约定空公式为 RETRY。"
+    },
+    {
+      "id": "F08",
+      "checker": "formula",
+      "category": "semantic-boundary",
+      "evaluation_group": "semantic-boundary",
+      "title": "语法完整的错误等式",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F08",
+          "latex": "1+1=3"
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "等式语法可解析；预期 OK 仅断言解析器接受输入，不断言等式成立。",
+      "limitation": "1+1=3 在通常算术下不成立；语法检查不能代替数学判真或原文核对。"
+    },
+    {
+      "id": "F09",
+      "checker": "formula",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "损坏的 JSON 输入",
+      "input": {
+        "transport": "jsonl",
+        "raw": "{\"id\":\"F09\",\"latex\":"
+      },
+      "expected": {
+        "status": "NEEDS_HUMAN",
+        "reason": "bad_input"
+      },
+      "why": "JSONL 入口必须受控拒绝损坏的 JSON 或非字符串公式字段，并返回 NEEDS_HUMAN / bad_input。"
+    },
+    {
+      "id": "F10",
+      "checker": "formula",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "公式字段类型错误",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "F10",
+          "latex": 42
+        }
+      },
+      "expected": {
+        "status": "NEEDS_HUMAN",
+        "reason": "bad_input"
+      },
+      "why": "JSONL 入口必须受控拒绝损坏的 JSON 或非字符串公式字段，并返回 NEEDS_HUMAN / bad_input。"
+    },
+    {
+      "id": "T01",
+      "checker": "table",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "Decimal 小数精确相加",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T01",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "0.1"
+            ],
+            [
+              "B",
+              "0.2"
+            ],
+            [
+              "合计",
+              "0.3"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "0.1+0.2 应与 0.3 精确相等，避免二进制浮点误差。"
+    },
+    {
+      "id": "T02",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "表内合计不一致",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T02",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1.5"
+            ],
+            [
+              "B",
+              "2.5"
+            ],
+            [
+              "总计",
+              "4.5"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "sum_mismatch"
+      },
+      "why": "数据行和为 4.0，声明合计 4.5 不一致。"
+    },
+    {
+      "id": "T03",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "声明行数不一致",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T03",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1"
+            ]
+          ],
+          "expected": {
+            "n_rows": 3
+          }
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "shape_mismatch"
+      },
+      "why": "显式声明 3 行而实际只有 2 行，应先报告 shape_mismatch。"
+    },
+    {
+      "id": "T04",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "声明列数下的短行",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T04",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A"
+            ]
+          ],
+          "expected": {
+            "n_cols": 2
+          }
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "shape_mismatch"
+      },
+      "why": "n_cols=2 的契约下，短行应受控地报告 shape_mismatch。"
+    },
+    {
+      "id": "T05",
+      "checker": "table",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "中英文千位分隔符",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T05",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1,000.10"
+            ],
+            [
+              "B",
+              "2，000.20"
+            ],
+            [
+              "total",
+              "3,000.30"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "合法千位分组在归一化后按 Decimal 精确相加，合计应为 3000.30。"
+    },
+    {
+      "id": "T06",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "数据单元格无数值",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T06",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "N/A"
+            ],
+            [
+              "total",
+              "1"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "bad_number"
+      },
+      "why": "合计列的数据行无法提取数值，应返回 bad_number。"
+    },
+    {
+      "id": "T07",
+      "checker": "table",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "行基准合计",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T07",
+          "rows": [
+            [
+              "item",
+              "first",
+              "second"
+            ],
+            [
+              "A",
+              "1.2",
+              "2.3"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "row:1": "3.5"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "row:1 从第二个单元格起相加，与独立提供的基准 3.5 比较。"
+    },
+    {
+      "id": "T08",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "列基准合计不一致",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T08",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1.2"
+            ],
+            [
+              "B",
+              "2.3"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "col:1": "3.6"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "sum_mismatch"
+      },
+      "why": "没有合计行也应按 expected.totals 比对数据行和 3.5。"
+    },
+    {
+      "id": "T09",
+      "checker": "table",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "带符号数值",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T09",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "-1.50"
+            ],
+            [
+              "B",
+              "+2.50"
+            ],
+            [
+              "total",
+              "1.00"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "明确的正负号在支持范围内，合计应为 1.00。"
+    },
+    {
+      "id": "T10",
+      "checker": "table",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "超出范围的基准列",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T10",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "col:2": "1"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "NEEDS_HUMAN",
+        "reason": "bad_expectation"
+      },
+      "why": "基准指向不存在的列，当前接口明确使用 bad_expectation。"
+    },
+    {
+      "id": "T11",
+      "checker": "table",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "合计行缺少单元格",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T11",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1"
+            ],
+            [
+              "total"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "shape_mismatch"
+      },
+      "why": "网格存在缺失单元格或空行，应受控返回 RETRY / shape_mismatch，不能中断进程。"
+    },
+    {
+      "id": "T12",
+      "checker": "table",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "空的末行",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T12",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            []
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "shape_mismatch"
+      },
+      "why": "网格存在缺失单元格或空行，应受控返回 RETRY / shape_mismatch，不能中断进程。"
+    },
+    {
+      "id": "T13",
+      "checker": "table",
+      "category": "invalid-input",
+      "evaluation_group": "contract",
+      "title": "负数基准列索引",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T13",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "col:-99": "1"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "NEEDS_HUMAN",
+        "reason": "bad_expectation"
+      },
+      "why": "列索引契约应是有效的非负下标；非法基准应报告 bad_expectation。"
+    },
+    {
+      "id": "T14",
+      "checker": "table",
+      "category": "unsupported-format",
+      "evaluation_group": "semantic-boundary",
+      "title": "百分比与普通数混合",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T14",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "10%"
+            ],
+            [
+              "B",
+              "20"
+            ],
+            [
+              "total",
+              "30"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "bad_number"
+      },
+      "why": "数值必须符合支持的完整单元格格式；百分比、混合单位和会计括号不能静默取首个数字，应返回 RETRY / bad_number。",
+      "limitation": "本例验证拒绝不支持的数字格式，不证明系统能换算百分比、币种或会计负数。需要人工解释原文或显式归一化后重新检查。"
+    },
+    {
+      "id": "T15",
+      "checker": "table",
+      "category": "unsupported-format",
+      "evaluation_group": "semantic-boundary",
+      "title": "会计括号负数",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T15",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "(1.50)"
+            ],
+            [
+              "B",
+              "2.50"
+            ],
+            [
+              "total",
+              "4.00"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "bad_number"
+      },
+      "why": "数值必须符合支持的完整单元格格式；百分比、混合单位和会计括号不能静默取首个数字，应返回 RETRY / bad_number。",
+      "limitation": "本例验证拒绝不支持的数字格式，不证明系统能换算百分比、币种或会计负数。需要人工解释原文或显式归一化后重新检查。"
+    },
+    {
+      "id": "T16",
+      "checker": "table",
+      "category": "positive",
+      "evaluation_group": "contract",
+      "title": "超出默认 Decimal 精度的正确合计",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T16",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "10000000000000000000000000000"
+            ],
+            [
+              "B",
+              "1"
+            ],
+            [
+              "total",
+              "10000000000000000000000000001"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "col:1": "10000000000000000000000000001"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "OK"
+      },
+      "why": "求和精度应随输入位数扩展，不能把大整数低位的差异舍入成相等。"
+    },
+    {
+      "id": "T17",
+      "checker": "table",
+      "category": "negative",
+      "evaluation_group": "contract",
+      "title": "大整数合计少 1",
+      "input": {
+        "transport": "jsonl",
+        "record": {
+          "id": "T17",
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "10000000000000000000000000000"
+            ],
+            [
+              "B",
+              "1"
+            ],
+            [
+              "total",
+              "10000000000000000000000000000"
+            ]
+          ],
+          "expected": {
+            "totals": {
+              "col:1": "10000000000000000000000000001"
+            }
+          }
+        }
+      },
+      "expected": {
+        "status": "RETRY",
+        "reason": "sum_mismatch"
+      },
+      "why": "求和精度应随输入位数扩展，不能把大整数低位的差异舍入成相等。"
+    }
+  ]
+}

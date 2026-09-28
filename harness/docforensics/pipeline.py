@@ -27,19 +27,36 @@ def load_provider(args):
 
 
 def run_verify(latex):
-    p = subprocess.run([sys.executable, VERIFY, latex], capture_output=True, text=True)
+    if not isinstance(latex, str):
+        return {"status": "NEEDS_HUMAN", "reason": "bad_input: latex must be a string"}
     try:
-        return json.loads(p.stdout.strip().splitlines()[-1])
-    except (IndexError, json.JSONDecodeError):
-        return {"status": "RETRY", "reason": f"verify.py crashed: {p.stderr[:200]}"}
+        p = subprocess.run([sys.executable, VERIFY, latex], capture_output=True, text=True, timeout=30)
+        result = json.loads(p.stdout.strip().splitlines()[-1])
+        expected_exits = {"OK": 0, "RETRY": 0, "NEEDS_HUMAN": 1, "NEEDS_ENV": 2}
+        if not isinstance(result, dict) or result.get("status") not in expected_exits:
+            raise ValueError("invalid verifier status")
+        if p.returncode != expected_exits[result["status"]]:
+            raise ValueError("invalid verifier exit code")
+        return result
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError, AttributeError, TypeError) as exc:
+        return {"status": "NEEDS_ENV", "reason": f"verify.py unavailable: {type(exc).__name__}: {exc}"}
 
 
 def run_audit(rec):
-    p = subprocess.run([sys.executable, AUDIT], input=json.dumps(rec), capture_output=True, text=True)
     try:
-        return json.loads(p.stdout.strip().splitlines()[-1])
-    except (IndexError, json.JSONDecodeError):
-        return {"status": "NEEDS_HUMAN", "reason": "bad_input", "detail": f"audit crashed: {p.stderr[:200]}"}
+        p = subprocess.run([sys.executable, AUDIT], input=json.dumps(rec),
+                           capture_output=True, text=True, timeout=30)
+        result = json.loads(p.stdout.strip().splitlines()[-1])
+        if not isinstance(result, dict) or result.get("status") not in ("OK", "RETRY", "NEEDS_HUMAN"):
+            raise ValueError("invalid audit status")
+        # audit_table.py uses exit 1 for a normal NEEDS_HUMAN result.
+        allowed_exits = (0, 1) if result["status"] == "NEEDS_HUMAN" else (0,)
+        if p.returncode not in allowed_exits:
+            raise ValueError("invalid audit exit code")
+        return result
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError, AttributeError, TypeError) as exc:
+        return {"status": "NEEDS_HUMAN", "reason": "checker_error",
+                "detail": f"audit unavailable: {type(exc).__name__}: {exc}"}
 
 
 def _evidence(run_dir, node):
@@ -106,6 +123,7 @@ def process_table(run_dir, doc, node, provider):
         status = "OK"
         state.append(run_dir, doc=doc, node_id=nid, skill="doc-table-audit", status="OK",
                      repaired=True, evidence=_evidence(run_dir, node),
+                     original_rows=rec["rows"], candidate_rows=repaired,
                      provider=provider.name, attempts=attempts)
     elif r.get("status") == "OK":
         status = "OK"

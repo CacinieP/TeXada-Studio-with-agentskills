@@ -15,13 +15,14 @@ CLI 已有 layout.json
 
 ## Skills 与脚本
 
-`SKILL.md` 提供触发说明、步骤、输入和限制；Python harness 按节点类型执行预先编排的循环。当前不是自主规划任意工具的通用 Agent，也不使用 MCP。
+`SKILL.md` 提供触发说明、步骤、输入和限制；Python harness 按节点类型执行预先编排的循环，运行时不动态加载 Skill 正文。当前不是自主规划任意工具的通用 Agent，也不使用 MCP。逐个 Skill 的代码映射、状态协议与评测方法见 [Skills 技术报告](skills-technical-report.md)，操作与边界见 [案例手册](casebook.md)。
 
 - `doc-formula-verify`：SymPy 语法校验脚本；检查器故障不得显示为通过。
 - `doc-table-audit`：CLI 对结构化数据做合计校验；Studio 另有面向简单 LaTeX 表格的行解析和重算。
 - `doc-report`：CLI 状态报告和 Studio 候选导出约定。
 - `doc-layout-parse`：已有 layout 输入的准备说明；没有自动 PDF/OCR 解析器。
 - `latex-cleanup`：独立 LaTeX 整理、编译和验证工具集；Studio 当前直接调用 Tectonic，未调用整个 Skill 工具链。
+- `spark-ops`：操作者使用的用户级部署说明，未接入自动资源调度。
 
 ## Spark 上的实际使用
 
@@ -33,7 +34,7 @@ CLI 已有 layout.json
 
 CLI 以文档及节点标识查找已完成状态；相同输入重跑跳过终态节点。输入改变时必须新建状态目录。Studio 任务状态在进程内存中，服务重启后不能恢复；只支持可信用户、一个 worker 的演示部署。
 
-Studio 保留原文和候选模型；候选先进入 diff，用户点击采用后才进入编辑器。报告记录修改、内容哈希、编译结果、耗时与检查范围。语法可解析、PDF 可生成与数学含义正确是不同判断。
+Studio 保留原文和候选模型；候选先进入 diff，用户点击采用后才进入编辑器，不自动保存到服务端，需导出保留。报告记录修改、内容哈希、编译结果、耗时与检查范围。语法可解析、PDF 可生成与数学含义正确是不同判断。行内公式使用逐行美元正则，注释或 verbatim 内的类似文本也可能被列为候选，未实现完整 TeX 上下文保护。
 
 ## 外部依赖
 

@@ -1,6 +1,6 @@
 # Contributing
 
-欢迎提交可复现的问题和小范围 PR。先阅读 README 的功能限制，避免把 fixture 测试结果当作真实模型评测。
+欢迎提交可复现的问题和小范围 PR。先阅读 README 的功能限制，按[文档导航](docs/index.md)找到对应模块的主要说明，避免把 fixture 测试结果当作真实模型评测。
 
 ## 开发流程
 
@@ -10,8 +10,20 @@
 4. PR 说明具体问题、修改后的行为、验证命令及未覆盖的限制。UI 修改可附去除敏感信息的截图。
 5. 提交前运行 `git diff --check`，检查暂存文件；需要源码包时先提交，再运行 `scripts/package.sh`。
 
-HTTP 相关修改运行 `webui` 的 Python 测试，Studio 逻辑修改运行 `node webui/test_studio.cjs`。
-模型行为修改应提供真实评测方法和报告，注明模型、数据与环境。禁止用测试替身填充真实评测成绩。
+按改动选择验证入口，具体命令集中在[根 README](README.md#测试)：
+
+| 改动 | 至少验证什么 |
+| --- | --- |
+| HTTP / 静态资源 | `webui` 的 Python 测试 |
+| Studio 交互 | `node webui/test_studio.cjs`；涉及布局时再做实际浏览器检查 |
+| 公式 / 表格输入契约 | [可执行案例集](samples/evaluation/README.md)，保存新的案例报告 |
+| CLI 重试、终态或报告 | `harness/tests`，以及 fixture 首跑与续跑 |
+| [案例运行器](scripts/evaluate_cases.py) | `scripts/test_evaluate_cases.py` 回归和实际案例报告 |
+| latex-cleanup 脚本 | 对应单元测试；编译行为另按其集成说明检查 |
+
+新增检查案例时使用原创合成输入和稳定 ID，写清输入契约、预期状态及 `why`。未支持的情况或已知缺陷需单独分组，不能为了全绿把崩溃设为预期成功。诊断案例见[案例手册](docs/casebook.md)；Skills 的执行边界和证据解释见[技术报告](docs/skills-technical-report.md)。
+
+模型行为修改应提供真实评测方法和报告，注明模型、数据与环境。禁止用测试替身或确定性案例匹配数填充真实模型评测成绩。
 
 当前没有自动 CI 工作流；维护者与贡献者自行运行并记录检查结果。
 
@@ -19,7 +31,7 @@ HTTP 相关修改运行 `webui` 的 Python 测试，Studio 逻辑修改运行 `n
 
 ## 文档与提交审阅
 
-- 中文首页和 `README.en.md` 的命令、能力与限制应保持一致；用户可见行为改变时同步排错文档。
+- 中文首页和 `README.en.md` 的命令、能力与限制应保持一致；用户可见行为改变时同步排错文档。涉及契约、案例或发布声明时，按[变更联动表](docs/index.md#变更时同步哪些文档)更新对应页面。
 - CLI fixture、CLI 真实模型与 Studio 是不同路径；不可把其中一条的验证结果泛化到其他路径。
 - 使用 `docs/launch-plan.md` 中的发布口径。说明实际复现结果，不把待实现功能、合成数据或单次耗时写成能力排名。
 - 保持一个 PR 解决一个具体问题。没有强制提交格式或 CLA；维护者按行为、来源许可与验证证据审阅。

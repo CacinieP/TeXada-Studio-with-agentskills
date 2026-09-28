@@ -1,7 +1,9 @@
 """CLI: python3 -m docforensics run samples/ --state state/run1 [选项]"""
 
 import argparse
+import difflib
 import glob
+import json
 import os
 import sys
 
@@ -54,10 +56,25 @@ def write_report(run_dir, provider):
         if repairs:
             lines += ["| 节点 | Skill | 修复内容 | 证据 | 尝试 |", "| --- | --- | --- | --- | --- |"]
             for e in repairs:
-                detail = f'`{e.get("original")}` → `{e.get("latex")}`' if e.get("original") else "重提取"
+                if e.get("original"):
+                    detail = f'`{e.get("original")}` → `{e.get("latex")}`'
+                elif "original_rows" in e and "candidate_rows" in e:
+                    detail = "表格行数据差异见下方"
+                else:
+                    detail = "旧记录未保存原文与候选，无法还原差异"
                 lines.append(f'| {e["node_id"]} | {e.get("skill")} | {detail} '
                              f'| {e.get("evidence") or "⚠️ 缺失"} | {e.get("attempts")} |')
             lines.append("")
+            for e in repairs:
+                if "original_rows" not in e or "candidate_rows" not in e:
+                    continue
+                original = json.dumps(e["original_rows"], ensure_ascii=False, indent=2).splitlines()
+                candidate = json.dumps(e["candidate_rows"], ensure_ascii=False, indent=2).splitlines()
+                diff = list(difflib.unified_diff(original, candidate,
+                                               fromfile="original_rows", tofile="candidate_rows", lineterm=""))
+                lines += [f'### 表格候选 `{e["node_id"]}`', "",
+                          "以下为检查通过的候选差异，仍需核对原始证据；未写回源文件。", "",
+                          "```diff", *(diff or ["(行数据无变化)"]), "```", ""]
         if needs:
             lines += ["### 待人工（不阻塞流水线）", ""]
             for e in needs:

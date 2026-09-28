@@ -2,10 +2,11 @@
 
 本目录保留的内容均为合成测试样本，随主项目采用 AGPL-3.0-only。不要把自己的上传文件、真实论文或私人文档加入本目录；Studio 上传内容保存在被 Git 忽略的 `state/studio/documents/`。
 
-## 两种使用入口
+## 三种使用入口
 
-- **Studio 文档**：`docs/report-01.tex` 与 `docs/exam-01.tex`，有意包含表格合计或公式语法错误，用于源码编辑、编译预览、候选对比与人工采用。启动方式见[根目录 README](../README.md)。
+- **Studio 文档**：`docs/report-01.tex` 与 `docs/exam-01.tex` 有意包含表格合计或公式语法错误；另有 `clean-control.tex` 正常对照、`semantic-boundary.tex` 数学语义反例、`manual-review.tex` 人工处理边界，共5份。用于源码编辑、候选对比与人工采用；新样本的分析测试不等于编译验收。启动方式见[根目录 README](../README.md)，逐份预期见[案例手册](../docs/casebook.md)。
 - **CLI 结构化输入**：下面三个目录中的 `layout.json` 与占位 crop。CLI 直接读取这些结构化数据，不负责从上述 `.tex` 或 PDF 中生成它们。两个入口的同名样本不应视为完全相同的输入。
+- **确定性检查案例**：[`evaluation/cases.json`](evaluation/cases.json) 包含正例、反例和边界，通过[独立运行器](../scripts/evaluate_cases.py)直接调用检查脚本，不生成修复候选。解释见[案例手册](../docs/casebook.md)。
 
 | CLI 样本 | 内容 | 注入错误 |
 | --- | --- | --- |
@@ -25,6 +26,14 @@ PYTHONPATH=harness python -m docforensics run samples \
 预期结果：`exam-01 OK=3`、`paper-01 OK=2 NEEDS_HUMAN=1`、`report-01 OK=2`。报告是 `state/fixture-check/report.md`，会注明 `fixture (offline test double)`。
 
 再次运行相同命令会跳过 8 个已有终态节点。输入、依赖或提供方变更后应选择新状态目录；现有终态不会自动失效。详细约束见 [Harness 说明](../harness/README.md)。
+
+## 直接检查输入契约与边界
+
+```bash
+python scripts/evaluate_cases.py --outdir state/evaluation-01
+```
+
+该入口不调用模型，不使用 `fixture_repairs.json`，也不做 CLI 状态续跑。每次创建新的报告目录，输出每例的预期、实际状态和限制；不可将匹配数当作模型准确率。详见[评估案例说明](evaluation/README.md)。三条路径如何连接见 [Skills 技术报告](../docs/skills-technical-report.md)，其他资料见[文档导航](../docs/index.md)。
 
 ## 真实模型运行
 

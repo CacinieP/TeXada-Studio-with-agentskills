@@ -116,6 +116,7 @@ class VerificationFailureTest(unittest.TestCase):
     def test_verifier_failure_is_not_green(self):
         failures = [SimpleNamespace(returncode=1, stdout='', stderr='crash'),
                     SimpleNamespace(returncode=0, stdout='not json', stderr=''),
+                    SimpleNamespace(returncode=0, stdout='{"status":[]}', stderr=''),
                     SimpleNamespace(returncode=0, stdout='{"status":"UNKNOWN"}', stderr='')]
         for result in failures:
             with self.subTest(result=result), patch.object(studio.subprocess, 'run', return_value=result):
@@ -132,6 +133,58 @@ class VerificationFailureTest(unittest.TestCase):
         self.assertEqual(fixed, content)
         self.assertEqual(edits, [])
 
+    def test_bad_input_remains_a_human_problem(self):
+        result = SimpleNamespace(returncode=1, stdout='{"status":"NEEDS_HUMAN","reason":"bad_input"}')
+        with patch.object(studio.subprocess, 'run', return_value=result), \
+             patch.object(studio.PROVIDER, 'repair_formula') as repair:
+            self.assertEqual(studio._verify_formula('x')['status'], 'NEEDS_HUMAN')
+            fixed, edits = studio._apply_fixes('Original $a_$ text.\r\n', [])
+        repair.assert_not_called()
+        self.assertEqual(fixed, 'Original $a_$ text.\r\n')
+        self.assertEqual(edits, [])
+
+    def test_verifier_status_and_exit_code_must_agree(self):
+        for status, code in (('OK', 1), ('RETRY', 1), ('NEEDS_HUMAN', 2), ('NEEDS_HUMAN', 0)):
+            with self.subTest(status=status, code=code):
+                result = SimpleNamespace(returncode=code, stdout='{"status":"' + status + '"}')
+                with patch.object(studio.subprocess, 'run', return_value=result):
+                    self.assertEqual(studio._verify_formula('x')['status'], 'NEEDS_ENV')
+        result = SimpleNamespace(returncode=2, stdout='{"status":"NEEDS_ENV","reason":"missing antlr"}')
+        with patch.object(studio.subprocess, 'run', return_value=result):
+            self.assertEqual(studio._verify_formula('x')['reason'], 'missing antlr')
+
+    def test_candidate_environment_failure_stops_retries(self):
+        content = 'Original $a_$ text.\n'
+        log = []
+        with patch.object(studio, '_verify_formula', side_effect=[
+                {'status': 'RETRY'}, {'status': 'NEEDS_ENV', 'reason': 'missing antlr'}]), \
+             patch.object(studio.PROVIDER, 'repair_formula', return_value='a_1') as repair:
+            fixed, edits = studio._apply_fixes(content, log)
+        repair.assert_called_once()
+        self.assertEqual(fixed, content)
+        self.assertEqual(edits, [])
+        self.assertIn('停止尝试', '\n'.join(log))
+
+    def test_invalid_model_response_never_creates_an_edit(self):
+        content = 'Original $a_$ text.\n'
+        with patch.object(studio, '_verify_formula', return_value={'status': 'RETRY'}), \
+             patch.object(studio.PROVIDER, 'repair_formula', return_value={'latex': 'a_1'}):
+            fixed, edits = studio._apply_fixes(content, [])
+        self.assertEqual(fixed, content)
+        self.assertEqual(edits, [])
+
+    def test_candidate_environment_failure_also_stops_later_formula_repairs(self):
+        content = 'Original $a_$ and $b_$ text.\n'
+        problems = [dict(id=f'f-{i}', line=1, latex=value, status='RETRY')
+                    for i, value in enumerate(('a_', 'b_'))]
+        with patch.object(studio, '_formula_problems', return_value=problems), \
+             patch.object(studio, '_verify_formula', return_value={'status': 'NEEDS_ENV'}), \
+             patch.object(studio.PROVIDER, 'repair_formula', return_value='a_1') as repair:
+            fixed, edits = studio._apply_fixes(content, [])
+        repair.assert_called_once()
+        self.assertEqual(fixed, content)
+        self.assertEqual(edits, [])
+
     def test_report_total_preserves_table_and_other_cells(self):
         content = (ROOT / 'samples/docs/report-01.tex').read_text()
         with patch.object(studio, '_formula_problems', return_value=[]), \
@@ -141,6 +194,84 @@ class VerificationFailureTest(unittest.TestCase):
         self.assertEqual(fixed, content.replace('650 & 115', '650 & 105'))
         self.assertEqual(len(edits), 1)
         self.assertEqual(studio._table_problems(fixed), [])
+
+
+class StudioTableAuditTest(unittest.TestCase):
+    @staticmethod
+    def table(rows, total='0', newline='\n'):
+        lines = [r'\begin{tabular}{|l|r|}', r'项目 & 数量 \\', r'\hline']
+        lines.extend(label + ' & ' + value + r' \\' for label, value in rows)
+        lines.extend(['合计 & ' + total + r' \\', r'\end{tabular}'])
+        return newline.join(lines) + newline
+
+    def assert_manual_unchanged(self, content):
+        problems = studio._table_problems(content)
+        self.assertTrue(problems)
+        self.assertTrue(all(p['status'] == 'NEEDS_HUMAN' for p in problems), problems)
+        self.assertTrue(all('right' not in p for p in problems), problems)
+        with patch.object(studio, '_formula_problems', return_value=[]), \
+             patch.object(studio.PROVIDER, 'repair_formula') as repair:
+            fixed, edits = studio._apply_fixes(content, [])
+        repair.assert_not_called()
+        self.assertEqual(fixed, content)
+        self.assertEqual(edits, [])
+
+    def test_signed_decimals_and_grouped_numbers_recalculate_exactly(self):
+        content = self.table([('A', '+1,000.25'), ('B', '-20.5'), ('C', '.25')], newline='\r\n')
+        problems = studio._table_problems(content)
+        self.assertEqual(len(problems), 1)
+        self.assertEqual(problems[0]['right'], '980')
+        with patch.object(studio, '_formula_problems', return_value=[]):
+            fixed, edits = studio._apply_fixes(content, [])
+        self.assertEqual(fixed, content.replace('合计 & 0', '合计 & 980'))
+        self.assertEqual(edits, [{'line': 7, 'before': '0', 'after': '980', 'skill': 'doc-table-audit'}])
+        self.assertEqual(studio._table_problems(fixed), [])
+
+    def test_decimal_and_large_integer_totals_are_not_rounded(self):
+        self.assertEqual(studio._table_problems(self.table([('A', '0.1'), ('B', '0.2')], '0.3')), [])
+        value = '123456789012345678901234567890'
+        problems = studio._table_problems(self.table([('A', value), ('B', '0.00001')], value))
+        self.assertEqual(problems[0]['right'], value + '.00001')
+
+    def test_non_numeric_total_is_manual_without_a_candidate(self):
+        self.assert_manual_unchanged(self.table([('A', '1'), ('B', '2')], '—', newline='\r\n'))
+
+    def test_complex_numeric_formats_require_human_review(self):
+        for value in ('(20)', r'20\%', '20%', '20 kg', r'\num{20}', '$20', '12,34',
+                      '1,234,56', '1.234,50', '1e3', 'NaN', 'Infinity'):
+            with self.subTest(value=value):
+                self.assert_manual_unchanged(self.table([('A', value), ('B', '2')], '0'))
+
+    def test_mixed_units_are_not_summed_as_plain_numbers(self):
+        self.assert_manual_unchanged(self.table([('A', '1 kg'), ('B', '2 g')], '3 kg'))
+
+    def test_non_rectangular_or_short_rows_require_human_review(self):
+        content = self.table([('A', '1'), ('B', '2')], '0')
+        for replacement in (r'B \\', r'B & 2 & 999 \\', r'B & 2'):
+            with self.subTest(replacement=replacement):
+                self.assert_manual_unchanged(content.replace(r'B & 2 \\', replacement))
+
+    def test_ambiguous_header_and_subtotal_are_not_automatically_summed(self):
+        content = self.table([('A', '1'), ('B', '2')], '0')
+        self.assert_manual_unchanged(content.replace(r'项目 & 数量 \\', r'项目 & 99 \\'))
+        self.assert_manual_unchanged(content.replace('B & 2', '小计 total & 2'))
+
+    def test_complex_column_spec_and_unclosed_table_require_human_review(self):
+        content = self.table([('A', '1'), ('B', '2')], '0')
+        self.assert_manual_unchanged(content.replace('{|l|r|}', '{|l|p{3cm}|}'))
+        self.assert_manual_unchanged(content.replace(r'\end{tabular}', ''))
+
+    def test_stale_or_invalid_candidates_never_claim_an_edit(self):
+        for total, right in (('—', '3'), ('3', '3'), ('0', '3 kg'), ('0', None)):
+            with self.subTest(total=total, right=right):
+                content = self.table([('A', '1'), ('B', '2')], total)
+                problem = {'id': 't-test', 'line': 6, 'col': 1, 'status': 'RETRY',
+                           'reason': 'synthetic candidate', 'right': right}
+                with patch.object(studio, '_formula_problems', return_value=[]), \
+                     patch.object(studio, '_table_problems', return_value=[problem]):
+                    fixed, edits = studio._apply_fixes(content, [])
+                self.assertEqual(fixed, content)
+                self.assertEqual(edits, [])
 
 
 class RealVerifierTest(unittest.TestCase):

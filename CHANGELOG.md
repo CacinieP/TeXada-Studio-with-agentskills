@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — executable cases and Skill contracts
+
+- Add 27 synthetic checker cases, a reproducible JSON/Markdown evaluation runner and three Studio documents for clean, semantic-boundary and manual-review scenarios.
+- Reject malformed checker input and invalid table expectations without crashing; align formula states with process exit codes and stop model calls when verification is unavailable.
+- Require complete numeric cells and supported table structure before Studio proposes totals; preserve unsupported inputs and original newlines, and log only actual changes.
+- Size Decimal precision to the input in CLI and Studio, covering large integer sums that exceed the default 28 digits.
+- Preserve original and candidate table rows in CLI events and show real diffs; keep old events readable without inventing missing data.
+- Replace stale evaluation placeholders with real cases/tests or explicit planned status; add a Skill technical report, casebook and documentation index, and expand the project report and technical article.
+
 ## Unreleased — open-source readiness
 
 - Expand Chinese and English onboarding, support, troubleshooting, citation metadata and contribution tasks.

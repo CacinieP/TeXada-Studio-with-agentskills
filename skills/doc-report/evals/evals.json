@@ -1,17 +1,30 @@
 {
+  "schema_version": 1,
   "skill": "doc-report",
-  "design": "报告完整性：每处修复必须有 evidence crop 且可打开；needs_human 条目必须含失败原因",
-  "dataset": {
-    "source": "合成 state.jsonl（含 OK/RETRY->repair/NEEDS_HUMAN 三态各若干）",
-    "counts": { "runs": 3 }
-  },
+  "status": "implemented-regression-tests",
+  "test_file": "../../../harness/tests/test_pipeline.py",
+  "run_from_repo_root": "python -m unittest discover -s harness/tests -p 'test_*.py' -v",
   "cases": [
-    { "id": "r-001", "input": "fixtures/state-with-repair.jsonl", "expect": "所有修复条目含 evidence 且 diff 正确", "metric": "evidence_coverage" },
-    { "id": "r-002", "input": "fixtures/state-with-missing-evidence.jsonl", "expect": "报告生成失败并指出缺证据节点", "metric": "fail_loud" }
+    {
+      "id": "R01",
+      "test": "test_table_candidate_records_and_reports_actual_diff",
+      "expect": "Terminal event preserves original_rows and candidate_rows; report displays their actual difference."
+    },
+    {
+      "id": "R02",
+      "test": "test_legacy_table_events_remain_readable_without_inventing_diff",
+      "expect": "Old events remain readable and explicitly state that original/candidate data is missing."
+    },
+    {
+      "id": "R03",
+      "test": "test_resume_skips_all_eight_original_fixture_nodes",
+      "expect": "Second run adds eight SKIP events without another repair call."
+    }
   ],
-  "benchmark": {
-    "with_skill": null,
-    "without_skill": null,
-    "note": "TODO: 回填"
-  }
+  "evidence_policy": "Existing crops may accompany reports. Missing crops are marked missing; report generation does not fail solely for this reason.",
+  "limitations": [
+    "No fabricated image evidence.",
+    "Rejected candidates are not all persisted.",
+    "Fixture repairs are not model performance."
+  ]
 }

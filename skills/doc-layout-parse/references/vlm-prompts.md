@@ -1,5 +1,7 @@
 # VLM Prompt 模板与调参（按需加载）
 
+**未来设计草案，未接入当前 CLI 或 Studio。** 仓库没有图像解析脚本，也没有完成本文所列模型/数据集试验；以下字段和参数均为待验证方案，不是实测记录。
+
 ## 版面解析 prompt（骨架）
 
 ```text
@@ -23,5 +25,5 @@ Return STRICT JSON {"latex": "...", "confidence": 0.0-1.0}. No commentary.
 ## 调参记录（TODO 目标环境回填）
 
 - 温度 0；max_tokens 按页面积缩放
-- 重识别传原图 + 20% padding crop（对齐 CROHME 经验）
+- 拟尝试原图 + 20% padding crop；比例及效果尚未验证
 - TODO: PaddleOCR-VL 与 HunyuanOCR 在 OmniDocBench 子集上的实测选择

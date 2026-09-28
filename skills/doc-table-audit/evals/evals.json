@@ -1,18 +1,34 @@
 {
+  "schema_version": 1,
   "skill": "doc-table-audit",
-  "design": "with/without 对照：同批含错表格，度量结构错误检出率与误报率",
-  "dataset": {
-    "source": "自建错误注入集（报表/试卷）",
-    "counts": { "table_errors_injected": 5, "clean_controls": 3 },
-    "error_types": ["sum_mismatch", "shape_mismatch", "bad_number", "cross_page_continuation"]
-  },
-  "cases": [
-    { "id": "t-001", "input": "samples/table-sum-err-01.json", "inject": "合计列与行和不符", "expect": "RETRY sum_mismatch", "metric": "detection_rate" },
-    { "id": "t-002", "input": "samples/table-clean-01.json", "inject": null, "expect": "OK", "metric": "false_positive_rate" }
+  "status": "implemented-contract-tests",
+  "synthetic": true,
+  "catalog": "../../../samples/evaluation/cases.json",
+  "runner": "../../../scripts/evaluate_cases.py",
+  "run_from_repo_root": "python scripts/evaluate_cases.py --outdir state/evaluation-01",
+  "case_ids": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T09",
+    "T10",
+    "T11",
+    "T12",
+    "T13",
+    "T14",
+    "T15",
+    "T16",
+    "T17"
   ],
-  "benchmark": {
-    "with_skill": null,
-    "without_skill": null,
-    "note": "TODO: 跑通后回填，产出 BENCHMARK.md"
-  }
+  "metric": "Declared checker expectation match, separated by evaluation_group; not model or OCR accuracy.",
+  "limitations": [
+    "No model inference or image recognition.",
+    "Passing syntax or numerical consistency does not prove source meaning.",
+    "No with/without Skill benchmark has been performed."
+  ]
 }

@@ -2,7 +2,7 @@
 
 验证对象：TeXada Studio with Agent Skills；团队 LinguistsWantTech。
 
-## 真实节点操作
+## 早前真实节点操作（录屏版本）
 
 | 样本 | 候选修改数 | 剩余已检出问题 | 修复前编译 | 候选编译 | 服务端任务耗时 |
 | --- | --- | --- | --- | --- | --- |
@@ -16,13 +16,31 @@
 
 浏览器验收未发生 pageerror；本次浏览器 HTTP(S) 请求仅访问同源演示服务。验证编辑器与 PDF 页面加载、问题定位、diff、采用候选、报告下载、tex 与 PDF 导出。此观察不等于服务器全流程断网测试。
 
-## 自动检查
+## 录屏阶段自动检查（历史记录）
 
 - Web：21 项 Python 回归测试通过。
 - Studio：JavaScript 页面逻辑回归通过。
 - latex-cleanup：76 项 Python 测试通过，37 项 JavaScript 检查通过。
 - 更改文件密钥扫描未发现泄露；不包含登录信息表和节点访问手册。
 - 字体资源、编辑器、模型与 TeX 包都有各自授权和依赖边界，未宣称官方认证或评测评级。
+
+## 案例与 Skill 契约补充（2026-09-28）
+
+本节独立于上面的历史录屏。本轮在本机 ARM64 / Python 3.13.13、SymPy 1.14.0、ANTLR 4.11.0 环境检查，没有重复真实模型推理、TeX 编译或新增样本浏览器验收，也未据此刷新历史耗时。
+
+| 检查 | 结果 | 证据 / 复现入口 |
+| --- | --- | --- |
+| 合成检查器案例 | 27/27 匹配：contract 24/24，semantic-boundary 3/3 | [原始 JSON](evaluation-results/checker-report.json)、[逐例报告](evaluation-results/checker-report.md)；含输入、输出、退出码、脚本及案例摘要 |
+| Web 回归 | 39 项通过 | `webui/test_*.py`；含3份新文档和原报表的真实检查器验证，模型被拦截断言 |
+| CLI 边界与报告 | 11 项通过 | `harness/tests/test_pipeline.py`；包括环境故障、状态协议、表格差异、旧日志和续跑 |
+| 案例运行器 | 11 项通过 | `scripts/test_evaluate_cases.py`；包括超时、非法字段、NUL、异常回包和目录保护 |
+| 原 CLI fixture | 7 OK、1 NEEDS_HUMAN；第二轮8 SKIP | 使用真实 checker 与离线预设候选，未调用模型 |
+
+案例结果为预期匹配数，不是模型或数学正确率。`1+1=3` 的语法 `OK` 和不支持格式的显式拒绝均按各自边界解释。无崩溃、超时或环境错误混入匹配数。源代码摘要与归档报告逐项核对一致。
+
+修复覆盖非法 JSON/字段类型、空表格与负索引、不支持数值格式、不产生真实变化却记录 edits、默认 Decimal 精度以及候选回判故障后继续请求模型。新 CLI 报告保留表格实际前后网格。详见 [Skills 技术报告](skills-technical-report.md) 和 [案例手册](casebook.md)。
+
+开源准备阶段另已完成 latex-cleanup Python 77 项、JavaScript 37 项和 Studio 页面逻辑检查；本轮未更改它们的实现，因此没有把重复运行计入新增证据。最新文档、样本及代码将随同一提交打包；演示实例与旧视频不能自动视为最新提交。
 
 ## CLI fixture 与续跑
 

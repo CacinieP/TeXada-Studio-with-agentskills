@@ -2,7 +2,7 @@
 
 **在 LaTeX 编辑器里发现公式语法与简单表格合计问题，审阅修复候选，再决定是否采用。**
 
-[English](README.en.md) · [看演示](docs/demo.md) · [常见问题](docs/troubleshooting.md) · [参与贡献](CONTRIBUTING.md) · [路线图](docs/roadmap.md)
+[English](README.en.md) · [文档导航](docs/index.md) · [看演示](docs/demo.md) · [案例手册](docs/casebook.md) · [参与贡献](CONTRIBUTING.md)
 
 适合需要整理 `.tex` 文档的教师、科研写作者，以及研究可审阅模型工作流的开发者。项目将 Monaco 编辑、规则检查、本地模型候选、Tectonic 预览和人工确认放进同一个界面。
 
@@ -25,6 +25,7 @@
 | --- | --- | --- |
 | 看操作和边界 | [演示页](docs/demo.md) | 无需安装 |
 | 跑一个可重复的样本 | 下方离线 fixture 快速开始 | Python，无需 GPU / 模型 / TeX |
+| 检查正例、反例与边界 | [可执行案例集](samples/evaluation/README.md) | Python；无需模型或编译器 |
 | 编辑、分析自己的可信 tex | 下方 Studio 启动步骤 | Python；编译和模型功能另需依赖 |
 | 扩展规则、修复或文档 | [贡献说明](CONTRIBUTING.md) | 对应模块的开发与测试环境 |
 
@@ -60,6 +61,16 @@ PYTHONPATH=harness python -m docforensics run samples \
 报告位于 `state/quickstart/report.md`，会注明 `fixture (offline test double)`。
 再次运行相同命令可验证断点续跑；使用新的 `--state` 目录开始一次独立运行。
 
+## 执行检查器案例
+
+安装上述 Python 依赖后，可运行 27 个合成公式与表格案例，检查语法、Decimal 合计、非法输入和不支持格式的处理：
+
+```bash
+python scripts/evaluate_cases.py --outdir state/evaluation-01
+```
+
+输出为新目录中的 `report.json` 和 `report.md`；重跑须换一个目录，避免覆盖证据。案例按契约、语义边界与已知缺口分组，匹配数不代表模型准确率。详见[案例定义与运行说明](samples/evaluation/README.md)、[逐例解读](docs/casebook.md)和 [Skills 技术报告](docs/skills-technical-report.md)。
+
 ## 启动 Studio
 
 ```bash
@@ -94,12 +105,14 @@ python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 ```bash
 python -m pip install -r webui/requirements-test.txt
 python -m unittest discover -s webui -p 'test_*.py' -v
+python -m unittest discover -s harness/tests -p 'test_*.py' -v
+python -m unittest discover -s scripts -p test_evaluate_cases.py -v
 python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
 node webui/test_studio.cjs
 node skills/latex-cleanup/tests/test_audit_math.cjs
 ```
 
-Node.js 22 用于 JavaScript 检查。上述测试不需要 GPU 或模型，也不代表真实浏览器视觉验收或 TeX 编译验收。实际编译检查见 [latex-cleanup 测试说明](skills/latex-cleanup/tests/CASES.md)。
+Node.js 22 用于 JavaScript 检查。Harness 测试覆盖检查器故障与报告证据；运行器回归检查超时、输出协议和报告目录保护。上述测试不需要 GPU 或模型，也不代表真实浏览器视觉验收或 TeX 编译验收。实际编译检查见 [latex-cleanup 测试说明](skills/latex-cleanup/tests/CASES.md)。
 
 ## 限制与复现范围
 
@@ -116,10 +129,10 @@ Node.js 22 用于 JavaScript 检查。上述测试不需要 GPU 或模型，也�
 | `webui/` | FastAPI、Studio、静态资源、HTTP 与 UI 逻辑测试 |
 | `harness/` | 命令行管线、修复提供方、断点状态 |
 | `skills/` | 公式、表格、版面和报告 Skill；内含 latex-cleanup 工具 |
-| `samples/` | 可分发的合成样本与测试替身 |
+| `samples/` | 可分发的 Studio / CLI 样本、修复替身与确定性检查案例 |
 | `deploy/` | DGX Spark 节点部署记录 |
 | `docs/` | 架构、提案、演示和比赛提交清单；提案不等于已实现功能 |
-| `scripts/` | Monaco 资源校验 / 恢复、源码打包、Git 备份 |
+| `scripts/` | [案例评估运行器](scripts/evaluate_cases.py)、Monaco 校验 / 恢复、源码打包与备份 |
 
 ## 贡献、分发与许可证
 

@@ -1,0 +1,29 @@
+% Synthetic unsupported inputs: preserve all three tables for human review.
+\documentclass{article}
+\title{TeXada: Manual Review Boundaries}
+\author{LinguistsWantTech}
+\date{}
+\begin{document}
+\maketitle
+\section{Mixed percentage and scalar}
+\begin{tabular}{lr}
+Item & Amount \\
+A & 10\% \\
+B & 20 \\
+Total & 30 \\
+\end{tabular}
+\section{Accounting notation}
+\begin{tabular}{lr}
+Item & Amount \\
+A & (1.50) \\
+B & 2.50 \\
+Total & 4.00 \\
+\end{tabular}
+\section{Missing total}
+\begin{tabular}{lr}
+Item & Amount \\
+A & 1 \\
+B & 2 \\
+Total & --- \\
+\end{tabular}
+\end{document}

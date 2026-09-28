@@ -37,19 +37,23 @@ Studio 的执行链为：浏览器与 Monaco → FastAPI → 公式及表格检�
 
 CLI 的执行链为：已有布局树 → 按节点类型分发工具 → 至多两次修复尝试 → OK 或 NEEDS_HUMAN → 事件文件与报告。模型只负责提出候选，计算和状态处理由程序执行。
 
-`SKILL.md` 封装使用时机、输入、步骤和限制，脚本承担确定性操作。`doc-formula-verify` 对应公式检查，`doc-table-audit` 对应表格检查，`doc-report` 约定输出记录。`doc-layout-parse` 当前是输入准备说明，未实现图像解析。`latex-cleanup` 提供独立的清理与验证工具；Studio 直接调用 Tectonic，没有调用该 Skill 的完整工具链。系统不使用 MCP，当前编排方式是预定义 Python 流程。[Agent Skills 规范](https://agentskills.io/specification)
+`SKILL.md` 封装使用时机、输入、步骤和限制，脚本承担确定性操作。`doc-formula-verify` 对应公式检查，`doc-table-audit` 对应表格检查，`doc-report` 约定输出记录。`doc-layout-parse` 当前是输入准备说明，未实现图像解析。`latex-cleanup` 提供独立的清理与验证工具；Studio 直接调用 Tectonic，没有调用该 Skill 的完整工具链。`spark-ops` 是操作者使用的部署约定。系统不使用 MCP，当前编排方式是预定义 Python 流程，不动态加载 Skill 正文。[Agent Skills 规范](https://agentskills.io/specification)
+
+六个 Skill 的执行入口、输入输出协议、错误路径及未来对照设计见 [Skills 技术报告](skills-technical-report.md)。它与面向操作的 [案例手册](casebook.md) 分工，避免把设计方案写成实测能力。
 
 ## 本轮工程完善
 
-检查器崩溃、异常输出或超时现在进入 NEEDS_ENV，保留原文并阻止不必要的模型调用。公式增加完整解析检查，同时兼容合法的 left 与 right 尺寸命令。此检查仍受 SymPy 语法覆盖范围限制。[SymPy 解析文档](https://docs.sympy.org/latest/modules/parsing.html)
+公式检查器崩溃、异常输出或超时现在进入 NEEDS_ENV，保留原文并阻止不必要的模型调用；CLI 表格检查器故障则记录为 NEEDS_HUMAN / checker_error。公式增加完整解析检查，同时兼容合法的 left 与 right 尺寸命令。此检查仍受 SymPy 语法覆盖范围限制。[SymPy 解析文档](https://docs.sympy.org/latest/modules/parsing.html)
 
 Monaco 0.52.2 的编辑器资源固定在仓库，由本站提供，保留 MIT 许可与摘要。界面补齐隐藏和折叠样式、diff 模型销毁、文档切换后的异步结果校验，以及任务异常后的按钮恢复。候选先进入对比视图，采用后写入编辑器。导出的 Markdown 质检报告含行号、修改前后内容、内容哈希、编译状态、模型标签和耗时。[Monaco 上游仓库](https://github.com/microsoft/monaco-editor)
 
 原文与上传文档分离保存，上传内容写入被 Git 忽略的状态目录。启动必须显式设置非空认证密钥。部署遵守用户级安装方式，保留原有模型服务。
 
-## 实机验证
+案例补充新增 27 个确定性输入和 3 份 Studio 文档，覆盖正常对照、语义错误、非法输入、不支持格式和大整数精度。检查器输入崩溃、无数字合计虚报修改、Decimal 默认精度以及回判失败后继续模型尝试的问题已修复。CLI 新事件保存表格前后网格，报告展示真实差异。具体结果与未测范围见 [验证记录](validation.md)。
 
-本轮使用团队分配的 Spark 节点。系统架构查询为 aarch64，GPU 名称为 NVIDIA GB10，磁盘检查显示使用率 30%。Ollama 配置标签为 `qwen3.8:27b-q4_K_M`。标签来自实际环境查询，不作为模型官方能力证明。本轮模型输入为文本，没有页面图像。
+## 验证：早前实机与本轮案例补充
+
+早前录屏阶段使用团队分配的 Spark 节点。当时系统架构查询为 aarch64，GPU 名称为 NVIDIA GB10，磁盘检查显示使用率 30%。Ollama 配置标签为 `qwen3.8:27b-q4_K_M`。标签来自实际环境查询，不作为模型官方能力证明。当时模型输入为文本，没有页面图像；本轮案例与文档补充在本机验证，未重跑真实模型或编译。
 
 视频使用浏览器真实操作录制，并加入中文字幕。旁白通过 ModelBest 的 VoxCPM2 API 生成，使用团队指定的“千问办公”最终精剪版视频作为音色参考；该服务仅用于后期配音，与项目的节点内修复流程分开。操作画面保留原始结果，未伪造接口响应。样本是项目可分发的合成样本，录制没有展示凭据、分配端口或私人文档。精确耗时及结果见随附验证记录。
 
@@ -57,17 +61,26 @@ Monaco 0.52.2 的编辑器资源固定在仓库，由本站提供，保留 MIT �
 
 | 验证类型 | 结果与含义 |
 | --- | --- |
-| Web 后端 | 21 项回归测试通过，含异常检查器、认证、上传隔离与完整解析 |
+| Web 后端与样本 | 39 项回归测试通过，含异常检查器、认证、上传隔离、表格边界与3份新样本 |
+| 检查器案例 | 27/27 匹配各自预期：24契约、3语义边界；不调用模型 |
+| Harness / 案例运行器 | 分别11项回归通过，覆盖失败路径、报告差异、续跑及无效案例协议 |
 | Studio JavaScript | 页面处理逻辑回归通过 |
-| latex-cleanup | 76 项 Python 测试与 37 项 JavaScript 检查通过 |
-| 真实浏览器 | 编辑、预览、diff、采用、报告和文件导出流程验收 |
+| latex-cleanup | 开源准备阶段77项 Python 测试与37项 JavaScript 检查通过；本轮未修改该工具代码 |
+| 真实浏览器 | 早前实机对编辑、预览、diff、采用、报告和文件导出流程验收；新增样本未据此宣称浏览器验收 |
 | CLI fixture | 验证预设替身与续跑，不计入真实模型效果 |
 
 这些检查说明实现的行为可以复现，不构成真实文档质量基准。尚无有无 Skills 的对照数据，也无多并发或其他 GPU 的性能比较。
 
 ## 复现方法
 
-取得仓库后，按 README 创建 Python 虚拟环境并安装依赖。无 GPU 的入门流程使用 `harness/requirements.txt`，通过 `python -m docforensics run samples` 加上 `--fixture-repairs samples/fixture_repairs.json` 和独立 `--state` 目录执行。报告会明确标注 fixture。第二次使用同一目录运行可核对跳过行为；修改输入时使用新的状态目录。
+取得仓库后，按 README 创建 Python 虚拟环境并安装 `harness/requirements.txt`。在仓库根目录执行以下无需 GPU 的完整命令：
+
+```bash
+PYTHONPATH=harness python -m docforensics run samples \
+  --state state/project-report-01 --fixture-repairs samples/fixture_repairs.json
+```
+
+报告会明确标注 fixture。第二次使用同一目录运行可核对跳过行为；修改输入时使用新的状态目录。全部体验方式见 [README](../README.md)。
 
 完整 Studio 需安装 `webui/requirements.txt`，准备 Tectonic、Poppler、中文字体和实际已下载的模型，再按 README 设置认证和编译器配置。模型推理在节点内运行；仅运行一个 Uvicorn worker。Tectonic 初次可能下载包，因此没有宣称整体流程离线。[Tectonic 项目说明](https://tectonic-typesetting.github.io/en-US/)
 
@@ -83,4 +96,4 @@ Monaco 0.52.2 的编辑器资源固定在仓库，由本站提供，保留 MIT �
 
 实际提交表要求团队信息、项目名称与领域、项目及报告书网址、Demo 视频网址、参赛征文网址和不超过 20 MB 的团队照片；视频要求在 5 分钟以内。表单未显示“无剪辑”要求，也未显示截止时刻。[项目提交表](https://mdmv7cyg.jsjform.com/f/F3WRIp)
 
-本次交付项目报告、技术征文、视频及字幕、验证记录和源码包。团队所在地址、真实团队照片以及评委可访问的托管链接仍由团队补充。本轮未代填或提交表单，也未对外发布文章。
+本次交付项目报告、技术征文、视频及字幕、验证记录和源码包；本轮扩展另附 Skills 技术报告、案例手册、27例原始结果与统一文档入口。团队所在地址、真实团队照片以及评委可访问的托管链接仍由团队补充。本轮未代填或提交表单，也未对外发布文章。

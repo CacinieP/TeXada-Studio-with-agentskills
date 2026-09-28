@@ -1,5 +1,7 @@
 # 公式重识别 Prompt（RETRY 路径）
 
+**未来集成草案，当前运行时未调用。** 当前提供方只发送错误公式文本，不接收图像，不返回 confidence，也不保存两次裁剪图。这些 prompt 不是已验证能力；当前契约见上层 `SKILL.md` 与 `evals/evals.json`。
+
 ## 高分辨率重识别
 
 ```text
@@ -10,7 +12,7 @@ Return STRICT JSON {"latex": "...", "confidence": 0.0-1.0}. No commentary.
 - 输入：原始 bbox 外扩 20% 的 crop，放大 2× 重采样
 - attempt=2 仍失败 → `NEEDS_HUMAN`，报告中给出两张 crop 与两次 SymPy 报错原文
 
-## 已知坑（TeXWizard/CROHME 经验）
+## 待图像集成后验证的问题假设
 
 - 手写分式横线易被识别为 `-`：SymPy 报错模式 `unexpected token` → 优先怀疑结构而非符号
 - 上下标粘连：重识别时在 prompt 中强调 explicit braces

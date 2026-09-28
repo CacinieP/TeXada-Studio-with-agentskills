@@ -264,6 +264,7 @@ def crops(name: str, token: str = Query("")):
 import re as _re
 import sys as _sys
 import uuid as _uuid
+from decimal import Decimal, localcontext
 
 _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics.vlm import OllamaProvider  # noqa: E402
@@ -274,6 +275,7 @@ STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 PROVIDER = OllamaProvider("http://127.0.0.1:11434", VLM_MODEL)
 _TABLE_LABELS = ("合计", "总计", "total")
+_TABLE_NUMBER = r"[+-]?(?:(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]*)?|\.[0-9]+)"
 _jobs = {}
 
 
@@ -361,7 +363,9 @@ def _verify_formula(latex: str):
         result = subprocess.run([_sys.executable, VERIFY, latex],
                                 capture_output=True, text=True, timeout=30)
         data = json.loads(result.stdout.strip().splitlines()[-1])
-        if result.returncode != 0 or data.get("status") not in ("OK", "RETRY", "NEEDS_ENV"):
+        expected_codes = {"OK": 0, "RETRY": 0, "NEEDS_HUMAN": 1, "NEEDS_ENV": 2}
+        status = data.get("status")
+        if not isinstance(status, str) or result.returncode != expected_codes.get(status):
             raise ValueError("verifier did not complete")
         return data
     except (OSError, subprocess.SubprocessError, ValueError, IndexError, AttributeError):
@@ -381,39 +385,89 @@ def _formula_problems(content: str):
     return problems
 
 
+def _table_number_match(cell: str):
+    """Match the entire plain numeric cell, retaining its source replacement span."""
+    return _re.fullmatch(rf"\s*(?P<number>{_TABLE_NUMBER})\s*(?:\\\\)?\s*", cell)
+
+
 def _table_problems(content: str):
-    problems, lines = [], content.splitlines()
-    in_tab, rows, start = False, [], 0
-    for i, line in enumerate(lines + [r"\end{tabular}"]):
-        if r"\begin{tabular}" in line:
-            in_tab, rows, start = True, [], i
+    """Audit only rectangular, one-row-per-line tables with a header and final total.
+
+    TeX macros, accounting notation, percentages and unit-bearing values need a
+    human. Taking the first digit sequence from those cells changes their meaning.
+    """
+    problems, rows, in_tab, width, shape_reason = [], [], False, None, ""
+
+    def audit_rows():
+        if not rows:
+            return
+        total_i, total_cells = rows[-1]
+        base = {"id": f"t-{total_i+1:03d}-shape", "type": "table_total",
+                "line": total_i + 1, "col": 0, "status": "NEEDS_HUMAN"}
+        reason = shape_reason
+        if width is None or width < 2 or any(len(c) != width for _, c in rows):
+            reason = reason or "表格列数不一致或列格式不受支持，需人工核对"
+        if reason:
+            problems.append({**base, "reason": reason})
+            return
+        label = total_cells[0].lower()
+        if not any(k in label for k in _TABLE_LABELS):
+            return  # No supported total row to audit.
+        if (label not in _TABLE_LABELS or len(rows) < 3
+                or any(_table_number_match(c) for c in rows[0][1][1:])
+                or any(any(k in c[0].lower() for k in _TABLE_LABELS) for _, c in rows[:-1])):
+            problems.append({**base, "reason": "需要明确的表头、数据行及唯一的末行合计，保留原文供人工核对"})
+            return
+        for j in range(1, width):
+            cells = [c[j] for _, c in rows[1:]]
+            matches = [_table_number_match(c) for c in cells]
+            item = {"id": f"t-{total_i+1:03d}-{j}", "type": "table_total",
+                    "line": total_i + 1, "col": j, "wrong": total_cells[j]}
+            if any(m is None for m in matches):
+                problems.append({**item, "status": "NEEDS_HUMAN",
+                                 "reason": f"合计列 {j+1} 含非纯数字或不支持的格式（如单位、百分比、括号或宏），需人工核对"})
+                continue
+            # Decimal avoids float rounding, including large integers and small fractions.
+            with localcontext() as ctx:
+                ctx.prec = max(28, sum(len(c) for c in cells) + 4)
+                values = [Decimal(m.group("number").replace(",", "")) for m in matches]
+                got, want = sum(values[:-1], Decimal(0)), values[-1]
+                if got != want:
+                    right = format(got, "f")
+                    if "." in right:
+                        right = right.rstrip("0").rstrip(".")
+                    problems.append({**item, "right": right, "status": "RETRY",
+                                     "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
+
+    for i, line in enumerate(content.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("%"):
             continue
-        if in_tab and "&" in line:
-            rows.append((i, [c.strip() for c in line.split("&")]))
-        if r"\end{tabular}" in line and in_tab:
-            in_tab = False
-            if rows and any(k in rows[-1][1][0].lower() for k in _TABLE_LABELS):
-                total_i, total_cells = rows[-1]
-                data = [c for li, c in rows[1:-1]]
-                for j in range(1, len(total_cells)):
-                    vals = []
-                    for c in data:
-                        if j >= len(c):
-                            continue
-                        m = _re.search(r"[+-]?\d[\d,]*\.?\d*", c[j])
-                        vals.append(float(m.group(0).replace(",", "")) if m else None)
-                    if any(v is None for v in vals):
-                        continue
-                    want = _re.search(r"[+-]?\d[\d,]*\.?\d*", total_cells[j])
-                    want = float(want.group(0).replace(",", "")) if want else None
-                    got = sum(vals)
-                    if want is None or abs(got - want) > 1e-9:
-                        problems.append({"id": f"t-{total_i+1:03d}-{j}", "type": "table_total",
-                                         "line": total_i + 1, "col": j, "wrong": total_cells[j],
-                                         "right": str(int(got)) if got == int(got) else str(got),
-                                         "status": "RETRY",
-                                         "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
+        if r"\begin{tabular}" in line:
+            if in_tab:
+                shape_reason = "嵌套表格不在自动合计检查范围，需人工核对"
+                continue
+            in_tab, rows, shape_reason = True, [], ""
+            spec = _re.fullmatch(r"\\begin\{tabular\}\s*\{([lcr|\s]+)\}", stripped)
+            width = sum(c in "lcr" for c in spec.group(1)) if spec else None
+            continue
+        if not in_tab:
+            continue
+        if r"\end{tabular}" in line:
+            if stripped != r"\end{tabular}":
+                shape_reason = "表格结束标记必须独占一行，需人工核对"
+            audit_rows()
             rows, in_tab = [], False
+            continue
+        if not stripped or stripped in (r"\hline", r"\toprule", r"\midrule", r"\bottomrule"):
+            continue
+        if not stripped.endswith(r"\\") or r"\\" in stripped[:-2]:
+            shape_reason = "仅支持每行一条且以双反斜杠结束的简单表格行，需人工核对"
+        body = stripped[:-2] if stripped.endswith(r"\\") else stripped
+        rows.append((i, [c.strip() for c in body.split("&")]))
+    if in_tab:
+        shape_reason = "表格缺少结束标记，需人工核对"
+        audit_rows()
     return problems
 
 
@@ -424,12 +478,17 @@ def _analyze(content: str):
 
 
 def _apply_fixes(content: str, log):
-    lines = content.splitlines()
+    lines = content.splitlines(keepends=True)
     edits = []
     fp = _formula_problems(content)
+    verifier_unavailable = False
     for p in fp:
-        if p["status"] == "NEEDS_ENV":
+        if verifier_unavailable or p["status"] == "NEEDS_ENV":
+            verifier_unavailable = True
             log.append(f"[doc-formula-verify] {p['id']} 检查器不可用，保留原文并转人工")
+            continue
+        if p["status"] != "RETRY":
+            log.append(f"[doc-formula-verify] {p['id']} 需要人工审阅，保留原文")
             continue
         li = p["line"] - 1
         latex = p["latex"]
@@ -437,10 +496,14 @@ def _apply_fixes(content: str, log):
         for attempt in (1, 2):
             log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 本地模型文本修复（第 {attempt} 次）")
             cand = PROVIDER.repair_formula({"id": p["id"], "data": {"latex": latex}})
-            if not cand:
+            if not isinstance(cand, str) or not cand.strip():
                 log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选")
                 continue
             vj = _verify_formula(cand)
+            if vj.get("status") == "NEEDS_ENV":
+                verifier_unavailable = True
+                log.append(f"[doc-formula-verify] {p['id']} 候选回判检查器不可用，停止尝试并保留原文")
+                break
             if vj.get("status") == "OK":
                 fixed, ok = cand, True
                 log.append(f"[doc-formula-verify] {p['id']} 修复 → SymPy 回判 ✓ ：{cand}")
@@ -451,21 +514,30 @@ def _apply_fixes(content: str, log):
             if old in lines[li]:
                 lines[li] = lines[li].replace(old, f"${fixed}$", 1)
                 edits.append({"line": p["line"], "before": latex, "after": fixed, "skill": "doc-formula-verify"})
-    content = "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+    content = "".join(lines)
 
     tp = _table_problems(content)
-    lines = content.splitlines()
+    lines = content.splitlines(keepends=True)
     for p in tp:
+        if p["status"] != "RETRY" or not isinstance(p.get("right"), str):
+            log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 保留原文供人工审阅")
+            continue
         li = p["line"] - 1
         cells = lines[li].split("&")
         j = p["col"]
         if j < len(cells):
+            match = _table_number_match(cells[j])
+            if not match or not _re.fullmatch(_TABLE_NUMBER, p["right"]):
+                continue
+            start, end = match.span("number")
+            replacement = cells[j][:start] + p["right"] + cells[j][end:]
+            if replacement == cells[j]:
+                continue
             log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 重算为 {p['right']}")
-            edits.append({"line": p["line"], "before": cells[j].strip(), "after": p["right"], "skill": "doc-table-audit"})
-            # 只替换数值本身，保留行尾 \\ 等表格结构
-            cells[j] = _re.sub(r"[+-]?\d[\d,]*\.?\d*", p["right"], cells[j], count=1)
+            edits.append({"line": p["line"], "before": match.group("number"), "after": p["right"], "skill": "doc-table-audit"})
+            cells[j] = replacement
             lines[li] = "&".join(cells)
-    content = "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+    content = "".join(lines)
     return content, edits
 
 
