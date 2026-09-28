@@ -120,7 +120,7 @@
       <div id="duo" style="flex:1;display:flex;min-height:0;">
         <div id="editor" style="flex:1;min-width:0;"></div>
         <div class="vsep" id="sepE" title="拖拽调整源码/预览分栏"><button class="sep-btn left" id="sepBtnE" title="折叠/展开预览">▶</button></div>
-        <div id="previewPane" style="width:38%;min-width:200px;max-width:75%;overflow:auto;background:#091223;padding:14px;">
+        <div id="previewPane" style="width:38%;min-width:220px;max-width:60%;overflow:auto;background:#091223;padding:14px;">
           <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
             <button class="act" id="btnCompile" style="padding:3px 10px;font-size:11.5px">⟳ 编译预览</button>
             <span id="pvStatus" style="color:var(--dim);font-size:12px">用 Tectonic 渲染整页</span>
@@ -196,8 +196,9 @@ window.addEventListener("load", () => {
   $("sepBtnL").onclick = () => toggle("sidebar");
   dragSep($("sepE"), (ev) => {
     const duo = $("duo"); const r = duo.getBoundingClientRect();
-    const w = Math.min(duo.offsetWidth - 200, Math.max(160, ev.clientX - r.left));
-    $("editor").style.flex = "none"; $("editor").style.width = w + "px";
+    const pct = Math.min(80, Math.max(20, ((ev.clientX - r.left) / duo.offsetWidth) * 100));
+    $("editor").style.width = pct + "%";
+    $("previewPane").style.width = (100 - pct) + "%";
     if (editor) editor.layout();
   });
   $("sepBtnE").onclick = () => {
@@ -275,6 +276,8 @@ async function loadFile(name) {
   curName = name; preFix = null;
   $("tabname").textContent = name;
   $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
+  $("editor").style.width = ""; $("editor").style.flex = "1";
+  $("previewPane").style.width = "38%";
   const d = await j(`/api/studio/file?token=${T}&name=${name}`);
   if (editor.getModel()) editor.getModel().setValue(d.content);
   else editor.setValue(d.content);
@@ -381,7 +384,7 @@ async function compilePreview(content) {
       lastPreviewTag = d.png.split("/").pop().split("?")[0];
       $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
       $("pvTabStatus").innerHTML = `<span style="color:var(--ok)">✓</span>`;
-      $("pvImgWrap").innerHTML = `<img src="${d.png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+      $("pvImgWrap").innerHTML = `<img src="${d.png}&token=${T}" style="width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
       $("btnPdf").classList.remove("hide");
     } else {
       lastPreviewTag = null;
@@ -451,7 +454,7 @@ function applyResult(res) {
     const png = res.compile_after.png;
     lastPreviewTag = png.split("/").pop().split("?")[0];
     $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · 修复后文档`;
-    $("pvImgWrap").innerHTML = `<img src="${png}&token=${T}" style="max-width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+    $("pvImgWrap").innerHTML = `<img src="${png}&token=${T}" style="width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
     $("btnPdf").classList.remove("hide");
   }
 }
