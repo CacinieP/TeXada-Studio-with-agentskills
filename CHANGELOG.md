@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — technical writing revision
+
+- Rewrite the article around an end-to-end total correction and human review, with explicit state handling and representative negative cases.
+- Add engineering contributions, design tradeoffs, evaluation denominators and planned acceptance criteria to the Skill technical report.
+- Remove narration production details from the project report and validation record; keep submission administration in the submission checklist.
+
 ## Unreleased — executable cases and Skill contracts
 
 - Add 27 synthetic checker cases, a reproducible JSON/Markdown evaluation runner and three Studio documents for clean, semantic-boundary and manual-review scenarios.

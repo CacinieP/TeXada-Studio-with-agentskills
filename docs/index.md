@@ -20,7 +20,7 @@
 
 1. 先读 [Skills 技术报告](skills-technical-report.md)，明确哪些部分是确定性检查、模型调用、人工复核或尚未实现的设计。
 2. 用[案例手册](casebook.md)和[案例集说明](../samples/evaluation/README.md)重放正例、反例和边界。语法接受、预期匹配、编译通过与数学语义正确是不同结论。
-3. [验证记录](validation.md)与[演示证据 JSON](demo-evidence.json)记录已有验证的条件；单次样本、fixture 和旁白均不是模型准确率基准。
+3. [验证记录](validation.md)与[演示证据 JSON](demo-evidence.json)记录已有验证的条件；单次演示与fixture不能作为模型准确率基准。
 4. 引用时使用 [CITATION.cff](../CITATION.cff)，写明实际提交号、模型或检查器、数据来源和未覆盖范围。公开评测不得使用无再分发授权的原始材料。
 
 ## 维护者：交付、部署与公开准备
