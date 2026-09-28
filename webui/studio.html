@@ -21,7 +21,7 @@
   button.act.star { background:#2d6cc9; }
   button.act.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
   #main { flex:1; display:flex; min-height:0; }
-  #sidebar { width:200px; min-width:140px; max-width:420px; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; overflow-y:auto; }
+  #sidebar { width:200px; min-width:0; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; overflow-y:auto; }
   .vsep { width:5px; cursor:col-resize; background:transparent; flex:none; position:relative; }
   .vsep:hover, .vsep.on { background:var(--accent); opacity:.5; }
   .sep-btn { position:absolute; top:50%; transform:translateY(-50%); width:14px; height:34px;
@@ -52,7 +52,7 @@
          background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
   #editor, #diff { flex:1; min-height:0; position:relative; overflow:hidden; }
   #duo { position:relative; }
-  #rightpanel { width:300px; min-width:180px; max-width:520px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
+  #rightpanel { width:300px; min-width:0; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
   .panel { border-bottom:1px solid var(--line); padding:10px 12px; }
   .panel h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
   .prob { padding:5px 8px; border-radius:4px; cursor:pointer; margin-bottom:4px; font-size:12.5px; }
@@ -63,7 +63,7 @@
   .prob.fixed { border-left:2px solid var(--ok); opacity:.75; }
   .kv { font-family:Menlo,monospace; font-size:12px; color:var(--fg); white-space:pre-wrap; }
   #preview img { width:100%; border:1px solid var(--line); border-radius:4px; background:#fff; }
-  #bottom { height:130px; min-height:32px; max-height:50vh; background:var(--panel); border-top:1px solid var(--line); flex:none;
+  #bottom { height:130px; min-height:0; background:var(--panel); border-top:1px solid var(--line); flex:none;
             display:flex; flex-direction:column; }
   #bottom h4 { font-size:11px; color:var(--dim); padding:4px 12px; text-transform:uppercase; letter-spacing:1px; }
   #joblog { flex:1; overflow-y:auto; font-family:Menlo,monospace; font-size:11.5px; padding:0 12px 8px; color:var(--dim); }
@@ -120,7 +120,7 @@
       <div id="duo" style="flex:1;display:flex;min-height:0;">
         <div id="editor" style="flex:1;min-width:0;"></div>
         <div class="vsep" id="sepE" title="拖拽调整源码/预览分栏"><button class="sep-btn left" id="sepBtnE" title="折叠/展开预览">▶</button></div>
-        <div id="previewPane" style="width:38%;min-width:220px;max-width:60%;overflow:auto;background:#091223;padding:14px;display:flex;flex-direction:column;">
+        <div id="previewPane" style="width:38%;min-width:0;overflow:auto;background:#091223;padding:14px;display:flex;flex-direction:column;">
           <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex:none">
             <button class="act" id="btnCompile" style="padding:3px 10px;font-size:11.5px">⟳ 编译预览</button>
             <span id="pvStatus" style="color:var(--dim);font-size:12px">用 Tectonic 渲染整页</span>
@@ -177,11 +177,11 @@ window.addEventListener("load", () => {
   // 记住拖拽前的宽度，折叠/展开互逆
   const saved = {};
   dragSep($("sepL"), (ev) => { $("sidebar").classList.remove("collapsed");
-    $("sidebar").style.width = Math.min(420, Math.max(140, ev.clientX)) + "px"; });
+    $("sidebar").style.width = ev.clientX + "px"; });
   dragSep($("sepR"), (ev) => { $("rightpanel").classList.remove("collapsed");
-    $("rightpanel").style.width = Math.min(520, Math.max(180, window.innerWidth - ev.clientX)) + "px"; });
+    $("rightpanel").style.width = (window.innerWidth - ev.clientX) + "px"; });
   dragSep($("hsep"), (ev) => { $("bottom").classList.remove("collapsed");
-    $("bottom").style.height = Math.min(window.innerHeight * 0.5, Math.max(32, window.innerHeight - ev.clientY)) + "px"; });
+    $("bottom").style.height = Math.max(0, window.innerHeight - ev.clientY) + "px"; });
 
   const toggle = (panel, cls="collapsed") => {
     const el = $(panel);
@@ -199,7 +199,7 @@ window.addEventListener("load", () => {
   $("sepBtnL").onclick = () => toggle("sidebar");
   dragSep($("sepE"), (ev) => {
     const duo = $("duo"); const r = duo.getBoundingClientRect();
-    const pct = Math.min(80, Math.max(20, ((ev.clientX - r.left) / duo.offsetWidth) * 100));
+    const pct = Math.min(98, Math.max(2, ((ev.clientX - r.left) / duo.offsetWidth) * 100));
     $("editor").style.width = pct + "%";
     $("previewPane").style.width = (100 - pct) + "%";
     if (editor) editor.layout();
@@ -207,7 +207,7 @@ window.addEventListener("load", () => {
   $("sepBtnE").onclick = () => {
     const pp = $("previewPane");
     const collapsed = pp.classList.contains("collapsed") || pp.style.width === "0px";
-    if (collapsed) { pp.classList.remove("collapsed"); pp.style.width = "38%"; pp.style.minWidth = "200px"; pp.style.border = ""; pp.style.overflow = "auto"; }
+    if (collapsed) { pp.classList.remove("collapsed"); pp.style.width = saved["previewPane"] || "38%"; pp.style.border = ""; pp.style.overflow = "auto"; }
     else { saved["previewPane"] = pp.style.width; pp.classList.add("collapsed"); pp.style.width = "0"; pp.style.minWidth = "0"; pp.style.overflow = "hidden"; }
     if (editor) editor.layout();
   };
@@ -279,8 +279,9 @@ async function loadFile(name) {
   curName = name; preFix = null;
   $("tabname").textContent = name;
   $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
-  $("editor").style.width = ""; $("editor").style.flex = "1";
-  $("previewPane").style.width = "38%";
+  if (! $("previewPane").classList.contains("collapsed")) {
+    if (! $("previewPane").style.width) $("previewPane").style.width = "38%";
+  }
   const d = await j(`/api/studio/file?token=${T}&name=${name}`);
   if (editor.getModel()) editor.getModel().setValue(d.content);
   else editor.setValue(d.content);
