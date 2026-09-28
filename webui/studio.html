@@ -120,13 +120,16 @@
       <div id="duo" style="flex:1;display:flex;min-height:0;">
         <div id="editor" style="flex:1;min-width:0;"></div>
         <div class="vsep" id="sepE" title="拖拽调整源码/预览分栏"><button class="sep-btn left" id="sepBtnE" title="折叠/展开预览">▶</button></div>
-        <div id="previewPane" style="width:38%;min-width:220px;max-width:60%;overflow:auto;background:#091223;padding:14px;">
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        <div id="previewPane" style="width:38%;min-width:220px;max-width:60%;overflow:auto;background:#091223;padding:14px;display:flex;flex-direction:column;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex:none">
             <button class="act" id="btnCompile" style="padding:3px 10px;font-size:11.5px">⟳ 编译预览</button>
             <span id="pvStatus" style="color:var(--dim);font-size:12px">用 Tectonic 渲染整页</span>
+            <div style="flex:1"></div>
+            <button class="act ghost" id="pvZoomFit" style="padding:2px 8px;font-size:11px">适应</button>
+            <button class="act ghost" id="pvZoom100" style="padding:2px 8px;font-size:11px">100%</button>
           </div>
-          <div id="pvLog" class="kv hide" style="background:#0e1d36;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err)"></div>
-          <div id="pvImgWrap" style="text-align:center"></div>
+          <div id="pvLog" class="kv hide" style="background:#0e1d36;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err);flex:none"></div>
+          <div id="pvImgWrap" style="flex:1;display:flex;align-items:flex-start;justify-content:center;"></div>
         </div>
       </div>
       <div id="diff" class="hide" style="flex:1;"></div>
@@ -259,7 +262,7 @@ require(["vs/editor/editor.main"], () => {
   });
   editor = monaco.editor.create($("editor"), {
     value: "", language: "latex", theme: "texada-blue", automaticLayout: true,
-    fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, renderWhitespace: "none"
+    fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: true, scrollBeyondLastLinePercent: 0, renderWhitespace: "none", verticalScrollbarSize: 10
   });
   loadFile(P.get("file") || "GTM249-p101-120.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
 });
@@ -371,6 +374,19 @@ $("fileInput").onchange = async (ev) => {
 };
 
 let lastPreviewTag = null;
+let pvZoom = "fit";
+function setPvImg(src) {
+  const style = pvZoom === "fit"
+    ? "width:100%;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-in"
+    : "max-width:none;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-out";
+  $("pvImgWrap").innerHTML = `<img id="pvImg" src="${src}" style="${style}" title="点击切换 适应/原始大小">`;
+  $("pvImg").onclick = () => { pvZoom = pvZoom === "fit" ? "raw" : "fit"; $("pvImg").style.cssText =
+    pvZoom === "fit"
+      ? "width:100%;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-in"
+      : "max-width:none;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-out"; };
+}
+$("pvZoomFit").onclick = () => { pvZoom = "fit"; if ($("pvImg")) $("pvImg").click = null, setPvImg($("pvImg").src); };
+$("pvZoom100").onclick = () => { pvZoom = "raw"; if ($("pvImg")) setPvImg($("pvImg").src); };
 async function compilePreview(content) {
   $("pvStatus").innerHTML = `<span class="spin"></span>Tectonic 编译中…`;
   $("pvTabStatus").innerHTML = `<span class="spin"></span>`;
@@ -384,7 +400,7 @@ async function compilePreview(content) {
       lastPreviewTag = d.png.split("/").pop().split("?")[0];
       $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
       $("pvTabStatus").innerHTML = `<span style="color:var(--ok)">✓</span>`;
-      $("pvImgWrap").innerHTML = `<img src="${d.png}&token=${T}" style="width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+      setPvImg(`${d.png}&token=${T}`);
       $("btnPdf").classList.remove("hide");
     } else {
       lastPreviewTag = null;
@@ -454,7 +470,7 @@ function applyResult(res) {
     const png = res.compile_after.png;
     lastPreviewTag = png.split("/").pop().split("?")[0];
     $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · 修复后文档`;
-    $("pvImgWrap").innerHTML = `<img src="${png}&token=${T}" style="width:100%;border:1px solid var(--line);background:#fff;border-radius:4px">`;
+    setPvImg(`${png}&token=${T}`);
     $("btnPdf").classList.remove("hide");
   }
 }
