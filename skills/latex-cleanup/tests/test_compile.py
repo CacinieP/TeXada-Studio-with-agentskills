@@ -54,11 +54,31 @@ class CompileTests(unittest.TestCase):
         self.assertEqual(result["status"], "not_run")
         self.assertEqual((self.outdir / "-source with spaces.pdf").read_bytes(), b"%PDF-old")
 
-    def test_timeout_preserves_console_and_status(self):
-        with self.fake_compiler("import time\nprint('starting', flush=True)\ntime.sleep(10)\n"):
+    def test_real_subprocess_timeout_is_retained(self):
+        # The interpreter need not finish starting before the deadline. Check the
+        # real timeout path without assuming that the child has produced output.
+        with self.fake_compiler("import time\nwhile True: time.sleep(60)\n"):
             result = compiler.compile_document(self.root, "tectonic", self.outdir, timeout=1)
         self.assertEqual(result["status"], "timeout")
-        self.assertIn("starting", (self.outdir / "console.log").read_text())
+        self.assertIsNotNone(result["compiler_exit_code"])
+        self.assertNotEqual(result["compiler_exit_code"], 0)
+        self.assertIsNone(result["pdf"])
+        self.assertTrue((self.outdir / "console.log").is_file())
+        self.assertEqual(json.loads((self.outdir / "build-result.json").read_text()), result)
+
+    def test_timeout_preserves_available_console_output(self):
+        # Verify the output handoff independently of OS child-startup scheduling.
+        # Include non-UTF-8 bytes: the saved console must remain byte-for-byte intact.
+        console = b"starting\nOverfull \\hbox (1.2pt too wide)\npartial output: \xff"
+        with patch.object(compiler.shutil, "which", return_value="/test/tectonic"), \
+                patch.object(compiler, "run_process", return_value=(-9, console, True, 1.0)):
+            result = compiler.compile_document(self.root, "tectonic", self.outdir, timeout=1)
+        self.assertEqual(result["status"], "timeout")
+        self.assertEqual(result["compiler_exit_code"], -9)
+        self.assertEqual((self.outdir / "console.log").read_bytes(), console)
+        self.assertEqual(Path(result["diagnostics_source"]), (self.outdir / "console.log").resolve())
+        self.assertEqual(len(result["diagnostics"]["overfull"]), 1)
+        self.assertEqual(json.loads((self.outdir / "build-result.json").read_text()), result)
 
     def test_success_keeps_final_log_warnings_and_safe_filename(self):
         body = (

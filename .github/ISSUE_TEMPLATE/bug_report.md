@@ -15,6 +15,8 @@ assignees: ''
 ## 环境
 
 - Commit:
+- Studio / CLI:
+- Fixture / real model:
 - OS / architecture:
 - Python / Node / browser:
 - Model / compiler (if relevant):
@@ -22,3 +24,5 @@ assignees: ''
 ## 日志或截图
 
 请移除 token、私人文档和个人路径。
+
+若反馈数学或表格结果，请同时写出原始值、实际候选、预期结果，以及你判断预期的依据。语法通过或编译通过不能代替语义核对。

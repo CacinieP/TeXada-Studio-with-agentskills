@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — open-source readiness
+
+- Expand Chinese and English onboarding, support, troubleshooting, citation metadata and contribution tasks.
+- Align Harness, sample and deployment documentation with the implemented CLI and distinguish real-model table limitations from Studio behavior.
+- Prepare a release-note draft, launch plan, social preview and a short excerpt of the recorded demo; no public release or post has been published.
+- Document the private vulnerability-reporting setup that remains required before public launch.
+- Separate real subprocess timeout verification from output-preservation verification to avoid assuming that a fresh Python child prints within one second; compiler runtime behavior is unchanged.
+
 ## 2026-09-28 Submission preparation
 
 - Fail closed when formula verification crashes or dependencies are missing; reject partial LaTeX parses while supporting delimiter sizing commands.
@@ -7,7 +15,7 @@
 - Reset failed task controls and discard stale file / preview responses.
 - Align Skills, architecture, deployment notes and submission documents with actual implementation and the verified form.
 
-## Unreleased
+## Earlier preparation (unreleased)
 
 - 参赛仓库使用 `TeXada-Studio-with-agentskills`，作品显示名统一为 TeXada Studio with Agent Skills；更新安装目录、源码链接和打包名称。
 

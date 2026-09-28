@@ -4,7 +4,9 @@
 
 ## 报告漏洞
 
-请使用仓库 Security 页的私密漏洞报告入口（若已启用）。若不可用，请在 Issue 中只请求与维护者建立私密联系，不公开利用步骤、真实 token 或用户文档。
+当前仓库仍为私有，尚未提供经验证的匿名私密漏洞报告入口。已有访问权限的成员请通过与维护者已有的私密联系渠道报告；不要把漏洞细节写入普通 Issue。
+公开发布前，维护者须启用并核验 GitHub 的 Private vulnerability reporting；届时使用仓库 Security → Advisories 中的 Report a vulnerability。若该入口不可用，只在 Issue 中请求建立私密联系，不附利用步骤、真实 token 或用户文档。
+GitHub 的该功能面向公共仓库；见 [官方配置说明](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository)。
 报告应包括受影响提交、最小复现、影响范围和已尝试的缓解措施。
 
 ## 部署边界

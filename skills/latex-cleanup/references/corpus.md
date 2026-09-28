@@ -59,4 +59,4 @@ node tests/test_audit_math.cjs
 
 美元定界符提取不是完整 Markdown 解析；查看输出中的 `limitations`。原 PDF 页范围来自
 分段标记，不能精确推断每条公式所在单页。缺少定界符、能解析但含错符号的公式以及图像
-丢失都需要其他检查。实际完整例子见 [GTM 语料实例](../examples/gtm-corpus/README.md)。
+丢失都需要其他检查。历史 GTM 语料实例不随本仓库分发；复现请使用自己拥有处理权限的材料，并把原文与产物保留在私有目录。

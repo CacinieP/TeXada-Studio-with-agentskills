@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting / 常见问题
+    url: https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/docs/troubleshooting.md
+    about: Check setup, model, preview and resume behavior before filing an issue.
+  - name: Security policy / 安全报告
+    url: https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/SECURITY.md
+    about: Follow the private reporting procedure; do not disclose vulnerabilities in public issues.

@@ -1,30 +1,50 @@
-# TeXada-Studio-with-agentskills
+# TeXada Studio with Agent Skills
 
-LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。包含 Monaco 源码编辑器、Tectonic 编译预览、修复对比，以及可断点续跑的命令行质检管线。
+**在 LaTeX 编辑器里发现公式语法与简单表格合计问题，审阅修复候选，再决定是否采用。**
 
-这是第三届 NVIDIA DGX Spark 黑客松 Agent Skills 方向的实验项目。当前支持可信用户的单进程演示部署，还不是多用户文档服务。
+[English](README.en.md) · [看演示](docs/demo.md) · [常见问题](docs/troubleshooting.md) · [参与贡献](CONTRIBUTING.md) · [路线图](docs/roadmap.md)
 
-参赛作品名：**TeXada Studio with Agent Skills · 文档质检与修复**。仓库名：`TeXada-Studio-with-agentskills`。
-本仓库承接已经清理的项目历史，原仓库保留私有；命名依据与迁移范围见 [仓库说明](docs/repository-migration.md)。
+适合需要整理 `.tex` 文档的教师、科研写作者，以及研究可审阅模型工作流的开发者。项目将 Monaco 编辑、规则检查、本地模型候选、Tectonic 预览和人工确认放进同一个界面。
 
-团队：LinguistsWantTech · 队长邓一纯 · 队员刘丰华。
-材料入口：[项目报告](docs/project-report.md) · [技术征文](docs/technical-article.md) · [实际提交字段](docs/submission-checklist.md)。
+**状态：实验原型，尚无正式 Release。** 当前仓库保持私有，仅授权成员可访问；项目源码采用 [AGPL-3.0-only](LICENSE)。面向可信用户的单进程部署，尚未提供多用户服务或公共匿名试用。
 
 ![Studio 的源码、预览与人工采用流程](docs/images/studio-overview.png)
 
-## 当前能力
+## 用一个例子了解
 
-- Studio：编辑 / 上传 / 导出 `.tex`，并排预览第一页 PDF，查看候选 diff，人工采用后导出质检报告。
-- 公式：用 SymPy 检查部分 LaTeX 语法，调用本地模型尝试修复，再做语法回判。
-- 表格：检查简单 `tabular` 合计值；复杂跨页表格和任意 LaTeX 宏不在支持范围。
-- CLI：读取已有 `layout.json`，输出 `OK / RETRY / NEEDS_HUMAN`、事件日志和 Markdown 报告；重跑跳过已完成节点。
-- Studio 的 Monaco 0.52.2 资源随仓库提供，运行时无需编辑器 CDN。
+| 文档里的问题 | TeXada 的处理 | 使用者仍需判断 |
+| --- | --- | --- |
+| 利润数据是 45 和 60，合计却写成 115；PDF 仍能编译 | Studio 定位合计行，按规则生成 105 的候选，展示 diff 与报告 | 数据行本身是否正确 |
+| 公式下标 `a_` 不完整，原文编译失败 | 本地模型提出候选，SymPy 回判语法，Tectonic 检查编译 | 补成 `a_1` 是否符合作者原意 |
 
-语法检查通过不代表数学含义正确。当前真实模型请求发送文本，不发送页面图像；版面解析 Skill 是工作流说明，CLI 不直接完成 PDF/OCR 解析。`samples/` 中的 crop 和修复数据是测试替身，不能作为模型效果评测。
+检查通过不等于数学含义正确；候选不会未经确认就覆盖编辑器原文。详见 [实际演示与单次结果](docs/demo.md)。
+
+## 选择体验方式
+
+| 目标 | 从哪里开始 | 需要什么 |
+| --- | --- | --- |
+| 看操作和边界 | [演示页](docs/demo.md) | 无需安装 |
+| 跑一个可重复的样本 | 下方离线 fixture 快速开始 | Python，无需 GPU / 模型 / TeX |
+| 编辑、分析自己的可信 tex | 下方 Studio 启动步骤 | Python；编译和模型功能另需依赖 |
+| 扩展规则、修复或文档 | [贡献说明](CONTRIBUTING.md) | 对应模块的开发与测试环境 |
+
+## 能力与范围
+
+| 能力 | Studio | CLI |
+| --- | --- | --- |
+| 输入 | 单个 `.tex`；编辑、上传和导出 | 已有 `layout.json` 结构树 |
+| 公式 | 部分行内公式语法；本地文本模型最多两次修复尝试 | SymPy 检查；fixture 或文本模型提出候选 |
+| 简单表格合计 | 检查并按规则重算候选 | 检查；fixture 可提供替身数据，真实模型模式尚未实现表格修复 |
+| 结果审阅 | 候选 diff、手动采用、Markdown 质检报告 | 事件日志与报告；重跑跳过终态节点 |
+| 编译预览 | Tectonic 编译；预览第一页 PDF | 当前管线不调用编译器 |
+
+模型请求只发送文本，不发送页面图像。自动 PDF/OCR、复杂跨页表格、多用户隔离与通用自主规划尚未实现。`samples/` 中的 crop 和修复数据是测试替身，不代表 OCR 或模型准确率。Studio 的 Monaco 0.52.2 资源随仓库提供，不依赖编辑器 CDN。
 
 ## 快速开始：无需 GPU 的离线样本
 
-需要 Python 3.10+；开发验证使用 Python 3.13。以下命令在仓库根目录执行。初次安装依赖需要网络，安装完成后 fixture 管线不调用模型服务。
+需要 Python 3.10+；当前已验证环境为 Python 3.13（其他版本尚未逐一验收）。以下命令在仓库根目录执行。初次安装依赖需要网络，安装完成后 fixture 管线不调用模型服务。
+
+仓库私有期间，clone 需要仓库访问权限和已配置的 GitHub 身份；也可使用维护者提供的源码包。
 
 ```bash
 git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
@@ -45,12 +65,13 @@ PYTHONPATH=harness python -m docforensics run samples \
 ```bash
 python -m pip install -r webui/requirements.txt
 export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# 先显示只供自己使用的本地地址，再以前台方式启动
+printf 'http://127.0.0.1:8888/studio?token=%s&file=report-01.tex\n' "$DEMO_TOKEN"
 python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 ```
 
-在同一终端查看自己生成的 `DEMO_TOKEN`，打开
-`http://127.0.0.1:8888/studio?token=<你的token>&file=report-01.tex`。
-没有设置 token 时服务会拒绝启动。也可复制 [`.env.example`](.env.example) 为 `.env`，填写后手动加载；应用不会自动读取 `.env`。
+打开启动前打印的本地地址；按 `Ctrl-C` 停止服务。该地址带个人 token，不要分享截图或原样复制进 Issue。
+没有设置 token 时服务会拒绝启动。也可复制 [`.env.example`](.env.example) 为 `.env`，填写后执行 `set -a; . ./.env; set +a`；应用不会自动读取 `.env`。
 
 编辑和浏览文件只需要 Python 依赖。完整功能还需要：
 
@@ -59,10 +80,10 @@ python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 | 公式分析 / 表格检查 | `webui/requirements.txt` 中的 SymPy、antlr4 等 |
 | 编译 PDF 与第一页预览 | [Tectonic](https://tectonic-typesetting.github.io/)、Poppler 的 `pdftoppm`；可执行文件位于 `PATH` |
 | 中文样本编译 | 字体 `Noto Sans CJK SC` 与所需 TeX 包 |
-| 模型修复 | 本机 Ollama 或兼容服务，监听 `127.0.0.1:11434`，已下载 `VLM_MODEL` 指定的模型 |
+| 模型修复 | 本机 Ollama 的兼容接口，固定访问 `127.0.0.1:11434`；`VLM_MODEL` 必须是已安装的模型标签 |
 
 可通过 `TECTONIC` 指定编译器完整路径，通过 `VLM_MODEL` 更换已安装的模型。
-默认模型名称是 `qwen3.8:27b-q4_K_M`；fixture 测试不需要下载它。程序不自动安装模型、字体或系统软件。
+默认标签 `qwen3.8:27b-q4_K_M` 来自实测节点，不保证你的机器已有同名模型。先运行 `ollama list`，再用 `export VLM_MODEL="实际已安装的标签"` 选择；可用 `curl --fail http://127.0.0.1:11434/v1/models` 检查接口。fixture 测试无需模型。程序不会自动安装模型、字体或系统软件。
 
 上传文档保存在 `state/studio/documents/`；同名上传会覆盖此前上传的版本，但不会改写仓库自带样本。运行结果保存在 `state/`，均被 Git 忽略。
 
@@ -102,10 +123,18 @@ Node.js 22 用于 JavaScript 检查。上述测试不需要 GPU 或模型，也�
 
 ## 贡献、分发与许可证
 
-贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。问题和功能建议可提交到 [GitHub Issues](https://github.com/CacinieP/TeXada-Studio-with-agentskills/issues)。
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。求助入口与报告要求见 [SUPPORT.md](SUPPORT.md)。问题和功能建议可提交到 [GitHub Issues](https://github.com/CacinieP/TeXada-Studio-with-agentskills/issues)。
 
 本项目原创代码、文档和合成样本采用 **GNU AGPL v3.0（SPDX: `AGPL-3.0-only`）**，Copyright (C) 2026 CacinieP。完整条款见 [LICENSE](LICENSE)，第三方组件及保留许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。第三方代码不因位于本仓库而改换原许可证。
 
 提供网络服务的修改版本需遵守 AGPL 第 13 条的对应源代码提供要求；请保留界面的源码链接，并指向实际部署版本可访问的完整源码。上传的用户文档不自动变成本项目的授权内容。
 
 提交并审阅后执行 `bash scripts/package.sh`，生成仅包含当前提交的 `dist/TeXada-Studio-with-agentskills-<commit>.zip`。打包不读取未跟踪文件，也不包含 Git 历史。`scripts/backup.sh` 的 Git bundle 包含历史，仅作私密备份，不作为公开源码包。
+
+## 项目与维护
+
+团队：LinguistsWantTech；队长邓一纯，队员刘丰华。仓库由 [@CacinieP](https://github.com/CacinieP) 维护。研究引用可使用 [CITATION.cff](CITATION.cff)，并注明实际使用的提交号。
+
+这是第三届 NVIDIA DGX Spark 黑客松 Agent Skills 方向的实验项目。参赛材料：[项目报告](docs/project-report.md) · [技术征文](docs/technical-article.md) · [验证记录](docs/validation.md)。
+
+维护者入口：[开源检查](docs/open-source-release.md) · [发布与传播计划](docs/launch-plan.md) · [变更记录](CHANGELOG.md) · [仓库迁移记录](docs/repository-migration.md)。

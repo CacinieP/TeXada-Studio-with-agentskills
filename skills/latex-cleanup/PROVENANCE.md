@@ -22,7 +22,6 @@
 
 ## 在 TeXada Studio with Agent Skills 中的定位
 
-内部依赖（同 `spark-ops`，不单独参赛）：为 `doc-formula-verify` 的修复结果提供**编译回环**验收——
-`audit_math.cjs` 数学审计（node）+ `compile_tex.py` 实际编译（Tectonic，P1/P2，目标环境按需）+
-`format_whitespace.py` 保守空白清洗。上游宿主（TeXada Studio with Agent Skills harness）在修复后调用其检查模式，
-不修改本 Skill 的契约。上游更新时从来源仓重新提取并更新本文件。
+这份快照提供可独立运行的数学审计、实际编译与保守清理工具。当前 Studio 直接调用 Tectonic，不调用本 Skill 的完整工具链；当前 CLI Harness 调用公式和表格检查脚本，不调用本快照的 Node 审计或编译回环。把它接入这些路径属于后续工作，不能将工具存在视为已经接入。
+
+本仓库维护了本地测试和文档调整；重新从来源仓提取时先核对差异，保留适用的修复与来源说明，不覆盖已经验证的行为。此次开源准备修正了样本/命令路径及历史语料链接，并处理编译超时测试对 Python 启动时序的依赖。运行时编译器实现未因此改动。

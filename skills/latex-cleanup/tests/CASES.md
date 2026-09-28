@@ -7,10 +7,25 @@
 不是空白脚本自动修复的结果。此 PNG 在本次 Tectonic 下按完整容器宽度仍溢出 1.29237 pt，
 因此仅在该样例使用 `0.98\linewidth`；这不是技能的通用规则。
 
+以下命令在仓库根目录、已激活的 Python 虚拟环境中执行：
+
 ```sh
-python3 -m unittest discover -s tests -v
-python3 tests/run_integration.py --outdir /path/to/work/integration-01 --offline
+python -m pip install -r webui/requirements-test.txt
+python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
+node skills/latex-cleanup/tests/test_audit_math.cjs
 ```
+
+已有 Tectonic 且预备好离线 TeX 包后，可另跑真实编译集成检查：
+
+```sh
+python skills/latex-cleanup/tests/run_integration.py \
+  --outdir state/integration-01 --offline
+```
+
+输出目录必须尚不存在；重跑时换成新的目录，例如 `state/integration-02`。脚本使用
+`PATH` 上的 `tectonic`，不会读取 Studio 的 `TECTONIC` 环境变量。`--offline` 禁止为
+本次编译联网取包，缺包或缺编译器会记录失败 / 未执行，不应当作通过。允许初次取包时
+可去掉 `--offline`，并在验证记录中注明联网条件。结果见输出目录的 `integration-result.json`。
 
 单元测试验证文件保护和脚本操作结果，编译进程管理部分使用测试用子进程，不依赖完整 TeX 环境。
 Markdown 用例要求 `markdown-it-py`；没有依赖会明确显示 skipped，不算已验收。
@@ -29,5 +44,5 @@ Markdown 用例要求 `markdown-it-py`；没有依赖会明确显示 skipped，�
 备份、并发变更、BOM/CRLF、文件权限和删除。它不验证证据的内容或 OCR 数学正确性。
 
 `test_ocr_corpus.py` 检验批量副本、状态保留、原件变化检测、片段覆盖和文本补丁回放；
-`node tests/test_audit_math.cjs` 检验公式探针的代码保护、偏移、哈希和输出目录保护。
-完整 50 本的实际运行和可重放例子见 [GTM 语料](../examples/gtm-corpus/README.md)。
+`node skills/latex-cleanup/tests/test_audit_math.cjs` 检验公式探针的代码保护、偏移、哈希和输出目录保护。
+批量处理的输入约定见 [语料处理说明](../references/corpus.md)。历史完整语料运行材料不随本仓库分发，不能据此声称新用户可重放其全部结果。

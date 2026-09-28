@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, cite this repository and include the exact commit you used."
+type: software
+title: "TeXada Studio with Agent Skills"
+authors:
+  - family-names: "邓"
+    given-names: "一纯"
+  - family-names: "刘"
+    given-names: "丰华"
+repository-code: "https://github.com/CacinieP/TeXada-Studio-with-agentskills"
+url: "https://github.com/CacinieP/TeXada-Studio-with-agentskills"
+license: AGPL-3.0-only
+abstract: "Experimental LaTeX quality-checking and repair workflow with local text-model candidates, deterministic checks, and human review."
+keywords:
+  - latex
+  - document-quality
+  - human-in-the-loop
+  - agent-skills
