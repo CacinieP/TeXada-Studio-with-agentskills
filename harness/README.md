@@ -1,5 +1,7 @@
 # Agent Harness 说明
 
+> 当前实现：读取现成的 layout JSON，调用 SymPy / 表格脚本，使用 fixture 或本机 OpenAI 兼容接口修复，记录事件与报告。下述 LiteLLM、多模型常驻和版面解析接入是设计目标，并非已实现功能。可运行命令见根目录 README。
+
 Harness 是 Skills 的执行外壳：规划循环、三态协议、状态持久化、模型网关。本目录收敛其设计要点，
 实现入口为 `python -m docforensics ...`（P0 期间只做薄循环，不引入重框架）。
 

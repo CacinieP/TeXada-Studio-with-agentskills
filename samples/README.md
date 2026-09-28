@@ -1,5 +1,10 @@
 # 样本包（离线 fixtures）
 
+本目录保留的内容均为合成测试样本，随主项目采用 AGPL-3.0-only。
+Studio 自带 `docs/report-01.tex` 和 `docs/exam-01.tex`，有意包含合计或公式语法错误。
+历史教材节选 `GTM249-p101-120.tex` 已移出当前分发范围，见 [发布清单](../docs/open-source-release.md)。
+用户自己的上传文件放在 `state/studio/documents/`，不要加入本目录。
+
 三个样本目录，每个含 `layout.json`（结构树）与占位 crop 截图：
 
 | 样本 | 内容 | 注入错误 |

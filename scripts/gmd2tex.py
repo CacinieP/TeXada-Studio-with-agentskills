@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MinerU 全文.md → 可编译 .tex（抽取指定页码段）。
 
-用法: gmd2tex.py 全文.md 0101 0120 out.tex "GTM249 · Classical Fourier Analysis"
+用法: gmd2tex.py 自有文档.md 0001 0020 out.tex "文档标题"
 - 标题映射: #/##/### → section/subsection/subsubsection
 - $$ 块 → equation*；行内 $...$ 保留（MinerU 空格风格 LaTeX 可直接编译）
 - 图片引用行、HTML 残留剔除

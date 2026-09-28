@@ -2,11 +2,13 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
 <title>TeXada-WebUI Studio</title>
 <style>
   :root { --bg:#0b1526; --panel:#101f38; --title:#0a1a33; --line:#1e3a5f; --fg:#d7e3f4;
           --dim:#7a94b8; --accent:#4da3ff; --ok:#5cc8ff; --warn:#ffd166; --err:#ff7b72; --status:#0d2b52; }
   * { box-sizing:border-box; margin:0; }
+  .hide { display:none !important; }
   html,body { height:100%; }
   body { background:var(--bg); color:var(--fg); font:13.5px/1.55 -apple-system,"PingFang SC",sans-serif;
          display:flex; flex-direction:column; overflow:hidden; }
@@ -33,6 +35,7 @@
   .sep-btn.right { right:-1px; border-radius:6px 0 0 6px; }
   #sidebar.collapsed { width:0 !important; min-width:0; padding:0; overflow:hidden; border:none; }
   #rightpanel.collapsed { width:0 !important; min-width:0; overflow:hidden; border:none; }
+  #previewPane.collapsed { width:0 !important; min-width:0; padding:0 !important; overflow:hidden !important; border:none; flex:none; }
   #bottom.collapsed { height:32px !important; overflow:hidden; }
   #bottom.collapsed #joblog { visibility:hidden; }
   .hsep-btn { position:absolute; right:14px; top:-2px; width:34px; height:9px;
@@ -50,6 +53,7 @@
   #tabs { height:34px; background:var(--panel); display:flex; align-items:stretch; border-bottom:1px solid var(--line); flex:none; }
   .tab { padding:0 16px; display:flex; align-items:center; font-family:Menlo,monospace; font-size:12.5px;
          background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
+  .tab[aria-disabled="true"] { cursor:not-allowed; }
   #editor, #diff { flex:1; min-height:0; position:relative; overflow:hidden; }
   #duo { position:relative; }
   #rightpanel { width:300px; min-width:0; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
@@ -98,7 +102,7 @@
   </div>
   <div id="main">
     <div id="sidebar">
-      <h4>资源管理器 · samples/docs</h4>
+      <h4>资源管理器 · 文档</h4>
       <div id="files"></div>
       <h4 style="margin-top:12px">Skills · 已启用</h4>
       <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>版面结构树解析</i></div></div>
@@ -112,7 +116,7 @@
     <div id="center">
       <div id="tabs">
         <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
-        <div class="tab" id="tab-diff" onclick="showCenter('diff')" style="color:var(--dim)">修复对比</div>
+        <div class="tab" id="tab-diff" onclick="showCenter('diff')" aria-disabled="true" style="color:var(--dim)">修复对比</div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;padding-right:10px">
           <span id="pvTabStatus" style="font-size:12px"></span>
         </div>
@@ -148,11 +152,12 @@
     </div>
   <div id="bottom"><h4 style="cursor:pointer" onclick="document.getElementById('sepBtnH').click()" title="点击折叠/展开">Skill 活动日志 ▴▾</h4><div id="joblog">待命。</div></div>
   <div id="statusbar">
-    <span id="sb-node">demo-node</span><span>GB10 · 128GB 统一内存</span><span id="sb-model" style="background:#ffffff22;padding:1px 8px;border-radius:9px">qwen3.8:27b-q4_K_M</span>
+    <span id="sb-node">本机</span><span id="sb-model" style="background:#ffffff22;padding:1px 8px;border-radius:9px">模型信息待加载</span>
     <div style="flex:1"></div><span id="sb-right">TeXada-WebUI · Agent Skills</span>
+    <a href="https://github.com/CacinieP/TeXada-WebUI" target="_blank" rel="noopener noreferrer" style="color:inherit">源码 · AGPL-3.0</a>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script src="/static/monaco/0.52.2/min/vs/loader.js"></script>
 <script>
 const P = new URLSearchParams(location.search); const T = P.get("token") || "";
 const $ = id => document.getElementById(id);
@@ -201,6 +206,8 @@ window.addEventListener("load", () => {
     const duo = $("duo"); const r = duo.getBoundingClientRect();
     const pct = Math.min(98, Math.max(2, ((ev.clientX - r.left) / duo.offsetWidth) * 100));
     $("editor").style.width = pct + "%";
+    $("previewPane").classList.remove("collapsed");
+    $("previewPane").style.overflow = "auto";
     $("previewPane").style.width = (100 - pct) + "%";
     if (editor) editor.layout();
   });
@@ -231,10 +238,7 @@ $("btnZoomIn").onclick = () => setFontSize(1);
 $("btnZoomOut").onclick = () => setFontSize(-1);
 let editor, diffEditor, origModel, modModel, curName = "", preFix = null, diffShown = false, busy = false;
 
-require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" }});
-window.MonacoEnvironment = { getWorkerUrl: () => URL.createObjectURL(new Blob(
-  ["self.MonacoEnvironment={baseUrl:'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/'};importScripts('https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js');"],
-  { type: "text/javascript" })) };
+require.config({ paths: { vs: "/static/monaco/0.52.2/min/vs" }});
 
 require(["vs/editor/editor.main"], () => {
   monaco.editor.defineTheme("texada-blue", {
@@ -264,7 +268,7 @@ require(["vs/editor/editor.main"], () => {
     value: "", language: "latex", theme: "texada-blue", automaticLayout: true,
     fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: true, scrollBeyondLastLinePercent: 0, renderWhitespace: "none", verticalScrollbarSize: 10
   });
-  loadFile(P.get("file") || "GTM249-p101-120.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
+  loadFile(P.get("file") || "report-01.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
 });
 
 async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); }
@@ -279,6 +283,9 @@ async function loadFile(name) {
   curName = name; preFix = null;
   $("tabname").textContent = name;
   $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
+  $("tab-diff").setAttribute("aria-disabled", "true");
+  showCenter("edit");
+  disposeDiff();
   if (! $("previewPane").classList.contains("collapsed")) {
     if (! $("previewPane").style.width) $("previewPane").style.width = "38%";
   }
@@ -316,13 +323,15 @@ function renderProblems(problems) {
 }
 
 function gotoLine(line) {
-  const ed = diffShown ? diffEditor.getModifiedEditor() : editor;
+  const ed = diffShown && diffEditor ? diffEditor.getModifiedEditor() : editor;
+  if (!ed || !ed.getModel()) return;
   ed.revealLineInCenter(line);
   ed.setPosition({ lineNumber: line, column: 1 });
   ed.focus();
 }
 
 function showCenter(mode) {
+  if (mode === "diff" && !diffEditor) return;
   diffShown = (mode === "diff");
   $("duo").classList.toggle("hide", mode === "diff");
   $("diff").classList.toggle("hide", mode !== "diff");
@@ -334,6 +343,13 @@ function showCenter(mode) {
   if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
 }
 $("btnDiff").onclick = () => showCenter(diffShown ? "edit" : "diff");
+
+function disposeDiff() {
+  if (diffEditor) diffEditor.dispose();
+  if (origModel) origModel.dispose();
+  if (modModel) modModel.dispose();
+  diffEditor = origModel = modModel = null;
+}
 
 function currentContent() {
   return diffShown && modModel ? modModel.getValue() : editor.getValue();
@@ -449,6 +465,7 @@ function lineStyle(l) {
 }
 
 function applyResult(res) {
+  disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
   origModel = monaco.editor.createModel(preFix, "latex");
   diffEditor = monaco.editor.createDiffEditor($("diff"), {
@@ -457,6 +474,7 @@ function applyResult(res) {
   });
   diffEditor.setModel({ original: origModel, modified: modModel });
   $("btnDiff").disabled = false;
+  $("tab-diff").setAttribute("aria-disabled", "false");
   renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
   const human = res.problems_after.length;
   $("compile").innerHTML =
@@ -480,6 +498,7 @@ function esc(s) { const d = document.createElement("div"); d.textContent = s ?? 
 
 fetch(`/api/nodeinfo?token=${T}`).then(r => r.json()).then(d => {
   $("sb-node").textContent = d.host + " · " + (d.gpu || "").split(",")[0];
+  $("sb-model").textContent = d.model || "—";
   $("sb-right").textContent = d.mem;
 }).catch(() => {});
 loadFiles();

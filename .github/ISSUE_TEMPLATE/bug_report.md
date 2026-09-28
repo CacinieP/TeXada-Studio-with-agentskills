@@ -1,0 +1,24 @@
+---
+name: Bug report
+about: Report a reproducible problem
+title: ''
+labels: ''
+assignees: ''
+---
+
+## 问题与预期
+
+## 最小复现步骤
+
+请使用合成数据；安全漏洞按 SECURITY.md 私密报告。
+
+## 环境
+
+- Commit:
+- OS / architecture:
+- Python / Node / browser:
+- Model / compiler (if relevant):
+
+## 日志或截图
+
+请移除 token、私人文档和个人路径。

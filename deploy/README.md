@@ -1,4 +1,6 @@
-# 节点部署手册（demo-node 实测）
+# 节点部署手册
+
+通用安装与开发入口见 [README](../README.md)。以下硬件与模型记录来自 2026-09-28 的特定节点，不代表所有安装环境。`spark` 是自行配置的 SSH 别名，替换成自己的主机。
 
 > 目标硬件：DGX Spark（GB10 · 128GB 统一内存 · 驱动 580.173.02 / CUDA 13.0 · Ubuntu 24.04 ARM64）
 > 原则：全部用户级安装，不动系统配置（赛事红线），模型层只绑 127.0.0.1。
@@ -7,7 +9,7 @@
 
 ```bash
 rsync -az --exclude .git --exclude .venv --exclude state --exclude dist \
-  ./ spark:~/TeXada-WebUI/          # ssh config 别名 spark（-p <SSH_PORT>）
+  ./ spark:~/TeXada-WebUI/          # SSH 主机别名
 ```
 
 ## 2. 依赖与端到端自检（无需 GPU，5 分钟）
@@ -76,3 +78,36 @@ qwen2.5vl:7b 实测（2026-09-28）：f-101 定界符补全 ✓、f-003 花括�
 - vLLM + NVFP4：NGC 容器（nvcr.io 可达），ARGB64 + CUDA 13 镜像，吞吐优于 Ollama
 - Step 系 MoE 仲裁模型（赛方合作模型）按官方渠道替换 `--vlm-model`
 - 内存预算见 docs/architecture.md（常驻 < 60GB 安全线）
+
+## Studio 编辑器离线资源
+
+### WebUI 启动与升级
+
+```bash
+cd ~/TeXada-WebUI
+~/.venvs/docf/bin/python -m pip install -r webui/requirements.txt
+export PATH="$HOME/bin:$HOME/lib/bin:$PATH"
+export DEMO_TOKEN="$(~/.venvs/docf/bin/python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# 用户级安装的 Tectonic；其他位置可自行调整
+export TECTONIC="$HOME/bin/tectonic"
+~/.venvs/docf/bin/python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
+```
+
+需要跳板或代理访问时，按节点网络策略配置监听地址和 HTTPS，始终保留 token 鉴权。
+仅使用一个 worker。升级前等待任务结束并备份 `state/`；新版不再提供默认 token。
+上传文件存放于 `state/studio/documents/`。旧版写入 `samples/docs/` 的私人文件应先备份，再迁移到该目录，避免进入提交。服务不会自动搬移或删除旧文件。
+
+### Monaco 资源
+
+Monaco 固定为 0.52.2，完整 `min/vs/` 与 MIT 许可证随代码保存。
+如节点尚无资源，先在节点执行 `python3 scripts/vendor_monaco.py`，下载时校验
+固定 SHA-512；不通过 SCP 上传大包。日常运行只访问本站静态资源，不访问 CDN。
+
+通过原有带 token 的 `/studio` 地址打开页面后，服务设置仅用于 Monaco 资源的
+12 小时 HttpOnly Cookie；脚本、字体和 Worker 统一鉴权。API 的 token 要求不变。
+新增静态路由需要重载 WebUI 服务；重载前确认没有正在执行的修复任务。
+
+回归检查：安装 `webui/requirements-test.txt` 到测试虚拟环境后运行
+`python -m unittest discover -s webui -p 'test_*.py'`。
+断网验收应清空浏览器缓存、保留浏览器到 Spark 的连接并阻断外网，确认编辑器与
+修复对比正常加载；整个工作流还需单独确认模型、Tectonic 包与字体已经就绪。

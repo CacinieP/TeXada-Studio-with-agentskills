@@ -4,6 +4,7 @@ __pycache__/
 node_modules/
 .env
 .env.*
+!.env.example
 
 # 运行时状态（断点续跑），仅保留占位文件
 state/*

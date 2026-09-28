@@ -1,50 +1,103 @@
 # TeXada-WebUI
 
-> 文档解析质检 Skill 套件 · 第三届 NVIDIA DGX Spark 黑客松（Agent Skills 方向）参赛作品
+LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。包含 Monaco 源码编辑器、Tectonic 编译预览、修复对比，以及可断点续跑的命令行质检管线。
 
-把「文档解析 → 逐项质检 → 不合格自动修复 → 修不好退回重生成 → 断点续跑」封装成一组协作的 Agent Skills，
-交付**带置信度与可追溯证据**的结构化文档，覆盖版面、表格、公式三类高错资产域。
+这是第三届 NVIDIA DGX Spark 黑客松 Agent Skills 方向的实验项目。当前支持可信用户的单进程演示部署，还不是多用户文档服务。
 
-## 仓库地图
+## 当前能力
 
-```
-TeXada-WebUI/
-├── README.md
-├── docs/
-│   ├── proposal.md              # 选题定稿书（评审视角，先读这个）
-│   ├── architecture.md          # 架构图 + 内存预算 + 为什么需要 DGX Spark
-│   ├── research-notes.md        # 调研纪要（含来源链接）
-│   ├── demo-script.md           # 3 分钟无剪辑演示脚本（含故意注入错误）
-│   └── submission-checklist.md  # 提交前自检清单（映射 NVIDIA 六维验证）
-├── skills/
-│   ├── doc-layout-parse/        # 版面与阅读顺序还原（调本地 VLM）
-│   ├── doc-table-audit/         # 表格跨页/合并/合计值交叉验算
-│   ├── doc-formula-verify/      # 公式 SymPy 解析回判 + 高分辨率重识别
-│   ├── doc-report/              # 质检报告与 diff 视图（证据链）
-│   ├── latex-cleanup/           # 内部依赖：TeX/Markdown 清洗与编译回环（v0.2.3，见其 PROVENANCE.md）
-│   └── spark-ops/               # 内部依赖：内存预算与模型装卸（不单独参赛）
-├── harness/                     # Agent Harness 说明（模型网关/装卸/断点协议）
-├── scripts/
-│   └── backup.sh                # git bundle 本地备份
-└── state/                       # 运行时状态（断点续跑，不入库）
-```
+- Studio：编辑 / 上传 / 导出 `.tex`，并排预览第一页 PDF，查看修复前后 diff。
+- 公式：用 SymPy 检查部分 LaTeX 语法，调用本地模型尝试修复，再做语法回判。
+- 表格：检查简单 `tabular` 合计值；复杂跨页表格和任意 LaTeX 宏不在支持范围。
+- CLI：读取已有 `layout.json`，输出 `OK / RETRY / NEEDS_HUMAN`、事件日志和 Markdown 报告；重跑跳过已完成节点。
+- Studio 的 Monaco 0.52.2 资源随仓库提供，运行时无需编辑器 CDN。
 
-## 快速开始
+语法检查通过不代表数学含义正确。当前真实模型请求发送文本，不发送页面图像；版面解析 Skill 是工作流说明，CLI 不直接完成 PDF/OCR 解析。`samples/` 中的 crop 和修复数据是测试替身，不能作为模型效果评测。
+
+## 快速开始：无需 GPU 的离线样本
+
+需要 Python 3.10+；开发验证使用 Python 3.13。以下命令在仓库根目录执行。初次安装依赖需要网络，安装完成后 fixture 管线不调用模型服务。
 
 ```bash
-# 依赖（目标环境为 DGX Spark / ARM64，本机先验证核心脚本）
-pip install sympy antlr4-python3-runtime   # 公式校验
-python3 skills/doc-formula-verify/scripts/verify.py '\frac{1}{2}'
-
-# 表格审计
-echo '{"rows":[["A","1"],["B","2"]],"expected":{"n_rows":2,"n_cols":2}}' \
-  | python3 skills/doc-table-audit/scripts/audit_table.py
+git clone https://github.com/CacinieP/TeXada-WebUI.git
+cd TeXada-WebUI
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r harness/requirements.txt
+PYTHONPATH=harness python -m docforensics run samples \
+  --state state/quickstart --fixture-repairs samples/fixture_repairs.json
 ```
 
-## 备份
+预期计数：`exam-01 OK=3`、`paper-01 OK=2 NEEDS_HUMAN=1`、`report-01 OK=2`。
+报告位于 `state/quickstart/report.md`，会注明 `fixture (offline test double)`。
+再次运行相同命令可验证断点续跑；使用新的 `--state` 目录开始一次独立运行。
+
+## 启动 Studio
 
 ```bash
-scripts/backup.sh   # 生成 git bundle 到 ../_backups/TeXada-WebUI/
+python -m pip install -r webui/requirements.txt
+export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 ```
 
-推送远端（GitHub 私有仓）需人工审阅后执行，见 docs/submission-checklist.md 的发布前检查。
+在同一终端查看自己生成的 `DEMO_TOKEN`，打开
+`http://127.0.0.1:8888/studio?token=<你的token>&file=report-01.tex`。
+没有设置 token 时服务会拒绝启动。也可复制 [`.env.example`](.env.example) 为 `.env`，填写后手动加载；应用不会自动读取 `.env`。
+
+编辑和浏览文件只需要 Python 依赖。完整功能还需要：
+
+| 功能 | 依赖 |
+| --- | --- |
+| 公式分析 / 表格检查 | `webui/requirements.txt` 中的 SymPy、antlr4 等 |
+| 编译 PDF 与第一页预览 | [Tectonic](https://tectonic-typesetting.github.io/)、Poppler 的 `pdftoppm`；可执行文件位于 `PATH` |
+| 中文样本编译 | 字体 `Noto Sans CJK SC` 与所需 TeX 包 |
+| 模型修复 | 本机 Ollama 或兼容服务，监听 `127.0.0.1:11434`，已下载 `VLM_MODEL` 指定的模型 |
+
+可通过 `TECTONIC` 指定编译器完整路径，通过 `VLM_MODEL` 更换已安装的模型。
+默认模型名称是 `qwen3.8:27b-q4_K_M`；fixture 测试不需要下载它。程序不自动安装模型、字体或系统软件。
+
+上传文档保存在 `state/studio/documents/`；同名上传会覆盖此前上传的版本，但不会改写仓库自带样本。运行结果保存在 `state/`，均被 Git 忽略。
+
+节点部署与用户级安装见 [部署说明](deploy/README.md)。默认只监听本机；共享部署前阅读 [安全说明](SECURITY.md)。不要把当前服务用于接收陌生人的 TeX 文件。
+
+## 测试
+
+```bash
+python -m pip install -r webui/requirements-test.txt
+python -m unittest discover -s webui -p 'test_*.py' -v
+python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
+node webui/test_studio.cjs
+node skills/latex-cleanup/tests/test_audit_math.cjs
+```
+
+Node.js 22 用于 JavaScript 检查。上述测试不需要 GPU 或模型，也不代表真实浏览器视觉验收或 TeX 编译验收。实际编译检查见 [latex-cleanup 测试说明](skills/latex-cleanup/tests/CASES.md)。
+
+## 限制与复现范围
+
+- 任务状态存于进程内存；仅启动一个 Uvicorn worker。并发编辑、任务取消和用户隔离尚未实现。
+- 编译预览仅显示第一页，上传仅支持单个 `.tex`，不支持整项目依赖上传。
+- Tectonic 初次编译可能下载 TeX 包；真正断网前需预备包、模型和字体并单独验收。
+- 旧管线仪表盘 `/` 仍使用 KaTeX CDN；离线编辑入口使用 `/studio`。
+- 当前源码已移除无明确再分发授权的教材节选；历史提交仍含该文件。仓库公开前须完成 [发布清单](docs/open-source-release.md)。
+
+## 仓库结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `webui/` | FastAPI、Studio、静态资源、HTTP 与 UI 逻辑测试 |
+| `harness/` | 命令行管线、修复提供方、断点状态 |
+| `skills/` | 公式、表格、版面和报告 Skill；内含 latex-cleanup 工具 |
+| `samples/` | 可分发的合成样本与测试替身 |
+| `deploy/` | DGX Spark 节点部署记录 |
+| `docs/` | 架构、提案、演示和比赛提交清单；提案不等于已实现功能 |
+| `scripts/` | Monaco 资源校验 / 恢复、源码打包、Git 备份 |
+
+## 贡献、分发与许可证
+
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。问题和功能建议可提交到 [GitHub Issues](https://github.com/CacinieP/TeXada-WebUI/issues)。
+
+本项目原创代码、文档和合成样本采用 **GNU AGPL v3.0（SPDX: `AGPL-3.0-only`）**，Copyright (C) 2026 CacinieP。完整条款见 [LICENSE](LICENSE)，第三方组件及保留许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。第三方代码不因位于本仓库而改换原许可证。
+
+提供网络服务的修改版本需遵守 AGPL 第 13 条的对应源代码提供要求；请保留界面的源码链接，并指向实际部署版本可访问的完整源码。上传的用户文档不自动变成本项目的授权内容。
+
+提交并审阅后执行 `bash scripts/package.sh`，生成仅包含当前提交的 `dist/TeXada-WebUI-<commit>.zip`。打包不读取未跟踪文件，也不包含 Git 历史。`scripts/backup.sh` 的 Git bundle 包含历史，仅作私密备份，不作为公开源码包。

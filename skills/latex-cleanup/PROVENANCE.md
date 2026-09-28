@@ -1,5 +1,10 @@
 # PROVENANCE · latex-cleanup
 
+## 本仓库的分发许可
+
+这份同一维护者 CacinieP 导入的副本按仓库根目录 `LICENSE` 中的 AGPL-3.0-only 分发。
+这里只声明本仓库副本的许可，不修改独立来源仓库的授权状态。下述提取范围保持不变。
+
 - 来源仓库：`CacinieP/latex-cleanup`（GitHub，私有）
 - 提取版本：v0.2.3 · commit `bdca55a`（后续 0.2.4 的 OCR 损伤修复规则见源仓 references/ocr-pitfalls.md，按需重新提取）
 - 提取日期：2026-09-28 · 方式：`git archive HEAD` 按路径提取 · 源仓 main 已合入 0.2.3（merge b4759b6）并发布 0.2.4（commit 0e9d0f1）

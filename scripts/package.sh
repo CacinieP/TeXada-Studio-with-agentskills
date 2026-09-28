@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# 生成提交包：dist/TeXada-WebUI-submission-<date>.zip
-# 排除 .git / .venv / state / dist 自身；样本与文档全保留。
+# 从已提交的 HEAD 生成源码包；不收集工作目录中的上传文档、密钥或缓存。
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STAMP="$(date +%Y%m%d)"
 DIST="$REPO_DIR/dist"
 mkdir -p "$DIST"
 cd "$REPO_DIR"
-zip -qr "$DIST/TeXada-WebUI-submission-$STAMP.zip" . \
-  -x '.git/*' '.venv/*' 'state/*' 'dist/*' '*.DS_Store' '__pycache__/*' '*/__pycache__/*'
-echo "提交包: $DIST/TeXada-WebUI-submission-$STAMP.zip"
-unzip -l "$DIST/TeXada-WebUI-submission-$STAMP.zip" | tail -1
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "请先审阅并提交代码；打包只包含 HEAD，不能包含未提交的修改。" >&2
+  exit 1
+fi
+REV="$(git rev-parse --short HEAD)"
+ARCHIVE="$DIST/TeXada-WebUI-$REV.zip"
+git archive --format=zip --prefix="TeXada-WebUI-$REV/" --output="$ARCHIVE" HEAD
+echo "源码包: $ARCHIVE"

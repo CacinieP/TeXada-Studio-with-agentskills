@@ -2,6 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
 <title>TeXada-WebUI · 文档解析质检套件</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -60,7 +61,7 @@
   <h1>TeXada-WebUI <small>文档解析质检套件 · DGX Spark 黑客松 · Agent Skills</small></h1>
 
   <div class="grid">
-    <div class="card"><h3>节点 · NVIDIA GB10</h3><div class="kv" id="gpu">—</div></div>
+    <div class="card"><h3>节点信息</h3><div class="kv" id="gpu">—</div></div>
     <div class="card"><h3>常驻模型 · Ollama</h3><div class="kv" id="models">—</div></div>
   </div>
 
@@ -215,5 +216,6 @@ async function fetchRender(nid) {
 async function loop(){ try { render(await j(`/api/status?token=${T}`)); } catch(e){} }
 nodeinfo(); loop(); setInterval(nodeinfo, 5000); setInterval(loop, 1000);
 </script>
+<footer><a href="https://github.com/CacinieP/TeXada-WebUI" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">源码 · AGPL-3.0</a></footer>
 </body>
 </html>

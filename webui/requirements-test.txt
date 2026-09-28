@@ -1,0 +1,4 @@
+-r requirements.txt
+httpx==0.28.1
+# Optional in latex-cleanup at runtime; required to run its full test suite.
+markdown-it-py==4.0.0

@@ -1,43 +1,95 @@
 """TeXada-WebUI 演示 Web UI 后端（FastAPI）。
 
-启动（节点上）:
-  DEMO_TOKEN=<token> ~/.venvs/docf/bin/uvicorn app:app --host 0.0.0.0 --port 8888 --app-dir ~/TeXada-WebUI/webui
-公网经跳板映射 8888→80<NN>，token 必填（守则：公网服务必须鉴权）。
+启动（仓库根目录，先设置 DEMO_TOKEN）:
+  python -m uvicorn app:app --host 127.0.0.1 --port 8888 --app-dir webui
+配置与依赖见 README.md；仅用于可信用户的单进程部署。
 """
 
 import hashlib
+import hmac
 import json
 import os
-import shlex
+import shutil
 import subprocess
+import sys
 import threading
 import time
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
-TOKEN = os.environ.get("DEMO_TOKEN", "docf-demo")
-REPO = os.path.expanduser("~/TeXada-WebUI")
+TOKEN = os.environ.get("DEMO_TOKEN", "")
+if not TOKEN.strip():
+    raise RuntimeError("DEMO_TOKEN must be set to a non-empty secret before starting the server")
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
-VLM_MODEL = "qwen3.8:27b-q4_K_M"
+VLM_MODEL = os.environ.get("VLM_MODEL", "qwen3.8:27b-q4_K_M")
+TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
 app = FastAPI(title="TeXada-WebUI demo")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 
 def _guard(token: str):
-    if token != TOKEN:
+    if not hmac.compare_digest(token.encode(), TOKEN.encode()):
         raise HTTPException(status_code=401, detail="bad token")
+
+
+MONACO_PREFIX = "/static/monaco/0.52.2"
+MONACO_COOKIE = "texada_monaco"
+MONACO_SESSION_TTL = 12 * 60 * 60
+
+
+def _monaco_signature(expires: int) -> str:
+    payload = f"{MONACO_PREFIX}:{expires}".encode()
+    return hmac.new(TOKEN.encode(), payload, hashlib.sha256).hexdigest()
+
+
+def _valid_monaco_cookie(value: str) -> bool:
+    if len(value) > 96:
+        return False
+    try:
+        timestamp, signature = value.split(".", 1)
+        expires = int(timestamp)
+    except (ValueError, TypeError):
+        return False
+    if len(signature) != 64 or any(c not in "0123456789abcdef" for c in signature):
+        return False
+    now = int(time.time())
+    return (now < expires <= now + MONACO_SESSION_TTL
+            and hmac.compare_digest(signature, _monaco_signature(expires)))
+
+
+class MonacoStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        if not _valid_monaco_cookie(Request(scope).cookies.get(MONACO_COOKIE, "")):
+            return PlainTextResponse("Unauthorized", status_code=401,
+                                     headers={"Cache-Control": "no-store"})
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "private, max-age=3600"
+        response.headers["Vary"] = "Cookie"
+        return response
+
+
+app.mount(MONACO_PREFIX, MonacoStaticFiles(
+    directory=os.path.join(os.path.dirname(__file__), "static", "monaco", "0.52.2")
+), name="monaco")
 
 
 def _run_pipeline(fresh: bool):
     _run.update(log=[], done=False, code=None, started=time.time())
-    inner = "rm -rf state/demo && " if fresh else ""
-    inner += (f"PYTHONPATH=harness ~/.venvs/docf/bin/python -m docforensics run samples "
-              f"--state state/demo --vlm http://127.0.0.1:11434 --vlm-model {VLM_MODEL}; "
-              f"echo RUN_EXIT_$?")
-    p = subprocess.Popen(["bash", "-c", inner], cwd=REPO, stdout=subprocess.PIPE,
-                         stderr=subprocess.STDOUT, text=True, bufsize=1)
+    if fresh and os.path.exists(STATE):
+        shutil.rmtree(STATE)
+    command = [sys.executable, "-m", "docforensics", "run", "samples", "--state", STATE,
+               "--vlm", "http://127.0.0.1:11434", "--vlm-model", VLM_MODEL]
+    env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
+    try:
+        p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, bufsize=1)
+    except OSError:
+        _run.update(done=True, code=1)
+        raise
     _run["proc"] = p
 
     def reader():
@@ -85,7 +137,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
     with open(texf, "w") as f:
         f.write(tex)
     try:
-        r = subprocess.run([os.path.expanduser("~/bin/tectonic"), "-o", d, texf],
+        r = subprocess.run([TECTONIC, "-o", d, texf],
                            capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         return None
@@ -136,13 +188,19 @@ def index():
 @app.get("/api/nodeinfo")
 def nodeinfo(token: str = Query("")):
     _guard(token)
-    gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.used,memory.total",
-                          "--format=csv,noheader"], capture_output=True, text=True).stdout.strip()
-    mem = subprocess.run(["bash", "-c", "free -h | sed -n 2p | awk '{print \"mem used \"$3\" / \"$2}'"],
-                         capture_output=True, text=True).stdout.strip()
-    models = subprocess.run(["bash", "-c", "~/lib/bin/ollama list 2>/dev/null | tail -n +2 | awk '{print $1\" \"$3}'"],
-                            capture_output=True, text=True).stdout.strip()
-    return {"gpu": gpu, "mem": mem, "models": models, "host": os.uname().nodename}
+    def output(command):
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    gpu = output(["nvidia-smi", "--query-gpu=name,memory.used,memory.total", "--format=csv,noheader"])
+    mem_lines = output(["free", "-h"]).splitlines()
+    mem = mem_lines[1] if len(mem_lines) > 1 else ""
+    models = output(["ollama", "list"])
+    return {"gpu": gpu, "mem": mem, "models": models, "host": os.uname().nodename,
+            "model": VLM_MODEL}
 
 
 @app.post("/api/run")
@@ -210,11 +268,11 @@ import uuid as _uuid
 _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics.vlm import OllamaProvider  # noqa: E402
 
-STUDIO_DOCS = os.path.join(REPO, "samples", "docs")
+SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.path.join(REPO, "state", "studio")
+STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 PROVIDER = OllamaProvider("http://127.0.0.1:11434", VLM_MODEL)
-TECTONIC = os.path.expanduser("~/bin/tectonic")
 _TABLE_LABELS = ("合计", "总计", "total")
 _jobs = {}
 
@@ -228,12 +286,18 @@ def _studio_compile(content: str, name: str, tag: str):
     try:
         r = subprocess.run([TECTONIC, "-o", d, texf], capture_output=True, text=True, timeout=240)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "log": "compile timeout"}
+        return {"ok": False, "log": "compile timeout", "png": None}
+    except FileNotFoundError:
+        return {"ok": False, "log": "Tectonic not found; install it or set TECTONIC", "png": None}
     ok = r.returncode == 0
     png = None
     if ok:
-        subprocess.run(["pdftoppm", "-png", "-r", "100", "-singlefile",
-                        os.path.join(d, "main.pdf"), os.path.join(d, "preview")], check=True)
+        try:
+            subprocess.run(["pdftoppm", "-png", "-r", "100", "-singlefile",
+                            os.path.join(d, "main.pdf"), os.path.join(d, "preview")],
+                           check=True, capture_output=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return {"ok": False, "log": "PDF generated but preview conversion failed; check pdftoppm", "png": None}
         p = os.path.join(d, "preview.png")
         png = f"/api/studio/preview/{name}/{tag}?v={int(time.time())}" if os.path.exists(p) else None
     return {"ok": ok, "log": (r.stderr or r.stdout or "")[-600:], "png": png}
@@ -254,7 +318,7 @@ def studio_preview_live(token: str = Query(""), body: dict = None):
 
 @app.post("/api/studio/upload")
 def studio_upload(token: str = Query(""), body: dict = None):
-    """导入 .tex 文档到 samples/docs（文件树即时可见）。"""
+    """导入 .tex 文档到被 Git 忽略的 state/studio/documents。"""
     _guard(token)
     body = body or {}
     name, content = body.get("name", ""), body.get("content", "")
@@ -262,6 +326,7 @@ def studio_upload(token: str = Query(""), body: dict = None):
         raise HTTPException(status_code=400, detail="仅支持 .tex 文件名")
     if name in (".", "..") or "/" in name:
         raise HTTPException(status_code=400, detail="bad name")
+    os.makedirs(STUDIO_DOCS, exist_ok=True)
     with open(os.path.join(STUDIO_DOCS, name), "w") as f:
         f.write(content)
     return {"ok": True, "name": name}
@@ -419,15 +484,24 @@ def _studio_job(name: str, content: str, job_id: str):
 
 
 @app.get("/studio")
-def studio(token: str = Query("")):
+def studio(request: Request, token: str = Query("")):
     _guard(token)
-    return FileResponse(os.path.join(os.path.dirname(__file__), "studio.html"))
+    response = FileResponse(os.path.join(os.path.dirname(__file__), "studio.html"),
+                            headers={"Cache-Control": "no-store"})
+    expires = int(time.time()) + MONACO_SESSION_TTL
+    response.set_cookie(MONACO_COOKIE, f"{expires}.{_monaco_signature(expires)}",
+                        max_age=MONACO_SESSION_TTL, path=MONACO_PREFIX + "/",
+                        httponly=True, samesite="strict",
+                        secure=request.url.scheme == "https")
+    return response
 
 
 @app.get("/api/studio/files")
 def studio_files(token: str = Query("")):
     _guard(token)
-    return {"files": sorted(f for f in os.listdir(STUDIO_DOCS) if f.endswith(".tex"))}
+    files = {f for directory in (SAMPLE_DOCS, STUDIO_DOCS) if os.path.isdir(directory)
+             for f in os.listdir(directory) if f.endswith(".tex")}
+    return {"files": sorted(files)}
 
 
 @app.get("/api/studio/file")
@@ -436,6 +510,8 @@ def studio_file(name: str = Query(""), token: str = Query("")):
     if not _re.fullmatch(r"[\w.-]+\.tex", name):
         raise HTTPException(status_code=400, detail="bad name")
     path = os.path.join(STUDIO_DOCS, name)
+    if not os.path.isfile(path):
+        path = os.path.join(SAMPLE_DOCS, name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="no file")
     with open(path) as f:

@@ -1,0 +1,8 @@
+* text=auto
+*.sh text eol=lf
+*.png binary
+*.ttf binary
+# Preserve upstream bytes (including generated whitespace) for SHA256SUMS.
+webui/static/monaco/0.52.2/** -text -whitespace linguist-vendored
+.github/ export-ignore
+state/ export-ignore
