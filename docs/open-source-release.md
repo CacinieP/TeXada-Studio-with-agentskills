@@ -20,7 +20,9 @@
 
 提交 ID 已变化。其他使用者应重新 clone；不要从旧 clone merge / push，也不要将清理前的 bundle 作为发布附件。保留旧 clone 的使用者需自行妥善处理其历史和 reflog。
 
-这里的清理指分支和标签可达的 Git 历史。GitHub 可能保留按旧 SHA 可访问的对象、缓存或内部引用；这些不由强制推送或本地 GC 删除。公开前需确认这部分的处理状态，必要时联系 GitHub Support。
+这里的清理指分支和标签可达的 Git 历史。推送后重新 mirror clone 已确认不含教材路径或其两个 blob；但通过已登录 GitHub API 按旧 blob SHA 查询，两个对象仍可读取。这些后台对象不由强制推送或本地 GC 删除。
+
+[GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)指出，Support 不清除非敏感数据，只处理符合条件的敏感数据，因此不能承诺教材内容的清理申请会被受理。若公开发布要求彻底隔离这些旧对象，应另建独立发布仓库、仅推送已清理的历史，并继续保留原仓库为私有；不要直接把原仓库改为公开。
 
 ## 改为公开之前必须完成
 
