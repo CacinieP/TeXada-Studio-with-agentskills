@@ -57,9 +57,23 @@ curl --fail http://127.0.0.1:11434/v1/models
 
 在启动 Studio 的终端设置 `export VLM_MODEL="已安装的完整模型标签"`，再启动服务。默认标签只记录实测节点配置，不意味着新机器已有模型。Studio 的模型 URL 固定为本机；CLI 可通过 `--vlm` 指定兼容端点。不要把 API key 粘贴到 Issue；当前 Studio 没有远程鉴权配置界面。
 
+## Skill 配置错误 / on 与 off 是否生效
+
+CLI 真实模型默认 `--skill-mode on`；Studio 在启动时读取 `SKILL_MODE`，默认 on，可在启动前设置 `export SKILL_MODE=off` 做对照。on 会验证并读取仓库中的 `doc-formula-verify/SKILL.md`；缺文件、无效元数据或越界路径不会静默回退为 off。先确认源码包完整，不要通过跳过校验来宣称 Skill 已加载。
+
+查看提供方事件的 `skill_loaded`、`skill_sha256`、`prompt_sha256`，不要仅凭界面名称判断。初检已通过时不会请求模型；Fixture 不加载指令，请求数为 0 属正常。三组受控执行见[研究协议](../samples/research/README.md)。
+
 ## 重跑没有产生新候选
 
-CLI 会从同一 `--state` 目录重放日志，跳过已有终态。修改样本、模型或参数后，请换新的目录，例如 `--state state/experiment-02`。旧目录是实验记录，不必删除。CLI 的返回码 0 表示管线运行完成，不代表没有 `NEEDS_HUMAN` 或所有数学内容正确。
+CLI 仅在文档/节点标识、输入哈希和执行上下文哈希都匹配，且终态允许复用时跳过。样本、crop 字节、模型参数、Skill 正文、检查器或依赖变化会自动重新检查；旧日志缺哈希也会重新检查。查看本轮 `report.md` 的 `run_id` 与 `SKIP` 来源，再查 `state.jsonl`，不要把历史事件数当作本轮调用数。
+
+暂时性提供方超时、网络/HTTP/协议故障与检查器环境故障会记为 `resumable:false`；恢复服务后执行同一命令即可重试。语法重试耗尽和明确人工边界仍可复用，单纯重复命令不会把它们变成成功。需要强制一次独立实验时使用新目录，例如 `--state state/experiment-02`，保留旧目录作为证据。CLI 返回码 0 表示管线完成，不代表所有数学内容正确。
+
+## Studio 重启后怎样读取结果
+
+结果快照和逐候选事件位于 `state/studio/jobs/<job_id>/`。保留 job_id 时，可通过经鉴权的任务状态接口读取已完成结果；页面暂无任务历史列表，也不会恢复尚未导出的编辑内容。中断任务会提示新建任务，不能从最后一个模型调用自动继续。
+
+仍只启动一个 Uvicorn worker：进行中的任务、轮询状态和后台线程依赖进程内存，磁盘快照不是跨 worker 的任务队列。也不要让多个 CLI 进程共享同一个状态目录。
 
 ## fixture 能修表格，真实 CLI 却不能
 

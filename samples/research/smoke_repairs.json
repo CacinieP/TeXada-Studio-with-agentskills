@@ -1,0 +1,12 @@
+{
+  "model_without_skill": {
+    "S02": [
+      "a_1+b"
+    ]
+  },
+  "model_with_skill": {
+    "S02": [
+      "a_1+b"
+    ]
+  }
+}

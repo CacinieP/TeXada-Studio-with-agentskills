@@ -541,7 +541,8 @@ $("btnReport").onclick = () => {
   if (!lastResult) return;
   const r = lastResult;
   const report = ["# TeXada Studio 质检报告", "", `文档：${curName}`,
-    `本地模型：${r.model}；输入：文本；耗时：${r.elapsed_seconds} 秒`,
+    `实际模型请求：${r.model_calls ?? "旧记录未计数"}；模型：${r.model || "本次未调用"}；耗时：${r.elapsed_seconds} 秒`,
+    `Skill 指令：${r.skill_mode || "旧记录未记录"}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
     `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,
@@ -549,6 +550,7 @@ $("btnReport").onclick = () => {
     `修改数：${(r.edits || []).length}；剩余问题：${r.problems_after.length}`, "", "## 修改记录", ""];
   for (const e of (r.edits || [])) report.push(`L${e.line} · ${e.skill}`, "", "原文：", "~~~~latex", e.before, "~~~~", "候选：", "~~~~latex", e.after, "~~~~", "");
   for (const p of r.problems_after) report.push(`待处理 L${p.line}：${p.reason || p.status}`);
+  if (r.trace) report.push("", "## 检查与候选事件", "", "下列接受状态仅表示检查器接受候选，不表示人工已经采用。", "", "```json", JSON.stringify(r.trace, null, 2), "```");
   download(curName.replace(/\.tex$/, "") + ".audit.md", new Blob([report.join("\n")], {type:"text/markdown"}));
 };
 

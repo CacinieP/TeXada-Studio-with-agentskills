@@ -10,7 +10,7 @@ description: Prepare or inspect a supplied layout.json document tree before form
 1. Request a supplied layout tree or an authorized OCR export. The CLI consumes an existing `layout.json`; it does not run a page parser.
 2. Inspect the examples under `samples/` for the expected schema: a document identifier and nodes with `id`, `type`, and `data`. Formula data contains `latex`; table data contains `rows` and `expected`.
 3. Preserve source locations and existing crop paths when available. Never invent coordinates, confidence, or image evidence.
-4. Confirm that the document and node identifiers are stable before resuming an existing state directory. A changed input should use a new state directory.
+4. Confirm that the document and node identifiers are stable before resuming an existing state directory. The CLI now also binds terminal reuse to input and execution-context hashes: changed input or configuration must be checked again even under the same identifiers. Use a fresh state directory for an independent evaluation, so its evidence stays separate from earlier runs.
 5. If only PDF or page images are available, explain that OCR integration is required and stop this step without claiming extraction succeeded.
 
 ## Planned integration

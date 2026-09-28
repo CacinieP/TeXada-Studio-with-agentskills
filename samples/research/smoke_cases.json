@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "dataset_id": "synthetic-runner-smoke-v1",
+  "dataset_kind": "synthetic",
+  "annotation_status": "pending",
+  "cases": [
+    {
+      "id": "S01",
+      "source": {
+        "title": "TeXada synthetic runner smoke source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+        "locator": "smoke-source.txt:L3"
+      },
+      "original_latex": "x+1",
+      "case_kind": "control",
+      "expected_syntax": "OK",
+      "reference_latex": "x+1",
+      "review_status": "pending"
+    },
+    {
+      "id": "S02",
+      "source": {
+        "title": "TeXada synthetic runner smoke source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+        "locator": "smoke-source.txt:L4"
+      },
+      "original_latex": "a_+b",
+      "case_kind": "injected",
+      "expected_syntax": "RETRY",
+      "reference_latex": "a_1+b",
+      "review_status": "pending",
+      "injection": "Remove the subscript digit 1 from a_1."
+    },
+    {
+      "id": "S03",
+      "source": {
+        "title": "TeXada synthetic runner smoke source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+        "locator": "smoke-source.txt:L5"
+      },
+      "original_latex": "x^2+2*x+1=(x+1)^3",
+      "case_kind": "control",
+      "expected_syntax": "OK",
+      "reference_latex": "x^2+2*x+1=(x+1)^3",
+      "review_status": "pending"
+    }
+  ]
+}

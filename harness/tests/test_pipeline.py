@@ -154,7 +154,9 @@ class ReportEvidenceTest(unittest.TestCase):
                 layout = json.loads((root / "samples" / name / "layout.json").read_text())
                 for node in layout["nodes"]:
                     status = "NEEDS_HUMAN" if node["id"] == "f-003" else "OK"
-                    state.append(directory, doc=layout["doc"], node_id=node["id"], status=status)
+                    input_hash, context_hash = pipeline.node_identity(node, provider)
+                    state.append(directory, doc=layout["doc"], node_id=node["id"], action="TERMINAL",
+                                 status=status, input_sha256=input_hash, context_sha256=context_hash)
             with patch.object(pipeline, "run_verify") as verify, patch.object(pipeline, "run_audit") as audit:
                 results = {name: pipeline.run(str(root / "samples" / name), directory, provider)[1]
                            for name in ("exam-01", "paper-01", "report-01")}

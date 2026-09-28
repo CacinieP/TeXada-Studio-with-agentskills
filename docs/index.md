@@ -20,8 +20,9 @@
 
 1. 先读 [Skills 技术报告](skills-technical-report.md)，明确哪些部分是确定性检查、模型调用、人工复核或尚未实现的设计。
 2. 用[案例手册](casebook.md)和[案例集说明](../samples/evaluation/README.md)重放正例、反例和边界。语法接受、预期匹配、编译通过与数学语义正确是不同结论。
-3. [验证记录](validation.md)与[演示证据 JSON](demo-evidence.json)记录已有验证的条件；单次演示与fixture不能作为模型准确率基准。
-4. 引用时使用 [CITATION.cff](../CITATION.cff)，写明实际提交号、模型或检查器、数据来源和未覆盖范围。公开评测不得使用无再分发授权的原始材料。
+3. 按[研究协议](../samples/research/README.md)运行[Skills 三组对照与复核导入器](../scripts/evaluate_skills.py)：先验证 dry-run / fixture，再显式选择真实模型；复核空表隐藏分组，未复核时不产生语义准确率。
+4. [验证记录](validation.md)与[演示证据 JSON](demo-evidence.json)记录已有验证的条件；单次演示与 fixture 不能作为模型准确率基准。
+5. 引用时使用 [CITATION.cff](../CITATION.cff)，写明实际提交号、模型或检查器、数据来源和未覆盖范围。公开评测不得使用无再分发授权的原始材料。
 
 ## 维护者：交付、部署与公开准备
 
@@ -39,6 +40,7 @@
 | Skills 机制、执行边界与研究解释 | [Skills 技术报告](skills-technical-report.md) | 与 Skill 指令、检查器和运行记录共同阅读 |
 | 可执行输入、预期状态与原因 | [案例 catalog](../samples/evaluation/cases.json) | 稳定 ID 是案例事实来源；runner 生成运行结果 |
 | 案例操作与结果解释 | [案例集说明](../samples/evaluation/README.md)、[案例手册](casebook.md) | 前者解释运行协议，后者解释场景和判断 |
+| Skill 对照、来源与独立复核 | [研究协议](../samples/research/README.md)、[研究运行器](../scripts/evaluate_skills.py) | 固定三组配置、保留全部候选，区分语法接受和人工语义判定 |
 | 部署与安全 | [部署手册](../deploy/README.md)、[SECURITY](../SECURITY.md) | 本机配置和私人数据不进入文档 |
 | 贡献和未来工作 | [CONTRIBUTING](../CONTRIBUTING.md)、[路线图](roadmap.md) | 区分已实现行为与候选任务 |
 | 历史验证与赛事材料 | [验证记录](validation.md)、[项目报告](project-report.md) | 保留环境、范围与时间条件，不扩展结论 |
@@ -51,9 +53,12 @@
 | --- | --- |
 | 安装依赖、入口或启动参数 | 中英文 README、部署与排错说明；实际执行对应命令 |
 | 检查器输入契约、状态或数字格式 | Skill 指令、案例 catalog、案例手册、技术报告；运行案例并保留新报告 |
-| CLI 重试、续跑或报告结构 | Harness 手册、相关回归、技术报告；检查 fixture 首跑与续跑 |
+| CLI 重试、续跑或报告结构 | Harness 手册、相关回归、技术报告；检查输入/上下文变化、暂时故障恢复和本轮报告 |
+| Skill 宿主、提示参数或研究协议 | 中英文 README、架构、研究协议与技术报告；核对实际请求及指纹，不把计划写成实验结果 |
 | Studio 交互或支持范围 | 中英文 README、排错、架构与演示说明；需要时更新截图 |
 | 新增能力或关闭已知缺口 | 路线图、CHANGELOG、案例与相关主要文档；保留未覆盖范围 |
 | 发布版本、仓库可见性或传播材料 | 发布检查、Release 草案、传播计划与首页状态；记录实际生效时间 |
 
 新增文档时在这里安排明确读者和入口，优先链接主要说明，避免在多个页面复制易过期的测试数量、运行耗时或能力承诺。
+
+新增[真实模型先导实验解读](skills-pilot-analysis.md)：12条输入、三组36条结果、17次HTTP尝试；含失败记录与人工待审表，不宣称语义效果提升。

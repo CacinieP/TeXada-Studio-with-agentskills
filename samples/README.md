@@ -1,6 +1,6 @@
 # 样本与测试替身
 
-本目录保留的内容均为合成测试样本，随主项目采用 AGPL-3.0-only。不要把自己的上传文件、真实论文或私人文档加入本目录；Studio 上传内容保存在被 Git 忽略的 `state/studio/documents/`。
+演示文档、结构化 fixture 与 `evaluation/` 是合成测试样本，随主项目采用 AGPL-3.0-only。`research/active_calculus_cases.json` 新增开放教材原文及明确注入的错误，单独采用 CC-BY-SA-4.0，见[来源与许可](research/ACTIVE_CALCULUS_NOTICE.md)。不要把自己的上传文件或私人文档加入本目录；Studio 上传内容保存在被 Git 忽略的 `state/studio/documents/`。
 
 ## 三种使用入口
 
@@ -25,7 +25,7 @@ PYTHONPATH=harness python -m docforensics run samples \
 
 预期结果：`exam-01 OK=3`、`paper-01 OK=2 NEEDS_HUMAN=1`、`report-01 OK=2`。报告是 `state/fixture-check/report.md`，会注明 `fixture (offline test double)`。
 
-再次运行相同命令会跳过 8 个已有终态节点。输入、依赖或提供方变更后应选择新状态目录；现有终态不会自动失效。详细约束见 [Harness 说明](../harness/README.md)。
+再次运行相同命令会跳过 8 个输入与上下文一致的可复用终态节点。输入、依赖、检查器、模型或 Skill 变化会使旧终态失效；暂时性环境/提供方故障会在重跑时重新处理。独立评测仍使用新的状态目录。详细约束见 [Harness 说明](../harness/README.md)。
 
 ## 直接检查输入契约与边界
 
@@ -54,3 +54,5 @@ PYTHONPATH=harness python -m docforensics run samples \
 - `fixture_repairs.json` 是预设修复，不可用作模型效果评测。`a_` 的候选 `a_1` 能通过语法检查，但原意仍需人核对。
 - fixture 验证的是状态流转、检查与报告链路。真实模型评测需单独提供数据来源、模型标签、调用方式和人工判定方法。
 - 历史教材节选已移出分发范围，见[发布清单](../docs/open-source-release.md)。不要将私密旧备份重新放回本目录。
+
+新增[三组研究入口](research/README.md)分别运行仅检查器、同模型不加载 Skill、同模型加载 Skill。12 条开放来源先导样本包含 6 条原文和 6 条人工注入错误；来源参考与真实候选一起进入人工待审表，未完成复核不报告语义准确率。

@@ -32,9 +32,20 @@ bundled in this source tree. Its source and MIT license are available in the
 ## Samples and historical material
 
 The retained demonstration documents, layout records and placeholder crops in
-`samples/` are synthetic test fixtures. They do not establish OCR or model accuracy.
+`samples/docs`, `samples/paper-01`, `samples/exam-01`, `samples/report-01`, and the
+checker regression catalog in `samples/evaluation` are synthetic test fixtures.
+They do not establish OCR or model accuracy.
 The historical `GTM249-p101-120.tex` textbook extract and both of its blob versions
 have been removed from the current tree and reachable `main` history because no
 redistribution grant is recorded. Old clones and private pre-rewrite backups can
 still contain it and must not be republished or merged back. The project license
 does not grant rights to that extract. See the release checklist before publication.
+
+## Active Calculus research pilot
+
+`samples/research/active_calculus_cases.json` contains formula excerpts and
+explicitly modified variants from *Active Calculus Single Variable, Second
+Edition*, © 2012–2025 Matthew Boelkins and contributors. The dataset and formula-
+containing pilot outputs retain **CC-BY-SA-4.0**, not the project's AGPL license.
+Exact pinned sources, changes, attribution and reproduction are in
+[ACTIVE_CALCULUS_NOTICE.md](samples/research/ACTIVE_CALCULUS_NOTICE.md).

@@ -21,3 +21,6 @@ models/
 # 提交包产物
 dist/
 .repo_memory/
+
+# Local evaluation traces and scratch evidence may contain document text.
+/work/

@@ -22,6 +22,15 @@
   "limitations": [
     "No model inference or image recognition.",
     "Passing syntax or numerical consistency does not prove source meaning.",
-    "No with/without Skill benchmark has been performed."
-  ]
+    "The contract catalog does not measure model effects. A separate 12-input pilot has run; independent semantic review remains pending."
+  ],
+  "runtime_evidence": {
+    "tests": [
+      "../../../harness/tests/test_skills_runtime.py",
+      "../../../harness/tests/test_vlm.py"
+    ],
+    "real_pilot": "../../../docs/evaluation-results/skills-pilot/manifest.json",
+    "interpretation": "../../../docs/skills-pilot-analysis.md",
+    "semantic_accuracy": null
+  }
 }

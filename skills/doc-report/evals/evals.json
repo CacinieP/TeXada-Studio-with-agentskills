@@ -24,7 +24,13 @@
   "evidence_policy": "Existing crops may accompany reports. Missing crops are marked missing; report generation does not fail solely for this reason.",
   "limitations": [
     "No fabricated image evidence.",
-    "Rejected candidates are not all persisted.",
+    "Bounded raw responses may be truncated; interrupted requests may lack a result. Events are evidence, not deterministic model replay.",
     "Fixture repairs are not model performance."
-  ]
+  ],
+  "trace_tests": [
+    "../../../harness/tests/test_resume_trace.py",
+    "../../../harness/tests/test_run_report.py",
+    "../../../webui/test_trace.py"
+  ],
+  "trace_contract": "Preserve original checks, every completed candidate and rejection, safe provider reasons and HTTP attempts. Reuse requires input/context hashes; current-run reports do not sum historical requests."
 }

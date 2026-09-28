@@ -4,5 +4,8 @@
 *.ttf binary
 # Preserve upstream bytes (including generated whitespace) for SHA256SUMS.
 webui/static/monaco/0.52.2/** -text -whitespace linguist-vendored
+# Evaluation manifests hash exact artifact bytes, including CSV CRLF records.
+docs/evaluation-results/** -text
+docs/evaluation-results/**/*.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 .github/ export-ignore
 state/ export-ignore

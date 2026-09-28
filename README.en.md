@@ -6,7 +6,7 @@
 
 TeXada combines a Monaco editor, deterministic checks, local text-model suggestions, Tectonic previews, and human review. It is intended for teachers, research writers, and developers working with trusted `.tex` documents.
 
-**Experimental prototype; no formal release yet.** The repository is currently private. Access requires authorization. Project-authored source is licensed under [AGPL-3.0-only](LICENSE); third-party components retain their licenses. This is a single-process application for trusted users, not a public multi-user service.
+**Experimental prototype; no formal release yet.** The repository is currently private. Access requires authorization. Project-authored source is licensed under [AGPL-3.0-only](LICENSE); third-party components retain their licenses. The open textbook formula pilot and adaptations separately retain [CC-BY-SA-4.0](samples/research/ACTIVE_CALCULUS_NOTICE.md). This is a single-process application for trusted users, not a public multi-user service.
 
 ![Source, PDF preview, and candidate review](docs/images/studio-overview.png)
 
@@ -15,7 +15,7 @@ TeXada combines a Monaco editor, deterministic checks, local text-model suggesti
 - A table can compile successfully while `45 + 60` is incorrectly recorded as `115`. Studio locates the inconsistency and proposes `105` using deterministic calculation.
 - For an incomplete subscript such as `a_`, a local text model proposes a candidate. SymPy checks syntax and Tectonic checks compilation. Neither proves that `a_1` is what the author intended.
 - Repair candidates open in a diff view. Users explicitly adopt them and can export an audit report.
-- The separate CLI reads an existing `layout.json`, records node events, writes a report, and skips terminal nodes when rerun.
+- The separate CLI reads an existing `layout.json`, records every check and candidate, and writes a report for the current run. It reuses terminal results only when input and execution-context hashes match.
 
 Automatic OCR, image-based repair, general agent planning, complex tables, project uploads, and multi-user isolation are not implemented. CLI real-model mode attempts formula repair only; table repair is currently available through test fixtures, while Studio can recompute simple totals. CLI runs do not invoke Tectonic.
 
@@ -33,7 +33,7 @@ PYTHONPATH=harness python -m docforensics run samples \
   --state state/quickstart --fixture-repairs samples/fixture_repairs.json
 ```
 
-Expected: `exam-01 OK=3`, `paper-01 OK=2 NEEDS_HUMAN=1`, `report-01 OK=2`. Open `state/quickstart/report.md`; it identifies the provider as an offline test double. Rerun the same command to exercise resume. Use a new state directory after changing inputs or providers. These counts are workflow checks, not model benchmarks.
+Expected: `exam-01 OK=3`, `paper-01 OK=2 NEEDS_HUMAN=1`, `report-01 OK=2`. Open `state/quickstart/report.md`; it identifies the provider as an offline test double. Rerun the same command to exercise resume. Input, model, Skill, checker, or dependency changes invalidate reuse automatically; transient provider/checker failures are retried in the same directory. Use a new directory for an independent run. These counts are workflow checks, not model benchmarks. See the [CLI manual](harness/README.md).
 
 Private clones require repository access and configured GitHub authentication. An authorized source archive is an alternative.
 
@@ -48,6 +48,20 @@ python scripts/evaluate_cases.py --outdir state/evaluation-01
 The [runner](scripts/evaluate_cases.py) writes `report.json` and `report.md` into a new directory and refuses to overwrite existing evidence. Cases cover syntax, Decimal totals, invalid inputs, and unsupported numeric formats. Contract matches, semantic boundaries, and known gaps are reported separately; none is a model-accuracy score. No model, OCR, or network call is made during execution.
 
 See the [case definitions and instructions](samples/evaluation/README.md), [casebook](docs/casebook.md), and [Skills technical report](docs/skills-technical-report.md) for interpretation and limitations. These detailed documents are currently in Chinese.
+
+## Compare Skill instructions
+
+Real-model CLI requests default to `--skill-mode on`; Studio defaults to `SKILL_MODE=on`. An allowlisted host validates and reads the formula Skill, adding its actual instructions to the system message. Off mode keeps the base prompt and the same checking workflow. Fixture mode loads no Skill and makes no model requests. Only the formula Skill is connected to this instruction host; Python still controls tools and retries.
+
+The [research runner](scripts/evaluate_skills.py) compares checker-only, the same model without Skill instructions, and the same model with instructions. It preserves provenance, configuration hashes, every candidate, and a blinded review sheet. Start with a plan-only run:
+
+```bash
+python scripts/evaluate_skills.py run \
+  --cases samples/research/smoke_cases.json \
+  --outdir work/research-dry-01 --mode dry-run
+```
+
+Dry-run executes neither checkers nor network requests. See the [research protocol](samples/research/README.md) for fixture, real-model, and human-review commands. Semantic accuracy remains null until independent review; synthetic, injected, and naturally occurring errors must be interpreted separately.
 
 ## Run Studio locally
 
@@ -72,7 +86,7 @@ Additional capabilities require:
 
 Run `ollama list` before selecting a model. The default `qwen3.8:27b-q4_K_M` is the recorded test-node label, not a guaranteed downloadable or preinstalled model. Model calls send text only. First-time Tectonic compilation may download packages. Studio bundles Monaco 0.52.2; the legacy dashboard at `/` still uses a KaTeX CDN.
 
-Use a single Uvicorn worker. Jobs are kept in process memory. Uploaded files and results live under ignored `state/`; an upload with the same name replaces the previous upload. TeX compilation is not a sandbox. Read [SECURITY.md](SECURITY.md) before sharing an installation.
+Use a single Uvicorn worker. Active execution still depends on process memory. Completed results and per-candidate events are stored under `state/studio/jobs/<job_id>/` and can be queried by a known job ID after restart. Interrupted jobs require a new job; model calls do not resume automatically. There is no task-history browser, and unsaved browser edits are not restored. Uploaded files and results live under ignored `state/`; an upload with the same name replaces the previous upload. TeX compilation is not a sandbox. Read [SECURITY.md](SECURITY.md) before sharing an installation.
 
 ## Verify and contribute
 
@@ -80,13 +94,13 @@ Use a single Uvicorn worker. Jobs are kept in process memory. Uploaded files and
 python -m pip install -r webui/requirements-test.txt
 python -m unittest discover -s webui -p 'test_*.py' -v
 python -m unittest discover -s harness/tests -p 'test_*.py' -v
-python -m unittest discover -s scripts -p test_evaluate_cases.py -v
+python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v
 python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
 node webui/test_studio.cjs
 node skills/latex-cleanup/tests/test_audit_math.cjs
 ```
 
-JavaScript checks use Node.js 22. Harness tests cover checker failures and report evidence; runner tests cover timeouts, output protocols, and report-directory protection. These checks do not require a GPU and do not replace real-browser or TeX compilation checks. There is no automated CI workflow or response-time guarantee.
+JavaScript checks use Node.js 22. Harness tests cover Skill loading, checker failures, hash-bound resume, and candidate evidence; runner tests cover output protocols, directory protection, and human-review imports. These checks do not require a GPU and do not replace real-browser or TeX compilation checks. There is no automated CI workflow or response-time guarantee.
 
 Start with a synthetic edge-case sample, documentation correction, or a scoped task in the [roadmap](docs/roadmap.md). The [documentation map](docs/index.md) identifies the primary document for each topic and the pages that must change together. Include the exact commit, environment, reproduction steps, and actual verification results. Never attach private documents or credentials.
 

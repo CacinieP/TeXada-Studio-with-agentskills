@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/schema.json",
+  "title": "TeXada formula research catalog (not human ground truth)",
+  "type": "object",
+  "required": ["schema_version", "dataset_id", "dataset_kind", "annotation_status", "cases"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dataset_id": {"type": "string", "minLength": 1},
+    "dataset_kind": {"enum": ["open-source", "synthetic"]},
+    "annotation_status": {"const": "pending"},
+    "cases": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "original_latex", "case_kind", "review_status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+          "source": {
+            "type": "object", "required": ["title", "url", "license", "locator", "sha256"],
+            "properties": {
+              "title": {"type": "string", "minLength": 1},
+              "url": {"type": "string", "minLength": 1},
+              "license": {"type": "string", "minLength": 1},
+              "locator": {"type": "string", "minLength": 1},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the original source file bytes, before extraction or injection."}
+            }
+          },
+          "original_latex": {"type": "string", "minLength": 1},
+          "case_kind": {"enum": ["original", "control", "injected"]},
+          "review_status": {"const": "pending"},
+          "expected_syntax": {"enum": ["OK", "RETRY", "NEEDS_HUMAN", "NEEDS_ENV"], "description": "Optional checker expectation, never semantic truth."},
+          "reference_latex": {"type": "string", "description": "Source reference for human review only; never sent to the model."},
+          "injection": {"type": "string", "minLength": 1, "description": "Describe the deliberate mutation; not a claim of naturally occurring error."}
+        },
+        "allOf": [{"if": {"properties": {"case_kind": {"const": "injected"}}}, "then": {"required": ["injection"]}}]
+      }
+    }
+  }
+}

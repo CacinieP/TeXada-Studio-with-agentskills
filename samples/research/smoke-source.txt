@@ -1,0 +1,6 @@
+Synthetic examples authored solely for runner smoke testing.
+License: AGPL-3.0-only, same as this repository.
+S01 source: x+1
+S02 source: a_1+b
+S03 source: x^2+2*x+1=(x+1)^3
+S03 intentionally demonstrates that parsing is not proof of a mathematical identity.

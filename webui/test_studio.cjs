@@ -109,6 +109,16 @@ windowListeners.get('load')();
   run("preFix = editor.getValue(); applyResult(result); showCenter('diff');");
   assert.equal(run('diffShown'), true, 'new file can get its own valid diff');
 
+  let downloaded;
+  context.captureDownload = (name, blob) => { downloaded = {name, blob}; };
+  context.traceResult = { ...context.result, model: null, model_calls: 0, skill_mode: 'on',
+    edits: [], elapsed_seconds: 1, trace: [{action: 'CANDIDATE_REJECTED', candidate: 'x+'}] };
+  run('download = captureDownload; lastResult = traceResult; $("btnReport").onclick();');
+  const report = await downloaded.blob.text();
+  assert.match(report, /实际模型请求：0；模型：本次未调用/);
+  assert.match(report, /CANDIDATE_REJECTED/);
+  assert.match(report, /不表示人工已经采用/);
+
   get('sepE').listeners.get('mousedown')({ target: { closest: () => get('sepBtnE') }, preventDefault() { throw new Error('button started drag'); } });
   assert.equal(documentListeners.has('mousemove'), false);
   get('sepBtnE').onclick();

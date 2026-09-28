@@ -10,12 +10,12 @@ Studio 浏览器
 
 CLI 已有 layout.json
   Python harness → formula / table checker → 最多两次修复尝试
-                 → state.jsonl → report.md → 下次运行跳过终态节点
+                 → state.jsonl → 本轮 report.md → 按输入与上下文指纹续跑
 ```
 
 ## Skills 与脚本
 
-`SKILL.md` 提供触发说明、步骤、输入和限制；Python harness 按节点类型执行预先编排的循环，运行时不动态加载 Skill 正文。当前不是自主规划任意工具的通用 Agent，也不使用 MCP。逐个 Skill 的代码映射、状态协议与评测方法见 [Skills 技术报告](skills-technical-report.md)，操作与边界见 [案例手册](casebook.md)。
+`SKILL.md` 提供触发说明、步骤、输入和限制。真实公式模型请求默认启用 Skill：CLI 使用 `--skill-mode on`，Studio 使用 `SKILL_MODE=on`。白名单宿主读取并验证 `doc-formula-verify/SKILL.md`，将实际正文加入系统消息，并记录 Skill 与提示哈希；off 保留基础提示和相同工具流程。Fixture 不加载正文、不请求模型。节点选择、检查器调用和重试仍由 Python 固定编排，未实现任意工具的自主规划，也不使用 MCP。逐个 Skill 的代码映射见 [Skills 技术报告](skills-technical-report.md)，受控实验见[研究协议](../samples/research/README.md)。
 
 - `doc-formula-verify`：SymPy 语法校验脚本；检查器故障不得显示为通过。
 - `doc-table-audit`：CLI 对结构化数据做合计校验；Studio 另有面向简单 LaTeX 表格的行解析和重算。
@@ -32,7 +32,9 @@ CLI 已有 layout.json
 
 ## 状态和审阅
 
-CLI 以文档及节点标识查找已完成状态；相同输入重跑跳过终态节点。输入改变时必须新建状态目录。Studio 任务状态在进程内存中，服务重启后不能恢复；只支持可信用户、一个 worker 的演示部署。
+CLI 仅复用文档/节点标识、输入哈希与执行上下文哈希都匹配的终态。输入、crop 字节、模型参数、Skill 正文、检查器或依赖变化会自动重新检查；旧日志无哈希不能授权跳过。暂时性提供方或检查器故障记为 `resumable:false`，恢复后可在同目录重跑。每次原始检查、提供方调用、候选接受/拒绝都进入追加日志；报告按当前 `run_id` 统计。详见 [Harness 手册](../harness/README.md)。
+
+Studio 在 `state/studio/jobs/<job_id>/` 保存 `job.json` 与逐候选 `events.jsonl`；服务重启后可按已知 job_id 查询已完成结果。执行中的任务仍依赖进程内存，中断后不自动续跑，读取旧任务会提示新建任务。页面尚无任务历史列表，也不能据此恢复未导出的浏览器编辑。只支持可信用户、一个 Uvicorn worker；单 worker 也不等于具备多用户隔离。
 
 Studio 保留原文和候选模型；候选先进入 diff，用户点击采用后才进入编辑器，不自动保存到服务端，需导出保留。报告记录修改、内容哈希、编译结果、耗时与检查范围。语法可解析、PDF 可生成与数学含义正确是不同判断。行内公式使用逐行美元正则，注释或 verbatim 内的类似文本也可能被列为候选，未实现完整 TeX 上下文保护。
 
