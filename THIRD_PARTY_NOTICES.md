@@ -33,7 +33,8 @@ bundled in this source tree. Its source and MIT license are available in the
 
 The retained demonstration documents, layout records and placeholder crops in
 `samples/` are synthetic test fixtures. They do not establish OCR or model accuracy.
-The historical `GTM249-p101-120.tex` textbook extract has been removed from the
-current tree because no redistribution grant is recorded. The project license
-does not grant rights to that extract in older commits. Do not publish the Git
-history until the release checklist's history review is resolved.
+The historical `GTM249-p101-120.tex` textbook extract and both of its blob versions
+have been removed from the current tree and reachable `main` history because no
+redistribution grant is recorded. Old clones and private pre-rewrite backups can
+still contain it and must not be republished or merged back. The project license
+does not grant rights to that extract. See the release checklist before publication.
