@@ -20,13 +20,13 @@
 
 提交 ID 已变化。其他使用者应重新 clone；不要从旧 clone merge / push，也不要将清理前的 bundle 作为发布附件。保留旧 clone 的使用者需自行妥善处理其历史和 reflog。
 
-这里的清理指分支和标签可达的 Git 历史。推送后重新 mirror clone 已确认不含教材路径或其两个 blob；但通过已登录 GitHub API 按旧 blob SHA 查询，两个对象仍可读取。这些后台对象不由强制推送或本地 GC 删除。
+这里的清理指分支和标签可达的 Git 历史。原仓库 `CacinieP/TeXada-WebUI` 推送后重新 mirror clone 已确认不含教材路径或其两个 blob；但通过该原仓库的已登录 GitHub API 按旧 blob SHA 查询，两个对象仍可读取。这些后台对象不由强制推送或本地 GC 删除。
 
-[GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)指出，Support 不清除非敏感数据，只处理符合条件的敏感数据，因此不能承诺教材内容的清理申请会被受理。若公开发布要求彻底隔离这些旧对象，应另建独立发布仓库、仅推送已清理的历史，并继续保留原仓库为私有；不要直接把原仓库改为公开。
+[GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)指出，Support 不清除非敏感数据，只处理符合条件的敏感数据，因此不能承诺教材内容的清理申请会被受理。本项目据此迁入独立仓库 `CacinieP/texada-agent-skills`，仅推送已清理的历史；原仓库继续私有，新仓库也按维护者要求保持私有。迁移核验见 [仓库说明](repository-migration.md)。
 
 ## 改为公开之前必须完成
 
-- [ ] 确认 GitHub 后台旧对象 / 缓存的清理状态；仅有重写后的分支并不能证明旧 SHA 内容不可访问。
+- [ ] 确认新仓库已与原仓库的旧对象隔离；检查新仓库旧 SHA 查询结果，而不是将原仓库直接改为公开。
 - [ ] 最后审阅拟公开的 refs、附件与 Git 历史；确认无真实用户文档、凭证或不应公开的材料。
 - [ ] 审阅 AGPL 的授权范围，以及来源快照和品牌资源的权属。
 - [ ] 确认实际部署版本的对应源码可公开访问；如有本地修改，提供该版本源码，并更新界面源码链接。

@@ -1,8 +1,11 @@
-# TeXada-WebUI
+# TeXada Agent Skills
 
 LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。包含 Monaco 源码编辑器、Tectonic 编译预览、修复对比，以及可断点续跑的命令行质检管线。
 
 这是第三届 NVIDIA DGX Spark 黑客松 Agent Skills 方向的实验项目。当前支持可信用户的单进程演示部署，还不是多用户文档服务。
+
+参赛作品名：**TeXada Agent Skills · 文档质检与修复**。仓库名：`texada-agent-skills`。
+本仓库承接已经清理的项目历史，原仓库保留私有；命名依据与迁移范围见 [仓库说明](docs/repository-migration.md)。
 
 ## 当前能力
 
@@ -19,8 +22,8 @@ LaTeX 文档质检与修复 Studio，面向公式语法和表格合计错误。�
 需要 Python 3.10+；开发验证使用 Python 3.13。以下命令在仓库根目录执行。初次安装依赖需要网络，安装完成后 fixture 管线不调用模型服务。
 
 ```bash
-git clone https://github.com/CacinieP/TeXada-WebUI.git
-cd TeXada-WebUI
+git clone https://github.com/CacinieP/texada-agent-skills.git
+cd texada-agent-skills
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r harness/requirements.txt
@@ -94,10 +97,10 @@ Node.js 22 用于 JavaScript 检查。上述测试不需要 GPU 或模型，也�
 
 ## 贡献、分发与许可证
 
-贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。问题和功能建议可提交到 [GitHub Issues](https://github.com/CacinieP/TeXada-WebUI/issues)。
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。问题和功能建议可提交到 [GitHub Issues](https://github.com/CacinieP/texada-agent-skills/issues)。
 
 本项目原创代码、文档和合成样本采用 **GNU AGPL v3.0（SPDX: `AGPL-3.0-only`）**，Copyright (C) 2026 CacinieP。完整条款见 [LICENSE](LICENSE)，第三方组件及保留许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。第三方代码不因位于本仓库而改换原许可证。
 
 提供网络服务的修改版本需遵守 AGPL 第 13 条的对应源代码提供要求；请保留界面的源码链接，并指向实际部署版本可访问的完整源码。上传的用户文档不自动变成本项目的授权内容。
 
-提交并审阅后执行 `bash scripts/package.sh`，生成仅包含当前提交的 `dist/TeXada-WebUI-<commit>.zip`。打包不读取未跟踪文件，也不包含 Git 历史。`scripts/backup.sh` 的 Git bundle 包含历史，仅作私密备份，不作为公开源码包。
+提交并审阅后执行 `bash scripts/package.sh`，生成仅包含当前提交的 `dist/texada-agent-skills-<commit>.zip`。打包不读取未跟踪文件，也不包含 Git 历史。`scripts/backup.sh` 的 Git bundle 包含历史，仅作私密备份，不作为公开源码包。

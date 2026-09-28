@@ -1,7 +1,7 @@
 # 调研纪要（2026-09-28 收口）
 
 > 汇总自 Notion「NVIDIA DGX Spark 参赛知识库」05/06/07 页、第二届复盘页与外部核验。
-> 结论：选题定稿方案 A `TeXada-WebUI`。本页只留决策相关证据，完整版在 Notion。
+> 结论：选题定稿方案 A `TeXada Agent Skills`。本页只留决策相关证据，完整版在 Notion。
 
 ## 一、赛事情报（第三届）
 
