@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "recorded_on": "2026-09-29",
+  "recording_source_revision": "e0cc8f898c587e603e8943f26fa85b463c4954bd",
+  "narration": "synthetic female voice",
+  "status": "local delivery; not publicly hosted",
+  "files": [
+    {
+      "filename": "TeXada-Studio-中文字幕.srt",
+      "bytes": 3388,
+      "sha256": "3be51fc46a8b607c65f14a512348fc7655a28bdd570a701352fbae0342852f6a"
+    },
+    {
+      "filename": "TeXada-Studio-介绍视频-女声版.mp4",
+      "bytes": 8904379,
+      "sha256": "924a7c25230425e66d60971bac4e7db637098bf7b6bc5f2b7cf98d865e801aee",
+      "duration_seconds": 160.728,
+      "resolution": "1920x1080",
+      "fps": 24
+    },
+    {
+      "filename": "TeXada-Studio-表格质检短片.mp4",
+      "bytes": 2502107,
+      "sha256": "b44919a153c37fbb176e60a91536fbd0a498f051f1ae54077c6bfab5912a628e",
+      "duration_seconds": 36.437663,
+      "resolution": "1920x1080",
+      "fps": 24
+    },
+    {
+      "filename": "TeXada-Studio-视频封面.png",
+      "bytes": 623419,
+      "sha256": "e02f311b013b7491fd19147b78f8ba7d934b0c0a6c3b8217675d6702da0f724b"
+    }
+  ]
+}

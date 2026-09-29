@@ -1,13 +1,6 @@
-# Reviewed exact historical findings only; see docs/security-scan-notes.md.
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:27
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:36
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:45
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:54
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:63
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:72
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:81
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:90
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:108
-8534759d78dbbf0138c7a8948a1c58b2775c9e77:docs/voice-production.json:generic-api-key:117
-dedca3c06b0d4eb355ee4854a261cc54432e67a9:webui/static/monaco/0.52.2/min/vs/language/typescript/tsWorker.js:generic-api-key:320
-dedca3c06b0d4eb355ee4854a261cc54432e67a9:webui/static/monaco/0.52.2/min/vs/editor/editor.main.js:generic-api-key:631
+# Exact reviewed upstream Monaco findings only; see docs/security-scan-notes.md.
+# Two source locations, with separate Git-history and directory-scan fingerprints.
+34a0d0c0ff0b606855734b92c4a7b338745d8a5e:webui/static/monaco/0.52.2/min/vs/editor/editor.main.js:generic-api-key:631
+34a0d0c0ff0b606855734b92c4a7b338745d8a5e:webui/static/monaco/0.52.2/min/vs/language/typescript/tsWorker.js:generic-api-key:320
+webui/static/monaco/0.52.2/min/vs/editor/editor.main.js:generic-api-key:631
+webui/static/monaco/0.52.2/min/vs/language/typescript/tsWorker.js:generic-api-key:320
