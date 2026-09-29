@@ -10,7 +10,7 @@
 | 许可与来源 | 主项目 AGPL-3.0-only；Monaco MIT 许可及固定资源保留；教材先导公式采用 CC-BY-SA-4.0 | [许可](../LICENSE)、[来源声明](../samples/research/ACTIVE_CALCULUS_NOTICE.md) |
 | 协作与维护 | 贡献流程、问题模板、排错页、CITATION.cff 和预发布文案齐备；About 与 Topics 已配置 | [求助入口](../SUPPORT.md)、[路线图](roadmap.md)、[发布草稿](releases/v0.1.0-alpha.1-draft.md) |
 | 历史清理 | 教材内容已从可达历史移除，并迁入独立私有仓库；后续完成邮件元数据、部署示例和图片脱敏 | [迁移记录](repository-migration.md)、[扫描复核](security-scan-notes.md) |
-| 演示与传播 | B站连续实录已发布；项目与技术报告齐备，微信公众号征文待作者审核发布 | [动态演示](dynamic-demo.md)、[发布计划](launch-plan.md) |
+| 演示与传播 | B站连续实录、微信公众号征文已发布；项目与技术报告齐备 | [动态演示](dynamic-demo.md)、[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[发布计划](launch-plan.md) |
 
 ## 复现结果
 
@@ -23,7 +23,7 @@ Studio 现有13份文档。最新演示从 `87ca397` 连续录制，时长222.07
 ## 后续发布工作
 
 1. 选定发布提交，复核许可、来源、拟公开 refs 和附件；从该提交生成源码包及校验清单。
-2. 核验源码、报告、演示与私密漏洞入口的访问；公众号文章经作者审核、手动发布后补链接。
+2. 核验源码、报告、演示、微信公众号文章与私密漏洞入口的访问。
 3. 创建首个预发布 tag / Release，确认实际部署版本对应的源码可访问。
 4. 邀请少量目标用户按 README 试跑，收集安装失败、误改和漏检案例，处理后再扩大传播。
 

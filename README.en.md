@@ -2,7 +2,7 @@
 
 Check formula syntax and simple table totals in a LaTeX editor, review repair candidates, and decide what to adopt.
 
-[中文](README.md) · [Demo video](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skill design and technical report](docs/skills-technical-report.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
+[中文](README.md) · [Demo video](https://www.bilibili.com/video/BV16Kan6rEGv/) · [WeChat article](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill design and technical report](docs/skills-technical-report.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
 
 TeXada combines Monaco, deterministic checks, a local text model, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
 
@@ -19,7 +19,7 @@ An entry in the third NVIDIA DGX Spark Hackathon, Agent Skills Development Chall
 | Live demonstration | [Bilibili video](https://www.bilibili.com/video/BV16Kan6rEGv/): about 3:42, including the model wait, diff review, and manual adoption; [recording and evidence](docs/dynamic-demo.md) |
 | Project overview | [Project report](docs/project-report.md): use cases, workflow, and implementation scope |
 | Skill technical report | [Design and implementation](docs/skills-technical-report.md): responsibilities, state contracts, loading, extension, and validation |
-| Competition article | [Full draft](docs/technical-article.md); **WeChat publication link pending author review and manual publication** |
+| Competition article | [Published on WeChat (Chinese)](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Repository text](docs/technical-article.md) |
 | Reproducible results | [Casebook](docs/casebook.md) · [Validation](docs/validation.md) · [Skill comparison](docs/skills-pilot-analysis.md) |
 
 TeXada organizes instructions, checking scripts, and cases into Skill task packages that can be maintained separately. The Python host explicitly loads instructions and manages states, allowing at most two candidate requests per formula. The checker evaluates each candidate, and the user reviews it before deciding whether to adopt it; requests, candidates, and check results are saved. Currently, only the `doc-formula-verify` instructions enter the model's system message; other task packages use their own scripts or operating procedures.

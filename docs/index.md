@@ -17,7 +17,7 @@
 
 ## 项目、赛事与发布
 
-- 项目介绍：[项目报告](project-report.md)、[技术征文审核稿](technical-article.md)、[提交清单](submission-checklist.md)。微信公众号文章由作者审核后手动发布，文章链接待补。
+- 项目介绍：[项目报告](project-report.md)、[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[征文仓库稿](technical-article.md)、[提交清单](submission-checklist.md)。
 - 发布准备：[开源清单](open-source-release.md)、[准备度记录](open-source-readiness.md)、[发布与传播计划](launch-plan.md)、[Release 草案](releases/v0.1.0-alpha.1-draft.md)。
 - 维护记录：[CHANGELOG](../CHANGELOG.md)、[迁移记录](repository-migration.md)、[隐私扫描记录](security-scan-notes.md)。
 - 引用项目：[CITATION.cff](../CITATION.cff)，同时注明所用提交号。

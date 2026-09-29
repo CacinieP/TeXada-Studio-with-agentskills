@@ -6,7 +6,7 @@
 
 [项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)
 
-微信公众号投稿链接：待作者审核后手动发布并补充。
+微信公众号：[阅读已发布文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)。
 
 一份数学讲义，漏掉分式外层的一半括号，就无法编译。另一份讲义把积分结果写错，却能生成漂亮的 PDF。写 LaTeX 时，这两类问题经常混在一起：我们既想尽快修好排版，也需要知道修复有没有改变原意。
 

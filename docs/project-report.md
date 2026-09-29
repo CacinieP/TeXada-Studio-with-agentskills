@@ -67,4 +67,4 @@ Studio 的安装、Tectonic、Poppler、字体、模型和认证设置见 [READM
 
 下一步围绕 TeX 上下文提取、更多来源的修复评测和持久任务队列推进，具体任务与验收标准见[路线图](roadmap.md)。
 
-源码、报告和B站演示已提供公开入口。微信公众号征文待作者审核后手动发布；提交材料与后续安排见[提交清单](submission-checklist.md)及[文档导航](index.md)。
+源码、报告、B站演示和[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)已提供公开入口。提交材料与后续安排见[提交清单](submission-checklist.md)及[文档导航](index.md)。

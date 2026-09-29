@@ -2,7 +2,7 @@
 
 在 LaTeX 编辑器里检查公式语法和简单表格合计，审阅修复候选，再决定是否采用。
 
-[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
+[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
 
 TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放在同一个工作台中。公式候选以 diff 展示，手动采用后可导出 `.tex`、PDF 和质检报告。
 
@@ -19,7 +19,7 @@ TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放�
 | 实机演示 | [B 站视频](https://www.bilibili.com/video/BV16Kan6rEGv/)：约3分42秒，保留模型等待、diff 审阅和人工采用；[录制说明与证据](docs/dynamic-demo.md) |
 | 项目介绍 | [项目报告](docs/project-report.md)：使用场景、工作流与实现范围 |
 | Skill 技术报告 | [设计与实现](docs/skills-technical-report.md)：职责划分、状态契约、加载方式、扩展与验证 |
-| 参赛征文 | [仓库全文](docs/technical-article.md)；微信公众号链接：**待作者审核后手动发布并补充** |
+| 参赛征文 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](docs/technical-article.md) |
 | 可复现结果 | [案例手册](docs/casebook.md) · [验证记录](docs/validation.md) · [Skill 对照实验](docs/skills-pilot-analysis.md) |
 
 TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务包。Python 宿主明确加载指令并管理状态，每个公式最多请求两次候选；检查器回判候选，使用者审阅后决定是否采用，请求、候选和检查结果都会保存。当前只有 `doc-formula-verify` 正文加载到模型的系统消息；其他任务包通过各自脚本或操作约定使用。

@@ -13,7 +13,7 @@
 | 项目应用领域 | 建议选择科研 / 教育 |
 | 项目及报告书网址 | [项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [项目报告](project-report.md) · [Skills 技术报告](skills-technical-report.md) |
 | Demo 视频网址 | [B站连续实录](https://www.bilibili.com/video/BV16Kan6rEGv/)，约3分42秒，符合5分钟内要求；[复现与证据](dynamic-demo.md) |
-| 参赛征文网址 | [技术征文审核稿](technical-article.md)；作者审核后手动发布微信公众号，公共文章链接待补 |
+| 参赛征文网址 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](technical-article.md) |
 | 团队照片 | 待提供真实照片，表单限制20 MB以内 |
 
 提交视频要求5分钟内；当前视频约3分42秒，保留完整模型等待。提交前再核对表单中的截止时间及最新要求。
@@ -31,8 +31,9 @@
 - [x] 项目报告、技术征文、样本及复现命令已整理。
 - [x] 连续实录已发布B站；字幕、媒体清单及源码对应关系已核对，详见[验证记录](validation.md)。
 - [x] 媒体和源码完成脱敏检查，详见[扫描记录](security-scan-notes.md)。
+- [x] 微信公众号征文已发布，文章链接已回填。
 - [ ] 确定提交版本，并附该版本的源码包与验证记录。
-- [ ] 补齐地址、照片，完成微信公众号文章审核与发布，并核验所有提交链接。
+- [ ] 补齐地址、照片，并核验所有提交链接。
 - [ ] 团队提交表单并保存回执。
 
 源码、技术报告及演示入口已集中到首页；后续版本发布步骤见[开源清单](open-source-release.md)。

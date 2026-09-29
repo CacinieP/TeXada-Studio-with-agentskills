@@ -1,6 +1,6 @@
 # 发布与传播计划
 
-源码、报告和[B站实机视频](https://www.bilibili.com/video/BV16Kan6rEGv/)作为公开入口。微信公众号征文由作者审核后手动发布，文章链接待补；尚未创建 tag 或 GitHub Release。
+源码、报告、[B站实机视频](https://www.bilibili.com/video/BV16Kan6rEGv/)和[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)均已提供公开入口；尚未创建 tag 或 GitHub Release。
 
 ## 受众与主线
 
@@ -23,7 +23,7 @@
 | --- | --- |
 | 主视频 | [B站完整实录](https://www.bilibili.com/video/BV16Kan6rEGv/)，约3分42秒；录制源码 `87ca397`，见[动态演示](dynamic-demo.md) |
 | 无配音版 | 与主片相同的连续画面，保留完整操作和模型等待；摘要见动态演示页 |
-| 技术文章 | [微信公众号审核稿](technical-article.md)，作者手动发布后补公共链接 |
+| 技术文章 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](technical-article.md) |
 | 复现材料 | [13份Studio文档](../samples/README.md)、[27个检查案例](../samples/evaluation/README.md)、[12项编译复现](evaluation-results/studio-latex/README.md) |
 | 封面 | [social-preview.png](images/social-preview.png)，1280×640 |
 | 版本说明 | [预发布草案](releases/v0.1.0-alpha.1-draft.md) |
@@ -41,7 +41,7 @@
 | --- | --- | --- |
 | 首轮试跑 | 团队邀请3位目标用户按README试跑 | 收到3份环境、运行结果和卡点记录 |
 | 首次版本发布 | 从选定提交创建带源码与校验值的预发布版本 | tag、附件和记录对应同一提交 |
-| 微信公众号 | 作者审核征文与配图后手动发布 | 回填文章链接，文章与B站视频都指向项目仓库 |
+| 微信公众号 | 已发布，文章链接已回填仓库 | 核对文章与B站视频中的项目仓库入口 |
 | 首周后半段 | 向相关LaTeX、Python或本地模型社区分享复现方法 | 按社区规则发布，逐条回应具体问题 |
 | 下一轮 | 汇总反馈，修正文档或样本，更新CHANGELOG | 每个已解决问题都有可验证的版本或命令 |
 | 英文扩展 | 有精力接收英文反馈时，再发布DEV文章 | 英文安装步骤与当前README一致 |
