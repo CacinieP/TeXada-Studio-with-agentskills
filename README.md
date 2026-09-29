@@ -22,7 +22,7 @@ TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放�
 | 参赛征文 | [仓库全文](docs/technical-article.md)；微信公众号链接：**待作者审核后手动发布并补充** |
 | 可复现结果 | [案例手册](docs/casebook.md) · [验证记录](docs/validation.md) · [Skill 对照实验](docs/skills-pilot-analysis.md) |
 
-公式 Skill 用 `SKILL.md` 说明检查与修复步骤，脚本给出确定性结果，Python 宿主管理状态和最多两次模型请求。模型只产生候选，候选经检查后进入人工审阅。当前接入模型请求的是 `doc-formula-verify`；小样本对照尚未观察到 Skill 带来输出改善，具体设计与实验记录见上表。
+TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务包。Python 宿主明确加载指令并管理状态，每个公式最多请求两次候选；检查器回判候选，使用者审阅后决定是否采用，请求、候选和检查结果都会保存。当前只有 `doc-formula-verify` 正文加载到模型的系统消息；其他任务包通过各自脚本或操作约定使用。
 
 ## 1. 先跑无需模型的样本
 

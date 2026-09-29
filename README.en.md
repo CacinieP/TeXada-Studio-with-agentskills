@@ -22,7 +22,7 @@ An entry in the third NVIDIA DGX Spark Hackathon, Agent Skills Development Chall
 | Competition article | [Full draft](docs/technical-article.md); **WeChat publication link pending author review and manual publication** |
 | Reproducible results | [Casebook](docs/casebook.md) · [Validation](docs/validation.md) · [Skill comparison](docs/skills-pilot-analysis.md) |
 
-The formula Skill describes checking and repair steps in `SKILL.md`; scripts return deterministic results, while the Python host manages states and at most two model requests. The model produces candidates for checking and human review. Only `doc-formula-verify` is currently loaded into model requests. The small pilot comparison has not shown an output improvement from adding the Skill; the reports above document both the design and the results.
+TeXada organizes instructions, checking scripts, and cases into Skill task packages that can be maintained separately. The Python host explicitly loads instructions and manages states, allowing at most two candidate requests per formula. The checker evaluates each candidate, and the user reviews it before deciding whether to adopt it; requests, candidates, and check results are saved. Currently, only the `doc-formula-verify` instructions enter the model's system message; other task packages use their own scripts or operating procedures.
 
 ## 1. Run a sample without a model
 
