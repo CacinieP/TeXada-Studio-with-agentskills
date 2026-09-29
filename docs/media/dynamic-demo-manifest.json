@@ -16,8 +16,8 @@
     },
     {
       "filename": "TeXada-Studio-真实动态录屏.mp4",
-      "bytes": 22069403,
-      "sha256": "8482ffbf30fd648cb812ade7eda637bea44930cd20cb574baba0e586eca864ae",
+      "bytes": 21909174,
+      "sha256": "e00ab8da0c2d371698f77c50296fd295d8cb503c8bf8d237c61eca5eaefc85bf",
       "duration_seconds": 222.08,
       "resolution": "1920x1080",
       "fps": "25/1",
@@ -26,12 +26,13 @@
     {
       "filename": "TeXada-Studio-真实动态录屏.srt",
       "bytes": 3543,
-      "sha256": "7a511b8cc3138268bf0eecaee93bd8ea516237266c1bab10e2f207f0a9749776"
+      "sha256": "7dbd5d4c81f195c2c8f7d6f2763ae16b3eb04bd3f7d87c52d2c04e2fadcd71c3"
     },
     {
       "filename": "旁白稿.md",
       "bytes": 2798,
       "sha256": "3df5e81f5497b1099bcbc8aacc190b0458dd30f26d2f72db06a39a0a5906d103"
     }
-  ]
+  ],
+  "narration_revision": "All seven narration clips regenerated with one fixed synthetic female voice reference; no user voice or old narration clips used. Subtitles retimed; the original continuous browser timeline and silent master are unchanged."
 }

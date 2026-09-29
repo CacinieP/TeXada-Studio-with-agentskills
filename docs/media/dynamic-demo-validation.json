@@ -57,7 +57,7 @@
     },
     {
       "filename": "TeXada-Studio-真实动态录屏.mp4",
-      "sha256": "8482ffbf30fd648cb812ade7eda637bea44930cd20cb574baba0e586eca864ae",
+      "sha256": "e00ab8da0c2d371698f77c50296fd295d8cb503c8bf8d237c61eca5eaefc85bf",
       "technical_checks_passed": true,
       "checks": {
         "valid_frame_rates": true,
@@ -104,6 +104,8 @@
     "caption_strip_outside_browser_content": true,
     "privacy_footer_present_in_reviewed_frames": true,
     "sensitive_patterns_found_by_sampled_ocr": 0,
-    "limits": "Ten sampled operation frames; not an exhaustive privacy certification. At 100% zoom a page may extend beyond the preview pane; Fit restores the full page."
-  }
+    "limits": "Ten sampled operation frames; not an exhaustive privacy certification. At 100% zoom a page may extend beyond the preview pane; Fit restores the full page.",
+    "scope": "Operation-frame review from the unchanged recorded source; regenerated caption strip is checked separately by current subtitle and media QA."
+  },
+  "narration_revision": "Same recorded browser interval; one synthetic voice reference for every regenerated narration segment. Silent video file is byte-identical to the previous delivery."
 }

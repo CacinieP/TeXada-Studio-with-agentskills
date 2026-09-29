@@ -2,6 +2,7 @@
 
 ## Unreleased — continuous live recording
 
+- Regenerate all narration with one synthetic voice reference and retime captions, preserving the continuous browser timeline and unchanged silent master.
 - Add a single continuous browser recording with visible pointer/clicks, full real model wait, review, adoption, downloads and sample navigation.
 - Deliver narrated/subtitled and original-speed unnarrated versions, keeping this run separate from earlier edited demos.
 - Update media evidence and documentation; application runtime and sample content are unchanged.

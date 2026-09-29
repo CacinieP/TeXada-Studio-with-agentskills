@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "updated_on": "2026-09-29",
+  "voice_reference_count": 1,
+  "reference_origin": "Original text-only synthetic female voice",
+  "reference_audio_sha256": "c3fb1d93ca8b8114b0bebc1ca461c2c46c0d56c2f039a6b9ddcdbc936f0a8395",
+  "reference_duration_seconds": 15.04,
+  "user_voice_read_or_uploaded": false,
+  "all_narration_segments_regenerated": true,
+  "old_narration_segments_reused": 0,
+  "voice_control_parameters_identical": true,
+  "audio_speed_changes": 0,
+  "segments": [
+    {
+      "id": "dynamic-01",
+      "start_seconds": 0.1709999999999999,
+      "duration_seconds": 22.88,
+      "audio_sha256": "d9ed7317481218d69801e7e187c22b83a2c9e2642ee2e469b9fd9f7c44e62e5f"
+    },
+    {
+      "id": "dynamic-02",
+      "start_seconds": 30.427999999999997,
+      "duration_seconds": 13.92,
+      "audio_sha256": "d0185d59a8a5702edf0267898ddb19f8008cff3bd86ee7d90ce40d9ac6b00c13"
+    },
+    {
+      "id": "dynamic-03",
+      "start_seconds": 46.428,
+      "duration_seconds": 40.16,
+      "audio_sha256": "5aa6906ca349598c31567abd7451ead1579a05211f783f8471d4587f042d24ca"
+    },
+    {
+      "id": "dynamic-04",
+      "start_seconds": 119.20000000000002,
+      "duration_seconds": 14.24,
+      "audio_sha256": "bf9697f762da20ff707132873fcc73eb85e645c94767278b127ddc04470ff539"
+    },
+    {
+      "id": "dynamic-05",
+      "start_seconds": 149.555,
+      "duration_seconds": 15.84,
+      "audio_sha256": "c7a687fad8572c14a02b3775ebff0081df9566962ae360b36319c53b37d70098"
+    },
+    {
+      "id": "dynamic-06",
+      "start_seconds": 166.212,
+      "duration_seconds": 22.4,
+      "audio_sha256": "196f911657432231417fd0565dccae77f0a89cae5e39ab48f98bf0278abe75c0"
+    },
+    {
+      "id": "dynamic-07",
+      "start_seconds": 191.217,
+      "duration_seconds": 26.24,
+      "audio_sha256": "a75020311d0ed9b8e2033d7441b270e6ce4edc95bb1789312f68a77fbbd32a29"
+    }
+  ],
+  "review_scope": "Request provenance, transcript completeness, scene timing and audio decoding; ASR alone does not establish perceived timbre."
+}
