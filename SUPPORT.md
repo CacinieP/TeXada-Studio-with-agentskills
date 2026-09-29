@@ -10,10 +10,10 @@
 | 安全漏洞、凭据或隐私问题 | [SECURITY.md](SECURITY.md) | 按私密报告流程联系，勿放入普通 Issue |
 | 行为违规 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 具体内容的位置，避免再传播个人信息 |
 
-仓库私有期间，以上入口需要访问权限；没有权限时，通过与维护者已有的联系渠道反馈。使用问题统一提交到 Issues。
+使用问题统一提交到 GitHub Issues，安全问题使用私密报告入口。
 
 执行 `git rev-parse --short HEAD` 获取提交号，注明 Studio / CLI 和 fixture / 真实模型。提供可复现的小型合成 TeX、实际命令及相关错误；删去 token、个人路径、私人文档和节点访问资料。
 
 ## English
 
-Use GitHub Issues for bugs, usage questions and feature requests. Include the commit, environment, Studio/CLI entry point, fixture/real-model mode, command and a small synthetic example. Repository access is required while private. Follow [SECURITY.md](SECURITY.md) for vulnerability reports.
+Use GitHub Issues for bugs, usage questions and feature requests. Include the commit, environment, Studio/CLI entry point, fixture/real-model mode, command and a small synthetic example. Follow [SECURITY.md](SECURITY.md) for vulnerability reports.

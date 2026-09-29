@@ -4,7 +4,7 @@
 
 ## Clone 或 Python 导入失败
 
-`Repository not found`：仓库目前私有，请确认账号有访问权限且 Git 已认证；也可使用授权源码包。
+`Repository not found`：请核对仓库地址为 `https://github.com/CacinieP/TeXada-Studio-with-agentskills.git`。可先用浏览器打开项目页，再检查 Git 的代理或 URL 重写配置。
 
 `No module named docforensics` 或解析依赖缺失：
 

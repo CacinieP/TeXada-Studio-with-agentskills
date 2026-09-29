@@ -4,11 +4,11 @@
 
 | 素材 | 用途 | 入口 |
 | --- | --- | --- |
-| `TeXada-Studio-真实动态录屏.mp4` | 完整操作、统一合成女声、中文字幕 | [操作与结果](dynamic-demo.md) |
+| `TeXada-Studio-真实动态录屏.mp4` | 完整操作、统一合成女声、中文字幕 | [B站播放](https://www.bilibili.com/video/BV16Kan6rEGv/) · [操作与结果](dynamic-demo.md) |
 | `TeXada-Studio-原速无配音实录.mp4` | 核对同一区间的实际操作和等待 | [文件规格与摘要](media/dynamic-demo-manifest.json) |
 | `TeXada-Studio-真实动态录屏.srt` | 配音版外挂字幕 | 同上 |
 
-视频已本地交付，公共播放地址待补；仓库仍为私有。
+[B站完整视频](https://www.bilibili.com/video/BV16Kan6rEGv/)已发布，时长约3分42秒。
 
 ## 自己操作一遍
 

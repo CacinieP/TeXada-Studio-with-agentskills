@@ -4,7 +4,9 @@
 
 方向：科研与教育中的 LaTeX 文档质检　更新：2026-09-29
 
-[项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · AGPL-3.0-only，第三方资源保留各自许可
+[项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skills 技术报告](skills-technical-report.md)
+
+原创部分采用 AGPL-3.0-only，第三方资源保留各自许可。
 
 ## 要解决的问题
 
@@ -65,4 +67,4 @@ Studio 的安装、Tectonic、Poppler、字体、模型和认证设置见 [READM
 
 优先完成三件事：加入理解 TeX 上下文的公式提取；完成先导实验的独立语义复核并扩大自然错误来源；把中断恢复和任务管理从单进程移到持久作业队列。评测将分别记录抽取覆盖、语法修复、误改和人工介入，保留失败输入。
 
-仓库当前私有。提交前需落实评委访问方式；材料与公开准备见[提交清单](submission-checklist.md)及[文档导航](index.md)。
+源码、报告和B站演示已提供公开入口。微信公众号征文待作者审核后手动发布；提交材料与后续安排见[提交清单](submission-checklist.md)及[文档导航](index.md)。

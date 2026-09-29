@@ -2,13 +2,27 @@
 
 在 LaTeX 编辑器里检查公式语法和简单表格合计，审阅修复候选，再决定是否采用。
 
-[English](README.en.md) · [连续实录](docs/dynamic-demo.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
+[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
 
 TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放在同一个工作台中。公式候选以 diff 展示，手动采用后可导出 `.tex`、PDF 和质检报告。
 
-当前为实验原型，尚无正式 Release；仓库保持私有，clone 需要授权。部署面向可信用户，使用单进程和共享 token。
+当前为可复现的实验原型，源码采用 AGPL-3.0-only，尚无正式 Release。部署面向可信用户，使用单进程和共享 token。
 
 ![Studio 源码、预览与候选审阅](docs/images/studio-overview.png)
+
+## 演示与参赛材料
+
+第三届 NVIDIA DGX Spark 黑客松 · Agent Skills 开发挑战赛参赛项目。
+
+| 内容 | 入口 |
+| --- | --- |
+| 实机演示 | [B 站视频](https://www.bilibili.com/video/BV16Kan6rEGv/)：约3分42秒，保留模型等待、diff 审阅和人工采用；[录制说明与证据](docs/dynamic-demo.md) |
+| 项目介绍 | [项目报告](docs/project-report.md)：使用场景、工作流与实现范围 |
+| Skill 技术报告 | [设计与实现](docs/skills-technical-report.md)：职责划分、状态契约、加载方式、扩展与验证 |
+| 参赛征文 | [仓库全文](docs/technical-article.md)；微信公众号链接：**待作者审核后手动发布并补充** |
+| 可复现结果 | [案例手册](docs/casebook.md) · [验证记录](docs/validation.md) · [Skill 对照实验](docs/skills-pilot-analysis.md) |
+
+公式 Skill 用 `SKILL.md` 说明检查与修复步骤，脚本给出确定性结果，Python 宿主管理状态和最多两次模型请求。模型只产生候选，候选经检查后进入人工审阅。当前接入模型请求的是 `doc-formula-verify`；小样本对照尚未观察到 Skill 带来输出改善，具体设计与实验记录见上表。
 
 ## 1. 先跑无需模型的样本
 

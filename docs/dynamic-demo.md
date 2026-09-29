@@ -8,7 +8,7 @@
 | `TeXada-Studio-原速无配音实录.mp4` | 同一区间的1920×960原速画面 |
 | `TeXada-Studio-真实动态录屏.srt` | 配音版外挂字幕 |
 
-视频已本地交付，尚无公共播放地址；仓库仍为私有。25fps封装后的文件时长为222.08秒，大小与SHA256见[媒体清单](media/dynamic-demo-manifest.json)。
+[在B站观看完整实录](https://www.bilibili.com/video/BV16Kan6rEGv/)。25fps封装后的文件时长为222.08秒，符合比赛5分钟内的视频要求。原文件大小与SHA256见[媒体清单](media/dynamic-demo-manifest.json)。
 
 ## 片中做了什么
 

@@ -4,9 +4,7 @@ TeXada 面向个人或可信团队，使用单个服务进程。安全修复维�
 
 ## 报告漏洞
 
-仓库私有期间，通过与维护者已有的私密渠道报告。请提供受影响提交、最小复现、影响范围和已尝试的缓解措施；普通 Issue 中只请求建立私密联系，不附漏洞细节、凭据或用户文档。
-
-公开前启用并验证 GitHub **Private vulnerability reporting**。启用后，入口为 Security → Advisories → Report a vulnerability，配置方法见 [GitHub 文档](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository)。
+通过 [GitHub 私密漏洞报告](https://github.com/CacinieP/TeXada-Studio-with-agentskills/security/advisories/new)联系维护者。请提供受影响提交、最小复现、影响范围和已尝试的缓解措施；漏洞细节、凭据或用户文档请勿放入普通 Issue。
 
 ## 部署要求
 

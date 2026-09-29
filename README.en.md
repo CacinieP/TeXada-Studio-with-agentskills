@@ -2,13 +2,27 @@
 
 Check formula syntax and simple table totals in a LaTeX editor, review repair candidates, and decide what to adopt.
 
-[中文](README.md) · [Continuous recording](docs/dynamic-demo.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
+[中文](README.md) · [Demo video](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skill design and technical report](docs/skills-technical-report.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
 
 TeXada combines Monaco, deterministic checks, a local text model, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
 
-This is an experimental prototype with no formal release yet. The repository is private and requires access to clone. Deployment uses one process and a shared token for trusted users.
+This is a reproducible experimental prototype under AGPL-3.0-only, with no formal release yet. Deployment uses one process and a shared token for trusted users.
 
 ![Source, preview, and candidate review](docs/images/studio-overview.png)
+
+## Demo and project materials
+
+An entry in the third NVIDIA DGX Spark Hackathon, Agent Skills Development Challenge.
+
+| Material | Link |
+| --- | --- |
+| Live demonstration | [Bilibili video](https://www.bilibili.com/video/BV16Kan6rEGv/): about 3:42, including the model wait, diff review, and manual adoption; [recording and evidence](docs/dynamic-demo.md) |
+| Project overview | [Project report](docs/project-report.md): use cases, workflow, and implementation scope |
+| Skill technical report | [Design and implementation](docs/skills-technical-report.md): responsibilities, state contracts, loading, extension, and validation |
+| Competition article | [Full draft](docs/technical-article.md); **WeChat publication link pending author review and manual publication** |
+| Reproducible results | [Casebook](docs/casebook.md) · [Validation](docs/validation.md) · [Skill comparison](docs/skills-pilot-analysis.md) |
+
+The formula Skill describes checking and repair steps in `SKILL.md`; scripts return deterministic results, while the Python host manages states and at most two model requests. The model produces candidates for checking and human review. Only `doc-formula-verify` is currently loaded into model requests. The small pilot comparison has not shown an output improvement from adding the Skill; the reports above document both the design and the results.
 
 ## 1. Run a sample without a model
 
