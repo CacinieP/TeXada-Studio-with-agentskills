@@ -66,3 +66,5 @@
 本次（2026-09-29）新版LaTeX演示及历史失败记录见[演示页](demo.md)、[脱敏任务结果](demo-evidence.json)与[逐候选轨迹](demo-trace.json)；历史脱敏范围见[扫描复核](security-scan-notes.md)。
 
 新增数学讲义入口：[13份Studio样本](../samples/README.md) · [8份新案例的检查契约](../samples/studio-cases.json) · [12次编译核验](evaluation-results/studio-latex/README.md)。
+
+最新媒体入口：[连续真实动态录屏](dynamic-demo.md)，包括原速完整等待和独立无配音版；[本次任务证据](dynamic-demo-evidence.json)与前版讲解录像分别保存。

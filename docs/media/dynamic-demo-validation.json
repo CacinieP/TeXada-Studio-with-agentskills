@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-09-29",
+  "source_recording_sha256": "8c378d9426dab548238b29214b977b29bc381a4d6bce07123d243c6ec361474b",
+  "source_interval_seconds": [
+    8.0,
+    230.071
+  ],
+  "interior_cuts": 0,
+  "speed_changes": 0,
+  "freeze_extensions": 0,
+  "browser_content_pixels_preserved": [
+    1920,
+    960
+  ],
+  "narrated_caption_region": [
+    0,
+    960,
+    1920,
+    120
+  ],
+  "clock_calibration_tolerance_seconds": 0.15,
+  "versions": [
+    {
+      "filename": "TeXada-Studio-原速无配音实录.mp4",
+      "sha256": "8370afc791fea1a074d262fcb2dc8f8d4e2f9011343403d2eec648c911f0e7c8",
+      "technical_checks_passed": true,
+      "checks": {
+        "valid_frame_rates": true,
+        "one_trim_inside_raw": true,
+        "duration_matches_continuous_trim": true,
+        "recorded_content_dimensions_preserved": true,
+        "audio_timestamps_within_video": true,
+        "completed_recording_without_reported_errors": true,
+        "scene_ranges_complete_and_ordered": true,
+        "action_times_monotonic": true,
+        "capture_start_end_preserved": true,
+        "recorded_continuous_duration_matches": true,
+        "all_scenes_inside_final": true,
+        "all_actions_inside_final": true,
+        "srt_valid_and_nonoverlapping": true,
+        "srt_inside_final": true,
+        "raw_complete_decode": true,
+        "final_complete_decode": true,
+        "sample_counts_match": true,
+        "sampled_pixels_match_linear_source_time": true,
+        "raw_unchanged_during_audit": true,
+        "final_unchanged_during_audit": true,
+        "no_error_diagnostics_in_probe_or_sampling": true
+      },
+      "linear_source_time_samples": 444,
+      "linear_source_time_samples_passed": 444,
+      "scene_count": 7,
+      "action_count": 44,
+      "subtitle_cues": 30,
+      "subtitle_overlaps": 0
+    },
+    {
+      "filename": "TeXada-Studio-真实动态录屏.mp4",
+      "sha256": "8482ffbf30fd648cb812ade7eda637bea44930cd20cb574baba0e586eca864ae",
+      "technical_checks_passed": true,
+      "checks": {
+        "valid_frame_rates": true,
+        "one_trim_inside_raw": true,
+        "duration_matches_continuous_trim": true,
+        "final_content_rect_valid": true,
+        "recorded_content_dimensions_preserved": true,
+        "audio_timestamps_within_video": true,
+        "completed_recording_without_reported_errors": true,
+        "scene_ranges_complete_and_ordered": true,
+        "action_times_monotonic": true,
+        "capture_start_end_preserved": true,
+        "recorded_continuous_duration_matches": true,
+        "all_scenes_inside_final": true,
+        "all_actions_inside_final": true,
+        "srt_valid_and_nonoverlapping": true,
+        "srt_inside_final": true,
+        "raw_complete_decode": true,
+        "final_complete_decode": true,
+        "sample_counts_match": true,
+        "sampled_pixels_match_linear_source_time": true,
+        "raw_unchanged_during_audit": true,
+        "final_unchanged_during_audit": true,
+        "no_error_diagnostics_in_probe_or_sampling": true
+      },
+      "linear_source_time_samples": 444,
+      "linear_source_time_samples_passed": 444,
+      "scene_count": 7,
+      "action_count": 44,
+      "subtitle_cues": 30,
+      "subtitle_overlaps": 0
+    }
+  ],
+  "scope": "Sampled source-time correspondence, full decode, timestamps, action order and subtitles; sampled visual checks do not prove privacy for every frame.",
+  "visible_operation_checks": {
+    "preview_fit_assertions_passed": 3,
+    "integral_source_line_visible": true,
+    "temporary_edit_restored_exactly": true
+  },
+  "sampled_visual_review": {
+    "operation_frames_reviewed": 10,
+    "three_fit_actions_restore_full_page": true,
+    "integral_source_formula_readable": true,
+    "caption_strip_outside_browser_content": true,
+    "privacy_footer_present_in_reviewed_frames": true,
+    "sensitive_patterns_found_by_sampled_ocr": 0,
+    "limits": "Ten sampled operation frames; not an exhaustive privacy certification. At 100% zoom a page may extend beyond the preview pane; Fit restores the full page."
+  }
+}

@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-09-29",
+  "recording_source_revision": "87ca39771e94c1f9889bf8a19aae3fc8e3ba1896",
+  "recording_mode": "Single continuous real-time browser take, including full model wait; setup/shutdown trimmed only.",
+  "catalog_documents": 13,
+  "temporary_comment_typed_and_undone": true,
+  "continuous_duration_seconds": 222.071,
+  "browser_page_errors": 0,
+  "main": {
+    "edits": [
+      {
+        "line": 20,
+        "before": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
+        "after": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
+        "skill": "doc-formula-verify"
+      }
+    ],
+    "problems_after": [],
+    "model": "qwen3.8:27b-q4_K_M",
+    "provider": "local-model-text",
+    "skill_mode": "on",
+    "model_calls": 1,
+    "elapsed_seconds": 70.86,
+    "original_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+    "candidate_sha256": "42bc1973f19a8537c5e06fa58cf5c99f885156d66a5bb833c66f98b427dab720",
+    "requires_review": true,
+    "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像",
+    "file": "math-delimiters.tex",
+    "compile_before_ok": false,
+    "compile_after_ok": true,
+    "adopted": true
+  },
+  "semantic": {
+    "file": "math-semantics.tex",
+    "syntax_problems": 0,
+    "compile_ok": true
+  },
+  "align_boundary": {
+    "file": "math-align-boundary.tex",
+    "syntax_problems": 0,
+    "compile_ok": false
+  },
+  "downloads": [
+    {
+      "name": "formula.fixed.pdf",
+      "bytes": 18705,
+      "sha256": "c50261f0892e489e27c1b064b33a9d40f12fa948f50f996f231a61c6d975e036"
+    },
+    {
+      "name": "formula.exported.tex",
+      "bytes": 1306,
+      "sha256": "42bc1973f19a8537c5e06fa58cf5c99f885156d66a5bb833c66f98b427dab720"
+    },
+    {
+      "name": "formula.audit.md",
+      "bytes": 7498,
+      "sha256": "8cf397be9c1ad2bff7ec9931ba3988ed24191ac6455b2108e574f6a6c00feae0"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "intro",
+      "start_seconds": 0.021,
+      "duration_seconds": 30.255
+    },
+    {
+      "id": "locate",
+      "start_seconds": 30.278,
+      "duration_seconds": 16.0
+    },
+    {
+      "id": "wait",
+      "start_seconds": 46.278,
+      "duration_seconds": 72.766
+    },
+    {
+      "id": "review",
+      "start_seconds": 119.05,
+      "duration_seconds": 23.001
+    },
+    {
+      "id": "export",
+      "start_seconds": 142.055,
+      "duration_seconds": 24.003
+    },
+    {
+      "id": "semantic",
+      "start_seconds": 166.062,
+      "duration_seconds": 25.002
+    },
+    {
+      "id": "samples",
+      "start_seconds": 191.067,
+      "duration_seconds": 31.002
+    }
+  ],
+  "actions": [
+    {
+      "seconds": 0.953,
+      "action": "collapse activity log"
+    },
+    {
+      "seconds": 2.808,
+      "action": "increase source font"
+    },
+    {
+      "seconds": 4.653,
+      "action": "increase source font"
+    },
+    {
+      "seconds": 6.489,
+      "action": "increase source font"
+    },
+    {
+      "seconds": 8.342,
+      "action": "focus source editor"
+    },
+    {
+      "seconds": 12.25,
+      "action": "type a temporary comment"
+    },
+    {
+      "seconds": 13.757,
+      "action": "undo the temporary comment"
+    },
+    {
+      "seconds": 22.17,
+      "action": "scroll mathematical source"
+    },
+    {
+      "seconds": 24.19,
+      "action": "show preview at 100 percent"
+    },
+    {
+      "seconds": 27.337,
+      "action": "scroll actual PDF preview"
+    },
+    {
+      "seconds": 29.373,
+      "action": "fit preview to pane"
+    },
+    {
+      "seconds": 30.275,
+      "action": "verified preview fit mode"
+    },
+    {
+      "seconds": 31.193,
+      "action": "open math-delimiters.tex"
+    },
+    {
+      "seconds": 33.223,
+      "action": "analyze source"
+    },
+    {
+      "seconds": 35.044,
+      "action": "jump to the reported formula"
+    },
+    {
+      "seconds": 36.878,
+      "action": "expand activity log"
+    },
+    {
+      "seconds": 47.202,
+      "action": "request a real model repair"
+    },
+    {
+      "seconds": 62.449,
+      "action": "inspect the source while waiting"
+    },
+    {
+      "seconds": 120.081,
+      "action": "enlarge actual candidate diff"
+    },
+    {
+      "seconds": 123.346,
+      "action": "inspect the candidate context"
+    },
+    {
+      "seconds": 126.731,
+      "action": "return to the changed formula"
+    },
+    {
+      "seconds": 131.79,
+      "action": "adopt the reviewed candidate"
+    },
+    {
+      "seconds": 142.98,
+      "action": "collapse the completed task log"
+    },
+    {
+      "seconds": 144.821,
+      "action": "inspect repaired PDF at original scale"
+    },
+    {
+      "seconds": 147.936,
+      "action": "scroll repaired PDF"
+    },
+    {
+      "seconds": 149.975,
+      "action": "fit repaired PDF"
+    },
+    {
+      "seconds": 150.879,
+      "action": "verified preview fit mode"
+    },
+    {
+      "seconds": 151.805,
+      "action": "download formula.fixed.pdf"
+    },
+    {
+      "seconds": 153.647,
+      "action": "download formula.exported.tex"
+    },
+    {
+      "seconds": 155.48,
+      "action": "download formula.audit.md"
+    },
+    {
+      "seconds": 167.055,
+      "action": "open math-semantics.tex"
+    },
+    {
+      "seconds": 168.945,
+      "action": "analyze the semantic counterexample"
+    },
+    {
+      "seconds": 170.796,
+      "action": "focus semantic source"
+    },
+    {
+      "seconds": 172.765,
+      "action": "locate the integral source with actual keyboard navigation"
+    },
+    {
+      "seconds": 175.286,
+      "action": "enlarge the semantic counterexample"
+    },
+    {
+      "seconds": 178.428,
+      "action": "read the deliberately false integral"
+    },
+    {
+      "seconds": 180.465,
+      "action": "fit semantic preview"
+    },
+    {
+      "seconds": 181.369,
+      "action": "verified preview fit mode"
+    },
+    {
+      "seconds": 192.036,
+      "action": "open math-fractions.tex"
+    },
+    {
+      "seconds": 193.889,
+      "action": "locate the fraction group error"
+    },
+    {
+      "seconds": 195.72,
+      "action": "open math-integrals.tex"
+    },
+    {
+      "seconds": 197.553,
+      "action": "locate the integral upper-limit group error"
+    },
+    {
+      "seconds": 199.407,
+      "action": "open math-align-boundary.tex"
+    },
+    {
+      "seconds": 206.906,
+      "action": "open math-clean.tex"
+    }
+  ],
+  "visual_annotations": [
+    "Recording-only mouse pointer and click rings.",
+    "Bottom node information covered by elapsed-time recording label.",
+    "Captions and narration added after recording; application results unchanged."
+  ],
+  "semantic_formula_visible": true,
+  "preview_fit_checks_passed": 3
+}

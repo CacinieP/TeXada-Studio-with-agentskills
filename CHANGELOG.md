@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — continuous live recording
+
+- Add a single continuous browser recording with visible pointer/clicks, full real model wait, review, adoption, downloads and sample navigation.
+- Deliver narrated/subtitled and original-speed unnarrated versions, keeping this run separate from earlier edited demos.
+- Update media evidence and documentation; application runtime and sample content are unchanged.
+
 ## Unreleased — LaTeX teaching samples and new demo
 
 - Add eight original mathematics documents, bringing the Studio library to thirteen, with explicit extraction, syntax, compilation and semantic boundaries.

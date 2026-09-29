@@ -2,7 +2,7 @@
 
 **Find LaTeX syntax and simple table-total problems, inspect repair candidates, and decide what to adopt.**
 
-[中文](README.md) · [Documentation map (中文)](docs/index.md) · [Demo and evidence](docs/demo.md) · [Casebook (中文)](docs/casebook.md) · [Contributing](CONTRIBUTING.md)
+[中文](README.md) · [Documentation map (中文)](docs/index.md) · [Continuous demo and evidence](docs/dynamic-demo.md) · [Casebook (中文)](docs/casebook.md) · [Contributing](CONTRIBUTING.md)
 
 TeXada combines a Monaco editor, deterministic checks, local text-model suggestions, Tectonic previews, and human review. It is intended for teachers, research writers, and developers working with trusted `.tex` documents.
 

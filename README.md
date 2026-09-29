@@ -2,7 +2,7 @@
 
 **在 LaTeX 编辑器里发现公式语法与简单表格合计问题，审阅修复候选，再决定是否采用。**
 
-[English](README.en.md) · [文档导航](docs/index.md) · [看演示](docs/demo.md) · [案例手册](docs/casebook.md) · [参与贡献](CONTRIBUTING.md)
+[English](README.en.md) · [文档导航](docs/index.md) · [看连续实录](docs/dynamic-demo.md) · [案例手册](docs/casebook.md) · [参与贡献](CONTRIBUTING.md)
 
 适合需要整理 `.tex` 文档的教师、科研写作者，以及研究可审阅模型工作流的开发者。项目将 Monaco 编辑、规则检查、本地模型候选、Tectonic 预览和人工确认放进同一个界面。
 

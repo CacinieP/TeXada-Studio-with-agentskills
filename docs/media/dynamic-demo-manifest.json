@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-09-29",
+  "recording_source_revision": "87ca39771e94c1f9889bf8a19aae3fc8e3ba1896",
+  "status": "local delivery; repository remains private; not publicly hosted",
+  "recording": "single continuous browser take, full real model wait preserved",
+  "files": [
+    {
+      "filename": "TeXada-Studio-原速无配音实录.mp4",
+      "bytes": 18056006,
+      "sha256": "8370afc791fea1a074d262fcb2dc8f8d4e2f9011343403d2eec648c911f0e7c8",
+      "duration_seconds": 222.08,
+      "resolution": "1920x960",
+      "fps": "25/1",
+      "audio": false
+    },
+    {
+      "filename": "TeXada-Studio-真实动态录屏.mp4",
+      "bytes": 22069403,
+      "sha256": "8482ffbf30fd648cb812ade7eda637bea44930cd20cb574baba0e586eca864ae",
+      "duration_seconds": 222.08,
+      "resolution": "1920x1080",
+      "fps": "25/1",
+      "audio": true
+    },
+    {
+      "filename": "TeXada-Studio-真实动态录屏.srt",
+      "bytes": 3543,
+      "sha256": "7a511b8cc3138268bf0eecaee93bd8ea516237266c1bab10e2f207f0a9749776"
+    },
+    {
+      "filename": "旁白稿.md",
+      "bytes": 2798,
+      "sha256": "3df5e81f5497b1099bcbc8aacc190b0458dd30f26d2f72db06a39a0a5906d103"
+    }
+  ]
+}
