@@ -12,12 +12,15 @@ TeXada combines a Monaco editor, deterministic checks, local text-model suggesti
 
 ## What it does
 
-- A table can compile successfully while `45 + 60` is incorrectly recorded as `115`. Studio locates the inconsistency and proposes `105` using deterministic calculation.
-- For an incomplete subscript such as `a_`, a local text model proposes a candidate. SymPy checks syntax and Tectonic checks compilation. Neither proves that `a_1` is what the author intended.
+- The new LaTeX demo repairs a fraction whose `\left(` has no matching `\right)`. One real model request proposed only the closing delimiter; the candidate passed syntax checking and compilation, then was manually adopted.
+- A separate lecture writes the integral of x from 0 to 1 as 1, instead of 1/2. It compiles and passes syntax checks, demonstrating that these checks do not establish mathematical truth.
+- Simple table totals remain supported: Studio can deterministically propose `105` when `45 + 60` is incorrectly recorded as `115`.
 - Repair candidates open in a diff view. Users explicitly adopt them and can export an audit report.
 - The separate CLI reads an existing `layout.json`, records every check and candidate, and writes a report for the current run. It reuses terminal results only when input and execution-context hashes match.
 
 Automatic OCR, image-based repair, general agent planning, complex tables, project uploads, and multi-user isolation are not implemented. CLI real-model mode attempts formula repair only; table repair is currently available through test fixtures, while Studio can recompute simple totals. CLI runs do not invoke Tectonic.
+
+The Studio library now contains **13 documents**, including **8 new original LaTeX teaching samples**: delimiters, fractions, index groups, integral limits, a clean control, a semantic counterexample, and extraction/reference boundaries. See the [sample catalog](samples/README.md) and [12 independent compile checks](docs/evaluation-results/studio-latex/README.md). Author reference repairs are separate from recorded model outputs.
 
 ## Try the offline fixture
 
@@ -70,9 +73,11 @@ With the virtual environment activated:
 ```bash
 python -m pip install -r webui/requirements.txt
 export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-printf 'http://127.0.0.1:8888/studio?token=%s&file=report-01.tex\n' "$DEMO_TOKEN"
+printf 'http://127.0.0.1:8888/studio?token=%s&file=math-clean.tex\n' "$DEMO_TOKEN"
 python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 ```
+
+The initial `math-clean.tex` lecture uses English text and does not require a CJK font. Switch to `math-delimiters.tex` to try the recorded example; model outputs may differ.
 
 Open the printed private local URL; stop with `Ctrl-C`. Do not share the token. A missing token prevents startup. `.env` is not loaded automatically; after editing a copy of `.env.example`, load it with `set -a; . ./.env; set +a`.
 

@@ -1,115 +1,21 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-09-29",
-  "scope": "Projection of real synthetic demo jobs; job identifiers, wall-clock timestamps and provider connection metadata omitted. Candidate and checker fields retained unchanged.",
+  "verified_source_revision": "dff5fc6b1274a91f2c66aa4d184bb1c2dad08071",
+  "scope": "Projection of the real delimiter repair. Job identifiers, wall-clock timestamps and provider metadata omitted; candidate and checker fields retained unchanged.",
   "jobs": {
-    "table": [
+    "math-delimiters": [
       {
         "schema_version": 2,
         "seq": 1,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "JOB_START",
-        "name": "report-01.tex"
+        "name": "math-delimiters.tex"
       },
       {
         "schema_version": 2,
         "seq": 2,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "COMPILE",
-        "phase": "before",
-        "ok": true
-      },
-      {
-        "schema_version": 2,
-        "seq": 3,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "CHECK",
-        "node_id": "f-012-1",
-        "line": 12,
-        "original": "R = R_0(1+g)^t",
-        "checker": "doc-formula-verify",
-        "check": {
-          "id": "argv",
-          "status": "OK",
-          "reason": ""
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 4,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "CHECK",
-        "node_id": "f-012-2",
-        "line": 12,
-        "original": "g",
-        "checker": "doc-formula-verify",
-        "check": {
-          "id": "argv",
-          "status": "OK",
-          "reason": ""
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 5,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "TABLE_CHECK",
-        "problems": [
-          {
-            "id": "t-021-2",
-            "type": "table_total",
-            "line": 21,
-            "col": 2,
-            "wrong": "115",
-            "right": "105",
-            "status": "RETRY",
-            "reason": "合计列 3：标注 115，数据行之和 105"
-          }
-        ],
-        "model_calls": 0
-      },
-      {
-        "schema_version": 2,
-        "seq": 6,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "CANDIDATE_EDIT",
-        "node_id": "t-021-2",
-        "line": 21,
-        "before": "115",
-        "after": "105",
-        "provider": "deterministic-table",
-        "model_calls": 0
-      },
-      {
-        "schema_version": 2,
-        "seq": 7,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "COMPILE",
-        "phase": "after",
-        "ok": true
-      },
-      {
-        "schema_version": 2,
-        "seq": 8,
-        "input_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-        "action": "JOB_END",
-        "model_calls": 0,
-        "edits": 1,
-        "candidate_sha256": "ead358180d7aafbb1b47656548c2d9fb130fe129d701b45354bae4da07233ba7"
-      }
-    ],
-    "exam": [
-      {
-        "schema_version": 2,
-        "seq": 1,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "JOB_START",
-        "name": "exam-01.tex"
-      },
-      {
-        "schema_version": 2,
-        "seq": 2,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "COMPILE",
         "phase": "before",
         "ok": false
@@ -117,11 +23,11 @@
       {
         "schema_version": 2,
         "seq": 3,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "CHECK",
-        "node_id": "f-012-1",
-        "line": 12,
-        "original": "E = mc^2",
+        "node_id": "f-016-1",
+        "line": 16,
+        "original": "x^2-1=(x-1)(x+1)",
         "checker": "doc-formula-verify",
         "check": {
           "id": "argv",
@@ -132,212 +38,58 @@
       {
         "schema_version": 2,
         "seq": 4,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "CHECK",
-        "node_id": "f-014-2",
-        "line": 14,
-        "original": "n",
+        "node_id": "f-020-2",
+        "line": 20,
+        "original": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
         "checker": "doc-formula-verify",
         "check": {
           "id": "argv",
-          "status": "OK",
-          "reason": ""
+          "status": "RETRY",
+          "reason": "parse error: LaTeXParsingError: missing ')' at '<EOF>'\n\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^"
         }
       },
       {
         "schema_version": 2,
         "seq": 5,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CHECK",
-        "node_id": "f-014-3",
-        "line": 14,
-        "original": "a_",
-        "checker": "doc-formula-verify",
-        "check": {
-          "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\na_\n~~^"
-        }
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+        "action": "PROVIDER_START",
+        "node_id": "f-020-2",
+        "attempt": 1,
+        "original": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}"
       },
       {
         "schema_version": 2,
         "seq": 6,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CHECK",
-        "node_id": "f-014-4",
-        "line": 14,
-        "original": "a_1",
-        "checker": "doc-formula-verify",
-        "check": {
-          "id": "argv",
-          "status": "OK",
-          "reason": ""
-        }
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+        "action": "PROVIDER_RESULT",
+        "node_id": "f-020-2",
+        "attempt": 1,
+        "candidate": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)"
       },
       {
         "schema_version": 2,
         "seq": 7,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CHECK",
-        "node_id": "f-016-5",
-        "line": 16,
-        "original": "\\left( a+b \\right",
-        "checker": "doc-formula-verify",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+        "action": "CANDIDATE_CHECK",
+        "node_id": "f-020-2",
+        "attempt": 1,
+        "candidate": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
         "check": {
           "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\n\\left( a+b \\right\n~~~~~~~~~~~~~~~~~^"
+          "status": "OK",
+          "reason": ""
         }
       },
       {
         "schema_version": 2,
         "seq": 8,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CHECK",
-        "node_id": "f-016-6",
-        "line": 16,
-        "original": "c+d",
-        "checker": "doc-formula-verify",
-        "check": {
-          "id": "argv",
-          "status": "OK",
-          "reason": ""
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 9,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_START",
-        "node_id": "f-014-3",
-        "attempt": 1,
-        "original": "a_"
-      },
-      {
-        "schema_version": 2,
-        "seq": 10,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_RESULT",
-        "node_id": "f-014-3",
-        "attempt": 1,
-        "candidate": "a_{}"
-      },
-      {
-        "schema_version": 2,
-        "seq": 11,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_CHECK",
-        "node_id": "f-014-3",
-        "attempt": 1,
-        "candidate": "a_{}",
-        "check": {
-          "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\na_{}\n~~~^"
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 12,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_REJECTED",
-        "node_id": "f-014-3",
-        "attempt": 1,
-        "candidate": "a_{}",
-        "reason": "checker_rejected",
-        "check": {
-          "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\na_{}\n~~~^"
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 13,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_START",
-        "node_id": "f-014-3",
-        "attempt": 2,
-        "original": "a_"
-      },
-      {
-        "schema_version": 2,
-        "seq": 14,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_RESULT",
-        "node_id": "f-014-3",
-        "attempt": 2,
-        "candidate": "a_{}"
-      },
-      {
-        "schema_version": 2,
-        "seq": 15,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_CHECK",
-        "node_id": "f-014-3",
-        "attempt": 2,
-        "candidate": "a_{}",
-        "check": {
-          "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\na_{}\n~~~^"
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 16,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_REJECTED",
-        "node_id": "f-014-3",
-        "attempt": 2,
-        "candidate": "a_{}",
-        "reason": "checker_rejected",
-        "check": {
-          "id": "argv",
-          "status": "RETRY",
-          "reason": "parse error: LaTeXParsingError: I expected something else here\na_{}\n~~~^"
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 17,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_START",
-        "node_id": "f-016-5",
-        "attempt": 1,
-        "original": "\\left( a+b \\right"
-      },
-      {
-        "schema_version": 2,
-        "seq": 18,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "PROVIDER_RESULT",
-        "node_id": "f-016-5",
-        "attempt": 1,
-        "candidate": "\\left( a+b \\right)"
-      },
-      {
-        "schema_version": 2,
-        "seq": 19,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_CHECK",
-        "node_id": "f-016-5",
-        "attempt": 1,
-        "candidate": "\\left( a+b \\right)",
-        "check": {
-          "id": "argv",
-          "status": "OK",
-          "reason": ""
-        }
-      },
-      {
-        "schema_version": 2,
-        "seq": 20,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "CANDIDATE_ACCEPTED",
-        "node_id": "f-016-5",
+        "node_id": "f-020-2",
         "attempt": 1,
-        "candidate": "\\left( a+b \\right)",
+        "candidate": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
         "check": {
           "id": "argv",
           "status": "OK",
@@ -347,61 +99,38 @@
       },
       {
         "schema_version": 2,
-        "seq": 21,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "seq": 9,
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "CANDIDATE_EDIT",
-        "node_id": "f-016-5",
-        "line": 16,
-        "before": "\\left( a+b \\right",
-        "after": "\\left( a+b \\right)"
+        "node_id": "f-020-2",
+        "line": 20,
+        "before": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
+        "after": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)"
       },
       {
         "schema_version": 2,
-        "seq": 22,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "seq": 10,
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "TABLE_CHECK",
-        "problems": [
-          {
-            "id": "t-025-1",
-            "type": "table_total",
-            "line": 25,
-            "col": 1,
-            "wrong": "4.5",
-            "right": "4",
-            "status": "RETRY",
-            "reason": "合计列 2：标注 4.5，数据行之和 4.0"
-          }
-        ],
+        "problems": [],
         "model_calls": 0
       },
       {
         "schema_version": 2,
-        "seq": 23,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-        "action": "CANDIDATE_EDIT",
-        "node_id": "t-025-1",
-        "line": 25,
-        "before": "4.5",
-        "after": "4",
-        "provider": "deterministic-table",
-        "model_calls": 0
-      },
-      {
-        "schema_version": 2,
-        "seq": 24,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "seq": 11,
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "COMPILE",
         "phase": "after",
-        "ok": false
+        "ok": true
       },
       {
         "schema_version": 2,
-        "seq": 25,
-        "input_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
+        "seq": 12,
+        "input_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
         "action": "JOB_END",
-        "model_calls": 3,
-        "edits": 2,
-        "candidate_sha256": "1082b2cd504cd6d171c04de2cf15a366331024e8d18721a2c39a596e673f1f1d"
+        "model_calls": 1,
+        "edits": 1,
+        "candidate_sha256": "42bc1973f19a8537c5e06fa58cf5c99f885156d66a5bb833c66f98b427dab720"
       }
     ]
   }

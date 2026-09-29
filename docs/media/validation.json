@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-09-29",
+  "main": {
+    "filename": "TeXada-Studio-LaTeX案例介绍.mp4",
+    "sha256": "8cfce3ce01a265e7b22d9eef6e5f373c81ca863dd9aaf7fbd42361a4eb72521d",
+    "duration_seconds": 176.423,
+    "full_decode_errors": 0
+  },
+  "formula_short": {
+    "filename": "TeXada-Studio-公式修复短片.mp4",
+    "sha256": "54adcffc236d8b3f61cd6d9b0addce7903d0e677e891367d378b889170982478",
+    "duration_seconds": 44.121333,
+    "full_decode_errors": 0
+  },
+  "video": "1920x1080 H.264; nominal 24 fps",
+  "audio": "AAC-LC, 48 kHz stereo",
+  "subtitles": {
+    "cues": 35,
+    "range_errors": 0,
+    "order_errors": 0,
+    "overlaps": 0,
+    "timing_method": "Clause timing weighted by text length; not word-level forced alignment."
+  },
+  "visual_review": {
+    "method": "Representative frames from all 8 scenes, plus focused diff/adoption/semantic checks; scene 04 rechecked after its history-log label was added.",
+    "privacy": "Node footer covered throughout recorded UI segments; no address bar in the recording.",
+    "scope_limit": "Sampled visual review and OCR do not establish a guarantee for every frame."
+  }
+}

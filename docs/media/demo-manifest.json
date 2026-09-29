@@ -1,35 +1,40 @@
 {
-  "version": 1,
+  "version": 2,
   "recorded_on": "2026-09-29",
-  "recording_source_revision": "e0cc8f898c587e603e8943f26fa85b463c4954bd",
-  "narration": "synthetic female voice",
+  "verified_source_revision": "dff5fc6b1274a91f2c66aa4d184bb1c2dad08071",
+  "narration": "synthetic female voice; no voice cloning or reference audio",
   "status": "local delivery; not publicly hosted",
   "files": [
     {
-      "filename": "TeXada-Studio-中文字幕.srt",
-      "bytes": 3388,
-      "sha256": "3be51fc46a8b607c65f14a512348fc7655a28bdd570a701352fbae0342852f6a"
-    },
-    {
-      "filename": "TeXada-Studio-介绍视频-女声版.mp4",
-      "bytes": 8904379,
-      "sha256": "924a7c25230425e66d60971bac4e7db637098bf7b6bc5f2b7cf98d865e801aee",
-      "duration_seconds": 160.728,
+      "filename": "TeXada-Studio-LaTeX案例介绍.mp4",
+      "bytes": 12905515,
+      "sha256": "8cfce3ce01a265e7b22d9eef6e5f373c81ca863dd9aaf7fbd42361a4eb72521d",
+      "duration_seconds": 176.423,
       "resolution": "1920x1080",
-      "fps": 24
+      "fps_nominal": 24
     },
     {
-      "filename": "TeXada-Studio-表格质检短片.mp4",
-      "bytes": 2502107,
-      "sha256": "b44919a153c37fbb176e60a91536fbd0a498f051f1ae54077c6bfab5912a628e",
-      "duration_seconds": 36.437663,
+      "filename": "TeXada-Studio-LaTeX案例字幕.srt",
+      "bytes": 3809,
+      "sha256": "ce1a95536b912fa344dbf6403a7cfd9edbf630ab9c79678dc888b259cee7cbd3"
+    },
+    {
+      "filename": "TeXada-Studio-LaTeX视频封面.png",
+      "bytes": 641774,
+      "sha256": "94d910471c884fd237899f63d3e186c0c118469fd0579c30d70bf0ad18cf5394"
+    },
+    {
+      "filename": "TeXada-Studio-公式修复短片.mp4",
+      "bytes": 5048562,
+      "sha256": "54adcffc236d8b3f61cd6d9b0addce7903d0e677e891367d378b889170982478",
+      "duration_seconds": 44.121333,
       "resolution": "1920x1080",
-      "fps": 24
+      "fps_nominal": 24
     },
     {
-      "filename": "TeXada-Studio-视频封面.png",
-      "bytes": 623419,
-      "sha256": "e02f311b013b7491fd19147b78f8ba7d934b0c0a6c3b8217675d6702da0f724b"
+      "filename": "旁白稿.md",
+      "bytes": 3031,
+      "sha256": "121066a9b5c09c997089bc69efcffbff95d1864e0bbf96a57c78c85755f6d2cb"
     }
   ]
 }

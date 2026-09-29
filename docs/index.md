@@ -63,4 +63,6 @@
 
 新增[真实模型先导实验解读](skills-pilot-analysis.md)：12条输入、三组36条结果、17次HTTP尝试；含失败记录与人工待审表，不宣称语义效果提升。
 
-本次（2026-09-29）新版演示及真实失败记录见[演示页](demo.md)、[脱敏任务结果](demo-evidence.json)与[逐候选轨迹](demo-trace.json)；历史脱敏范围见[扫描复核](security-scan-notes.md)。
+本次（2026-09-29）新版LaTeX演示及历史失败记录见[演示页](demo.md)、[脱敏任务结果](demo-evidence.json)与[逐候选轨迹](demo-trace.json)；历史脱敏范围见[扫描复核](security-scan-notes.md)。
+
+新增数学讲义入口：[13份Studio样本](../samples/README.md) · [8份新案例的检查契约](../samples/studio-cases.json) · [12次编译核验](evaluation-results/studio-latex/README.md)。

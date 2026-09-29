@@ -14,10 +14,13 @@
 
 | 文档里的问题 | TeXada 的处理 | 使用者仍需判断 |
 | --- | --- | --- |
-| 利润数据是 45 和 60，合计却写成 115；PDF 仍能编译 | Studio 定位合计行，按规则生成 105 的候选，展示 diff 与报告 | 数据行本身是否正确 |
-| 公式下标 `a_` 不完整，原文编译失败 | 本地模型提出候选，SymPy 回判语法，Tectonic 检查编译 | 补成 `a_1` 是否符合作者原意 |
+| 分式外的 `\left(` 缺少配对的 `\right)`，原文编译失败 | 本次实录中，本地模型只补上闭合定界符；回判与编译通过，展示 diff 后手动采用 | 括号范围与原作者意图是否一致 |
+| 从 0 到 1 对 x 积分，被写成 1；正确值为 1/2 | 文档仍可编译，语法检查也不报错；作为明确的语义反例保留 | 数学结论本身是否成立 |
+| 简单表格中 45 与 60 的合计写成 115 | 按规则生成 105 的候选 | 数据行本身是否正确 |
 
 检查通过不等于数学含义正确；候选不会未经确认就覆盖编辑器原文。详见 [实际演示与单次结果](docs/demo.md)。
+
+新增 **8 份数学讲义样本**，Studio 样本现共 **13 份**：定界符、分式、下标组、积分上限，以及正常对照、语义、多行公式和引用边界。[样本与预期](samples/README.md) · [12 次独立编译核验](docs/evaluation-results/studio-latex/README.md)
 
 ## 选择体验方式
 
@@ -92,9 +95,11 @@ Dry-run 不执行检查器或网络请求；真实运行、fixture 与人工复�
 python -m pip install -r webui/requirements.txt
 export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 # 先显示只供自己使用的本地地址，再以前台方式启动
-printf 'http://127.0.0.1:8888/studio?token=%s&file=report-01.tex\n' "$DEMO_TOKEN"
+printf 'http://127.0.0.1:8888/studio?token=%s&file=math-clean.tex\n' "$DEMO_TOKEN"
 python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
 ```
+
+首次打开 `math-clean.tex` 数学讲义；这组新增英文样本不需要中文字体。随后可切换 `math-delimiters.tex` 重现视频中的定界符问题。模型输出不保证与录屏相同。
 
 打开启动前打印的本地地址；按 `Ctrl-C` 停止服务。该地址带个人 token，不要分享截图或原样复制进 Issue。
 没有设置 token 时服务会拒绝启动。也可复制 [`.env.example`](.env.example) 为 `.env`，填写后执行 `set -a; . ./.env; set +a`；应用不会自动读取 `.env`。

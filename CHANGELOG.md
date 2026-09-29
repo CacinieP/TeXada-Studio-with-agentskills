@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — LaTeX teaching samples and new demo
+
+- Add eight original mathematics documents, bringing the Studio library to thirteen, with explicit extraction, syntax, compilation and semantic boundaries.
+- Add machine-readable expectations, five new Web tests (55 total), and twelve independent compilation records for originals and author reference repairs.
+- Replace the current demo with a real delimiter repair, a clean lecture and a false-integral counterexample; retain earlier rejected-candidate evidence separately.
+- Refresh onboarding, article, screenshots and media hashes without changing application runtime behavior.
+
 ## Unreleased — technical writing revision
 
 - Rewrite the article around an end-to-end total correction and human review, with explicit state handling and representative negative cases.

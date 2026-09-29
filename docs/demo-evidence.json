@@ -1,69 +1,60 @@
 {
+  "schema_version": 2,
   "recorded_on": "2026-09-29",
-  "recording_source_revision": "e0cc8f898c587e603e8943f26fa85b463c4954bd",
-  "scope": "Two synthetic Studio inputs, real local text model with Skill on; single warmed environment, not a benchmark.",
-  "table": {
+  "verified_source_revision": "dff5fc6b1274a91f2c66aa4d184bb1c2dad08071",
+  "source_provenance": "Recorded runtime files match this revision; three recorded sample SHA256 values are verified against this revision. The full 13-document catalog is shown on a separate explanatory slide.",
+  "scope": "Original synthetic LaTeX teaching samples; one real model repair with Skill on in a warmed isolated environment. Not a benchmark.",
+  "recorded_samples_sha256": {
+    "math-clean.tex": "c2a0dac827b8d2770c9a59e062cb66a9fa884413523e98e9a6e1f3f4d828bc5f",
+    "math-delimiters.tex": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+    "math-semantics.tex": "834b8be1171ed9c6590fdc545be90f37d77c42d11c5f57648401b68bdef7e84c"
+  },
+  "clean": {
+    "file": "math-clean.tex",
+    "problems": 0,
+    "compile_ok": true,
+    "evidence": "Browser recording readiness assertions and standalone compile report."
+  },
+  "main": {
     "edits": [
       {
-        "line": 21,
-        "before": "115",
-        "after": "105",
-        "skill": "doc-table-audit"
+        "line": 20,
+        "before": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
+        "after": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
+        "skill": "doc-formula-verify"
       }
     ],
     "problems_after": [],
-    "model": null,
-    "provider": "deterministic-checks",
-    "skill_mode": "on",
-    "model_calls": 0,
-    "elapsed_seconds": 6.96,
-    "original_sha256": "64e3d4abffd5b43eb4f4348575bd71d20c64c6ce8225ca12eef3724de1863dd3",
-    "candidate_sha256": "ead358180d7aafbb1b47656548c2d9fb130fe129d701b45354bae4da07233ba7",
-    "requires_review": true,
-    "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像",
-    "compile_before_ok": true,
-    "compile_after_ok": true
-  },
-  "exam": {
-    "edits": [
-      {
-        "line": 16,
-        "before": "\\left( a+b \\right",
-        "after": "\\left( a+b \\right)",
-        "skill": "doc-formula-verify"
-      },
-      {
-        "line": 25,
-        "before": "4.5",
-        "after": "4",
-        "skill": "doc-table-audit"
-      }
-    ],
-    "problems_after": [
-      {
-        "id": "f-014-3",
-        "type": "formula",
-        "line": 14,
-        "latex": "a_",
-        "status": "RETRY",
-        "reason": "parse error: LaTeXParsingError: I expected something else here\na_\n~~^"
-      }
-    ],
     "model": "qwen3.8:27b-q4_K_M",
     "provider": "local-model-text",
     "skill_mode": "on",
-    "model_calls": 3,
-    "elapsed_seconds": 150.98,
-    "original_sha256": "0629d6696693090c2c38681553c09c392783e7ad7b47c79aff94c690ed3605c6",
-    "candidate_sha256": "1082b2cd504cd6d171c04de2cf15a366331024e8d18721a2c39a596e673f1f1d",
+    "model_calls": 1,
+    "elapsed_seconds": 67.99,
+    "original_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+    "candidate_sha256": "42bc1973f19a8537c5e06fa58cf5c99f885156d66a5bb833c66f98b427dab720",
     "requires_review": true,
     "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像",
+    "file": "math-delimiters.tex",
     "compile_before_ok": false,
-    "compile_after_ok": false
+    "compile_after_ok": true,
+    "adopted": true,
+    "pdf_exported": true,
+    "tex_exported": true,
+    "report_exported": true
   },
+  "semantic": {
+    "file": "math-semantics.tex",
+    "problems": 0,
+    "compile_ok": true,
+    "false_equation": "\\int_0^1 x\\,dx=1",
+    "correct_value": "1/2",
+    "meaning": "Compilation and syntax checks do not establish mathematical truth."
+  },
+  "browser_page_errors": 0,
   "media_edits": [
-    "Wait intervals omitted; formula result held for narration with an on-screen label.",
+    "Model wait omitted with an on-screen label; all result frames belong to the same repair task.",
     "Node identity and resource footer covered.",
-    "Explanatory diagrams and prior pilot results explicitly labeled."
-  ]
+    "Skill, recovery and sample-library scenes are labeled explanatory slides."
+  ],
+  "historical_failure_evidence": "evaluation-results/studio-earlier/demo-trace.json"
 }

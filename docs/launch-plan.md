@@ -6,11 +6,11 @@
 
 **一句话：TeXada 把 LaTeX 错误定位、修复候选和人工审阅放到一个编辑界面里。**
 
-首个故事使用可复现的小错误：45 + 60 被写成 115，即使编译成功也可能错；工具提出 105，使用者看过 diff 再采用。第二个故事讲模型补下标的歧义，解释为什么需要人工审阅。不要以“全自动论文修复”作为标题。
+首个故事使用本次实录的LaTeX分式：缺少配对定界符导致编译失败，模型提出末尾补 `\right)` 的候选，使用者看过diff再采用。紧接着展示积分语义反例：源码能编译、检查器报0问题，但等式仍然错误。旧表格与下标案例可作历史补充，不作为本次主片内容。不要以“全自动论文修复”作为标题。
 
 | 受众 | 他们关心什么 | 适合的入口 | 希望获得的具体反馈 |
 | --- | --- | --- | --- |
-| 教师、科研写作者 | 能否发现常见错误，是否会误改 | 新版演示中的表格案例 + 演示页 | 一个经脱敏/原创的错误样本 |
+| 教师、科研写作者 | 能否发现常见错误，是否会误改 | 新版公式实录、正常对照与语义反例 + 演示页 | 一个经脱敏/原创的错误样本 |
 | LaTeX / Python 开发者 | 能否安装、规则如何扩展 | README + fixture 快速开始 | 一次安装记录或最小复现 |
 | 本地模型 / Agent Skills 开发者 | 候选如何回判，失败如何处理 | 技术征文 + 架构与验证记录 | 一个具体的工作流设计意见 |
 | 赛事评委与参赛者 | 实现与设想是否分清，实机证据是否可信 | 完整演示 + 项目报告 | 对实现范围和复现证据的检查 |
@@ -36,17 +36,17 @@ GitHub 推荐社交预览使用 1280 × 640 图像、文件小于 1 MB；私有�
 | 素材 | 规格与用途 | 位置 / 状态 |
 | --- | --- | --- |
 | 仓库首页 | 中文 + 英文，案例、分层体验、命令和反馈入口 | `README.md` / `README.en.md` |
-| 完整演示 | 8个场景，160.7秒（2分40.7秒）；剪去等候处明确标记 | 新版参赛材料；未上传 |
-| 传播短片 | 36.4秒，新版第2、3场景原速节选；表格问题 → 候选 → 采用 | `TeXada-Studio-表格质检短片.mp4`；本地交付，尚未上传 |
+| 完整演示 | 本次LaTeX主片176.4秒（2分56.4秒）；定界符修复、正常对照、语义反例；剪去等候处明确标记 | 新版参赛材料；运行时与3个实录样本核对到 `dff5fc6`；未上传 |
+| 传播短片 | 本轮44.1秒节选围绕公式源码问题、候选和人工采用；旧36.4秒表格短片仅作历史 | 当前文件与验收状态见[演示页](demo.md)，不默认分发旧短片 |
 | 社交分享封面 | 1280 × 640，文字与示意图，不冒充实机截图 | `docs/images/social-preview.png` |
 | 深入技术文章 | 现有技术征文，讲模型与检查器的职责边界 | `technical-article.md` |
-| 可复现实验材料 | 27例合成检查、3份新增 Studio 文档、实际调用关系与失败处理 | [案例手册](casebook.md)、[Skills 技术报告](skills-technical-report.md)；不是模型效果榜单 |
+| 可复现实验材料 | 保留27例合成检查；本轮新增8份LaTeX文档，Studio共13份；完整Web55项通过，12次独立编译分别保留成功与预期失败 | [案例手册](casebook.md)、[Skills 技术报告](skills-technical-report.md)；不是模型效果榜单 |
 | 首个版本说明 | 候选预发布说明，发布时补提交与校验值 | `releases/v0.1.0-alpha.1-draft.md` |
 | 贡献邀请 | 4 项有完成标准的任务草案 | `roadmap.md`，尚未代发 Issues |
 
-新版演示明确标记已剪去的模型等候，保留实际任务结果、修复依据和人工采用的语境；旁白为合成语音。历史6.94秒、105.73秒仅作早前单次实测，不写成新版结果或稳定性能承诺。所有待传播画面均须脱敏，旧媒体不随新版自动分发。技术文章聚焦产品与实验，不列视频制作服务。
+本次S06实录是1次模型请求、1处编辑、67.99秒任务总耗时，前后编译失败→通过，并完成采用和PDF/TeX/报告导出。成片明确标记剪去的等候，保留修复依据和人工审阅语境。早前6.94/105.73秒以及上一版6.96/150.98秒均属历史单次任务，不作为本次结果或性能承诺。所有待传播画面须脱敏，旧媒体不随新版自动分发。技术文章聚焦产品与验证，不列视频制作服务。
 
-下一篇内容可围绕一个具体边界展开：为什么 `1+1=3` 会通过语法检查，或为何遇到百分比与会计括号应保留原文。附稳定案例 ID、复现命令和实际结果，引导读者贡献新的反例。这些选题现有源码可以复现，但尚未录制对应新短片；不要把27例契约匹配包装为100%纠错准确率。
+后续内容可展开S12/S13：为什么多行环境未抽取时仍显示0问题，或为何生成PDF后仍有未定义引用。附稳定案例ID、复现命令和实际结果，引导读者贡献新的反例；这些边界不借用主片单例的完整浏览器验收。不要把27例契约匹配、55项回归或12次编译符合预期包装成纠错准确率。
 
 ## 4. 发布文案草稿
 
@@ -54,19 +54,19 @@ GitHub 推荐社交预览使用 1280 × 640 图像、文件小于 1 MB；私有�
 
 ### 中文短介绍（动态 / 相关社群）
 
-> 一份 LaTeX 报表能编译成功，合计却可能是错的。我们做了 TeXada Studio：把公式语法检查、简单表格合计、修复 diff 和人工确认放进一个界面。视频里的 45 + 60 被写成了 115，工具按规则提出 105；模型补下标的候选也必须由人核对。代码采用 AGPL-3.0-only，提供不需要 GPU 的 fixture 体验。目前是可信用户的实验原型，尚不支持自动 OCR 或多用户服务。欢迎带一个合成错误样本来试，反馈“哪里跑不起来、哪里不该改”。
+> LaTeX分式缺少配对定界符，模型提出的修复候选仍需核对原意。TeXada Studio把源码定位、语法回判、diff和人工采用放在同一界面。本次视频展示补上结束定界符、编译恢复与导出，也展示一个能编译却算错的积分等式。仓库提供13份Studio样本和无需GPU的fixture入口，代码采用AGPL-3.0-only。目前是可信用户的实验原型，尚不支持自动OCR或多用户服务。欢迎带一个合成错误样本来试，反馈“哪里跑不起来、哪里不该改”。
 >
 > 项目：https://github.com/CacinieP/TeXada-Studio-with-agentskills
 
 ### 技术文章标题与开头
 
-标题：**LaTeX 能编译，数字却可能是错的：TeXada 的候选修复与人工审阅**
+标题：**从缺失定界符到错误积分：TeXada 怎样记录候选修复与人工判断**
 
-开头：从 `45 + 60 = 115` 的合成报表讲起，先展示错误和 diff，再解释规则计算、模型候选、SymPy 解析、Tectonic 编译各自解决什么。正文复用现有技术征文，附真实耗时及限制；结尾邀请读者复现 fixture、贡献边界样本。
+开头：从 `math-delimiters.tex` 的配对定界符讲起，展示一次真实候选与diff，再对照 `math-semantics.tex` 中能解析、能编译却不成立的积分等式。正文解释模型候选、SymPy解析、Tectonic编译和人工语义判断的不同职责，附单次任务67.99秒的计时边界；结尾邀请读者复现样本、贡献反例。
 
 ### English launch copy
 
-> A LaTeX document can compile successfully and still contain an incorrect total. TeXada Studio brings syntax checks, simple table-total checks, local text-model suggestions, and explicit human review into one editor. In our synthetic demo, 45 + 60 was recorded as 115; a deterministic check proposes 105 and shows the diff before adoption. Model-generated formula candidates remain suggestions, not mathematical proofs. The project is an experimental single-process application for trusted documents, licensed under AGPL-3.0-only. A GPU-free fixture walkthrough is available. Automatic OCR and multi-user hosting are not implemented. We would especially welcome a reproducible installation report or a small synthetic edge case.
+> TeXada Studio brings LaTeX syntax checks, local text-model candidates, a source diff, and explicit human review into one editor. Our new demo follows a missing paired delimiter through a real candidate, compilation and export, then shows an incorrect integral equality that still compiles. The repository includes 13 Studio documents and a GPU-free fixture walkthrough. Candidates remain suggestions, not mathematical proofs. This is an experimental single-process application for trusted documents, licensed under AGPL-3.0-only. Automatic OCR and multi-user hosting are not implemented. We welcome reproducible installation reports and small synthetic edge cases.
 >
 > Repository: https://github.com/CacinieP/TeXada-Studio-with-agentskills
 
