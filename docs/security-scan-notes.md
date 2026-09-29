@@ -42,3 +42,9 @@
 这些记录说明当时检查的范围与处理结果。发布新版本时重扫源码和 refs，并人工检查新增附件的内容、元数据及画面；许可和来源按发布清单另行复核。
 
 历史重写更新可达引用，平台缓存、不可达对象、fork、旧 clone 和下载包需要分别处理。[GitHub 清理流程](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)说明平台侧处理方式；已暴露的凭据需撤销或轮换。协作者重新 clone，发布包从清理后的提交重建，避免旧对象回流。
+
+## 公开前复查（2026-09-29）
+
+文档和发布入口补齐后，再次清理可达历史中的旧节点别名。52个提交保留，重写前后的最新源码 tree 一致；602个可达 blob 和提交消息中旧别名命中为0。历史验证与录制版本的对应关系见[迁移记录](repository-migration.md)。
+
+Gitleaks 以100%脱敏输出扫描全部可达提交（约15.26 MB）与工作目录，沿用上文两条精确的上游资源例外，未发现未处理命中。远端只有 `main`，无 tag、Release 或 Actions 运行记录。媒体文件继续单独托管，仓库提供[B站播放入口](https://www.bilibili.com/video/BV16Kan6rEGv/)和原文件摘要。

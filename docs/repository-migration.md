@@ -22,3 +22,15 @@
 - 演示服务的部署与源码仓库分别维护，部署时核对运行版本。
 
 协作者应重新 clone 清理后的仓库，避免将旧历史 merge 或 push 回来。清理前的 bundle 仅作私有恢复备份。Git 引用清理之外的平台缓存和旧副本按[扫描记录](security-scan-notes.md)处理；公开发布按[发布清单](open-source-release.md)执行。
+
+## 公开前的节点别名清理（2026-09-29）
+
+公开前再次检查可达历史，清理旧部署说明、页面页脚和一条提交消息中的节点别名。重写保留52个提交，清理前后最新源码 tree 完全一致；602个可达 blob 与提交消息复查均无旧别名。恢复用 bundle 留在仓库外的私有备份中。
+
+录制清单和历史验证记录保留当时真实使用的提交号，当前历史中的对应版本如下。原始结果与媒体摘要未改写。
+
+| 记录中的提交 | 清理后的对应提交 |
+| --- | --- |
+| `87ca397` | [`912c723`](https://github.com/CacinieP/TeXada-Studio-with-agentskills/commit/912c723fd4bb8df5a5a78a98d352d7c554142827) |
+| `dff5fc6` | [`4a16188`](https://github.com/CacinieP/TeXada-Studio-with-agentskills/commit/4a16188b563412d3eabb25ebb3490d569db1ab59) |
+| `fd58759` | [`7f5d312`](https://github.com/CacinieP/TeXada-Studio-with-agentskills/commit/7f5d312905a5ed3256f785cda64297803d4d8286) |
