@@ -1,21 +1,28 @@
 # Local Monaco assets
 
-Version: `monaco-editor@0.52.2` (MIT, Microsoft).
+The complete `monaco-editor@0.52.2` `min/vs/` tree is stored in `0.52.2/`, with
+Microsoft’s original MIT [LICENSE](0.52.2/LICENSE) and per-file [SHA256SUMS](0.52.2/SHA256SUMS).
 
-The complete `min/vs/` tree and upstream `LICENSE` are vendored in `0.52.2/`.
-Source: https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz
-The pinned tarball SHA-512 is checked by `scripts/vendor_monaco.py` before
-extraction. `0.52.2/SHA256SUMS` records each installed upstream file.
+## Restore or verify
 
-For a fresh node, run `python3 scripts/vendor_monaco.py` there. This downloads
-the package directly on the node and verifies it; do not upload the large
-package through SCP. An offline copy can be supplied with `--archive PATH`.
-No npm install, build step, MCP service, or external CDN is needed at runtime.
+From the repository root:
 
-The backend serves these files at `/static/monaco/0.52.2/`. A valid `/studio`
-request sets a signed, 12-hour HttpOnly cookie scoped to that asset directory.
-All asset requests, including workers and fonts, check the cookie; API routes
-still require their existing token. Reopen the authenticated Studio URL when
-the cookie expires. On HTTP the cookie is non-Secure; HTTPS requests receive
-a Secure cookie. Successful assets are cached privately, while unauthorized
-responses and the cookie-setting Studio page are not cached.
+```bash
+python scripts/vendor_monaco.py
+```
+
+The script downloads the [pinned npm archive](https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz),
+checks its SHA-512, extracts the assets and verifies each file. For an offline
+archive, add `--archive /path/to/monaco-editor-0.52.2.tgz`.
+On an allocated node, download the archive there according to the deployment rules.
+Studio serves the installed assets locally; no frontend build is required.
+
+## Authentication and caching
+
+An authenticated `/studio` request sets a signed, 12-hour HttpOnly cookie scoped
+to `/static/monaco/0.52.2/`. Asset requests, including workers and fonts, use that
+cookie; API requests use the token. Reopen the authenticated Studio URL to renew
+an expired cookie.
+
+HTTPS requests receive a Secure cookie. Successful assets are cached privately;
+unauthorized responses and the cookie-setting Studio page are not cached.

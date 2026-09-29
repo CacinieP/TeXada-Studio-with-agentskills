@@ -1,78 +1,70 @@
-# 可信用户的部署与维护
+# 部署与维护
 
-当前服务适合单人或可信团队演示：一个 Uvicorn worker、一个共享 token，不具备多用户隔离或 TeX 沙箱。先阅读[安全边界](../SECURITY.md)；不要开放匿名上传。
+当前部署面向可信用户：一个 Uvicorn worker、一个共享 token。TeX 编译尚无沙箱，多用户隔离也未实现；信任边界见 [SECURITY.md](../SECURITY.md)。
 
-## 准备源码与环境
+## 准备候选版本
 
-使用已审阅的提交部署，在用户目录建立独立虚拟环境。Python 依赖安装方式见[根目录 README](../README.md)。若通过 SSH 同步，使用自己的主机别名，仅传输已提交源码，例如在本地仓库根目录执行：
+使用已审阅的提交，在目标机器的用户目录建立独立目录和虚拟环境。需要 SSH 传输时，在本地仓库根目录执行；将 `texada-node` 换成自己的 SSH 别名：
 
 ```bash
-# spark 是你自己的 SSH 别名；远端 candidate 目录应是新的空目录。
-git archive HEAD | ssh spark \
-  'mkdir -p ~/texada-candidate && tar -xf - -C ~/texada-candidate'
+git archive HEAD | ssh texada-node \
+  'mkdir ~/texada-candidate && tar -xf - -C ~/texada-candidate'
 ```
 
-此命令不携带 `.git`、未提交修改、被忽略的 `.env` 或运行数据。远端的配置、虚拟环境与数据需单独管理。先在新目录核对依赖，不要覆盖正在运行的服务目录。
+目录已存在时 `mkdir` 会失败，避免覆盖旧部署。此方式只传输已提交源码；配置和运行数据另行管理。
 
-完整 Studio 需要已有 Tectonic、Poppler 的 `pdftoppm`、中文字体 `Noto Sans CJK SC`，以及本机模型服务。可使用用户目录中的安装，不修改系统驱动或全局配置。
-
-## 启动前检查
-
-以下命令在目标机器、已激活的虚拟环境内执行；它们只查看依赖，不下载模型或执行真实推理。
+在目标机器执行：
 
 ```bash
-python --version
+cd ~/texada-candidate
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r webui/requirements.txt
 python -m pip check
-python -c 'import fastapi, uvicorn, sympy, antlr4; print("Python dependencies import OK")'
+```
+
+使用 Python 3.11+，已验证版本为3.13。仅编辑和分析时，到此已具备 Python 环境。编译与模型功能另需本机依赖：
+
+```bash
 "${TECTONIC:-tectonic}" --version
 pdftoppm -v
 ollama list
 ```
 
-- `TECTONIC` 是编译器路径，可设为用户目录中的完整路径；不要附加命令行参数。
-- `ollama list` 中必须存在你选择的 `VLM_MODEL`。使用其他兼容服务时，按该服务的方法检查；Studio 的接口固定为本机 `127.0.0.1:11434/v1/chat/completions`，当前不发送 API key。
-- 在具有 Fontconfig 的环境中，可执行 `fc-list : family`，确认结果含 `Noto Sans CJK SC`。`fc-match` 可能返回替代字体，不能单独证明所需字体已安装。没有 Fontconfig 时使用该平台已有的字体管理方式检查。
-- Tectonic 的首次编译可能下载 TeX 包。预备依赖后，还需实际编译合成样本，才能确认预览可用；版本检查不代替编译验收。
+`TECTONIC` 可指向用户目录中的编译器。Studio 请求本机 `127.0.0.1:11434`，`VLM_MODEL` 应选 `ollama list` 中的完整标签。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。
 
-程序不自动安装上述软件、字体或模型。缺少编译器时仍可打开编辑器，但预览与修复前后编译无法完成。模型标签、内存需求与可用性取决于自己的环境。
-
-## 启动与停止
-
-在仓库目录创建 tmux 会话：
+## 配置和启动
 
 ```bash
-tmux new -s texada
+cp .env.example .env
 ```
 
-然后在 tmux 内激活自己的虚拟环境，加载仅本机保存的配置。若使用 `.env`，先按 `.env.example` 填写随机非空的 `DEMO_TOKEN` 和已安装模型标签，再执行：
+编辑 `.env`：填入随机非空 `DEMO_TOKEN`、已安装的 `VLM_MODEL` 和需要时的 `TECTONIC` 路径。token 可用 `python -c 'import secrets; print(secrets.token_urlsafe(32))'` 生成。
 
 ```bash
 set -a
 . ./.env
 set +a
-: "${DEMO_TOKEN:?请先配置随机非空 token}"
-: "${VLM_MODEL:?请先选择已安装模型}"
-: "${TEXADA_BIND_PORT:?请设置获准使用的本机监听端口}"
+: "${DEMO_TOKEN:?请先配置 token}"
+export TEXADA_BIND_PORT=8888
 python -m uvicorn app:app --app-dir webui \
   --host 127.0.0.1 --port "$TEXADA_BIND_PORT" --workers 1
 ```
 
-`TEXADA_BIND_PORT` 由你在当前会话或私密配置中设置；不在仓库填写分配节点的访问参数。默认保持回环监听，通过获准的隧道或已配置的 HTTPS 代理访问 `/studio`。代理和日志脱敏要求见安全说明。
+将端口改为目标机器获准使用的本机端口。通过 SSH 隧道或已配置的 HTTPS 代理访问 `/studio?token=你的token`，访问凭据仅保存在私密配置中。代理配置与日志处理见安全说明。
 
-使用 `Ctrl+B`、`D` 脱离 tmux；需要停止时先等待修复结束，再 `tmux attach -t texada`，对 Uvicorn 按 `Ctrl+C`。不要用重启节点作为停止方法。Studio 未完成的任务保存在内存，停止或崩溃后不能恢复。
+需要保持终端会话时可先运行 `tmux new -s texada`，在会话内执行上述启动命令；`Ctrl-B D` 脱离，`tmux attach -t texada` 返回。停止前等待任务结束，再按 `Ctrl-C`。
 
-## 验收、升级与回滚
+## 验收、升级和回滚
 
-1. 记录拟部署的提交号、依赖版本和本机配置位置；配置值与 token 不进入截图、日志附件或提交。
-2. 在独立目录和独立状态下检查候选版本。先跑 README 的 fixture 与单元测试，再通过 `/studio` 检查样本加载、分析、预览、diff、采用和导出。真实模型验收会产生推理负载，应明确记录模型与结果。
-3. 切换前等待任务结束，停止服务并备份原目录的 `state/`。上传文档位于 `state/studio/documents/`；不要依靠 Git 备份这些数据。
-4. 保留旧提交目录与原虚拟环境，从候选目录启动同一获准监听入口。只迁移确认需要且兼容的数据，不自动复制私人文档到样本目录。
-5. 若验收失败，停止候选服务，使用旧目录、旧环境和切换前的数据备份恢复。先另存切换后新产生的数据，避免回滚覆盖。当前没有数据库迁移或自动回滚工具。
+1. 记录提交号与依赖版本，先跑 [README](../README.md#1-先跑无需模型的样本) 的 fixture。
+2. 用 `math-clean.tex` 核对样本加载、分析和预览，再用 `math-delimiters.tex` 验证模型候选、diff、采用与导出，记录实际结果。
+3. 升级前停止服务，备份原目录的 `state/`。上传文件在 `state/studio/documents/`，任务结果在 `state/studio/jobs/`；它们由 Git 忽略。
+4. 保留旧源码与虚拟环境，从候选目录启动服务。仅迁移需要且兼容的数据。
+5. 回滚时先另存候选版本产生的新数据，再恢复旧目录、旧环境和备份。
 
-Monaco 0.52.2 随源码提供；恢复和摘要校验见 `scripts/vendor_monaco.py`。旧仪表盘仍使用 KaTeX CDN。模型、字体、包缓存和浏览器请求都需分别检查，不能因编辑器资源本地化而声称全流程离线。
+正在执行的任务依赖进程内存；重启后需重新发起，完成任务的磁盘记录仍可查询。Monaco 资源已打包；离线部署还需预备模型、字体和 TeX 包，旧仪表盘 `/` 的 KaTeX 仍来自 CDN。常见问题见[排错说明](../docs/troubleshooting.md)。
 
-## DGX Spark 比赛节点约束
+## DGX Spark 比赛节点
 
-在赛事分配节点上，还须遵守团队收到的私下使用手册：仅使用分配节点，不修改系统网络或账号配置，不重启，至少保留 20% 磁盘空间。账号、凭据和分配端口不写入公开文档或视频。
-
-大于 1 GB 的文件不得通过 SCP 上传；模型在分配节点内按授权来源下载，不把共享模型目录当作可写目录。具体监听和访问方式按节点手册配置；面向外部的演示必须鉴权。这些比赛约束不等于项目已经实现沙箱隔离或多用户安全。
+按团队收到的节点手册使用分配资源：不改系统网络或账号配置，不重启，至少保留20%磁盘空间；大于1GB的文件不通过 SCP 上传。模型在节点内按授权来源下载，共享模型目录保持只读。实际主机、凭据和分配端口存于私密配置，外部演示启用鉴权。

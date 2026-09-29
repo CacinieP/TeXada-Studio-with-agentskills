@@ -1,56 +1,31 @@
 # Changelog
 
-## Unreleased — continuous live recording
+## Unreleased
 
-- Regenerate all narration with one synthetic voice reference and retime captions, preserving the continuous browser timeline and unchanged silent master.
-- Add a single continuous browser recording with visible pointer/clicks, full real model wait, review, adoption, downloads and sample navigation.
-- Deliver narrated/subtitled and original-speed unnarrated versions, keeping this run separate from earlier edited demos.
-- Update media evidence and documentation; application runtime and sample content are unchanged.
+### Added
 
-## Unreleased — LaTeX teaching samples and new demo
+- Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
+- Twenty-seven checker cases, a casebook and reproducible evaluation reports.
+- Formula Skill instruction loading, on/off comparison runs, per-candidate events and context-bound CLI resume.
+- A continuous browser demo with real model waiting, candidate review, adoption, downloads and sample navigation; all narration uses one synthetic voice reference.
+- `scripts/compile_studio_cases.py` to reproduce twelve archived compilation cases in a fresh output directory.
+- Chinese and English setup guides, troubleshooting, contribution guidance and release materials.
 
-- Add eight original mathematics documents, bringing the Studio library to thirteen, with explicit extraction, syntax, compilation and semantic boundaries.
-- Add machine-readable expectations, five new Web tests (55 total), and twelve independent compilation records for originals and author reference repairs.
-- Replace the current demo with a real delimiter repair, a clean lecture and a false-integral counterexample; retain earlier rejected-candidate evidence separately.
-- Refresh onboarding, article, screenshots and media hashes without changing application runtime behavior.
+### Changed
 
-## Unreleased — technical writing revision
+- Reorganize documentation around setup, reproducible examples and implementation details; require Python 3.11+ for the Harness.
+- Vendor Monaco 0.52.2 locally, preserve its MIT license and verify pinned package and file hashes.
+- Use scoped signed cookies for editor assets and an explicit token for API access.
+- Keep uploads and run outputs in `state/`; source packages contain committed files only.
+- Adopt AGPL-3.0-only for project-authored material and retain separate third-party and dataset licenses.
 
-- Rewrite the article around an end-to-end total correction and human review, with explicit state handling and representative negative cases.
-- Add engineering contributions, design tradeoffs, evaluation denominators and planned acceptance criteria to the Skill technical report.
-- Remove narration production details from the project report and validation record; keep submission administration in the submission checklist.
+### Fixed
 
-## Unreleased — executable cases and Skill contracts
+- Preserve the editor until the user adopts a reviewed candidate; reset failed controls and discard stale file or preview responses.
+- Fix empty diff panels, stale comparisons, hidden collapse controls and preview resizing.
+- Reject partial LaTeX parses and malformed checker input; handle missing dependencies without issuing repair requests.
+- Validate table structure and complete numeric cells, size Decimal precision to the input, and record only actual edits.
+- Preserve rejected candidates, original table rows, process exit codes and bounded response excerpts in reports.
+- Remove embedded deployment credentials, private paths and an unlicensed textbook extract from distributed source and reachable history.
 
-- Add 27 synthetic checker cases, a reproducible JSON/Markdown evaluation runner and three Studio documents for clean, semantic-boundary and manual-review scenarios.
-- Reject malformed checker input and invalid table expectations without crashing; align formula states with process exit codes and stop model calls when verification is unavailable.
-- Require complete numeric cells and supported table structure before Studio proposes totals; preserve unsupported inputs and original newlines, and log only actual changes.
-- Size Decimal precision to the input in CLI and Studio, covering large integer sums that exceed the default 28 digits.
-- Preserve original and candidate table rows in CLI events and show real diffs; keep old events readable without inventing missing data.
-- Replace stale evaluation placeholders with real cases/tests or explicit planned status; add a Skill technical report, casebook and documentation index, and expand the project report and technical article.
-
-## Unreleased — open-source readiness
-
-- Expand Chinese and English onboarding, support, troubleshooting, citation metadata and contribution tasks.
-- Align Harness, sample and deployment documentation with the implemented CLI and distinguish real-model table limitations from Studio behavior.
-- Prepare a release-note draft, launch plan, social preview and a short excerpt of the recorded demo; no public release or post has been published.
-- Document the private vulnerability-reporting setup that remains required before public launch.
-- Separate real subprocess timeout verification from output-preservation verification to avoid assuming that a fresh Python child prints within one second; compiler runtime behavior is unchanged.
-
-## 2026-09-28 Submission preparation
-
-- Fail closed when formula verification crashes or dependencies are missing; reject partial LaTeX parses while supporting delimiter sizing commands.
-- Present repair candidates for review before adopting them into the editor; export audit records with hashes and compile results.
-- Reset failed task controls and discard stale file / preview responses.
-- Align Skills, architecture, deployment notes and submission documents with actual implementation and the verified form.
-
-## Earlier preparation (unreleased)
-
-- 参赛仓库使用 `TeXada-Studio-with-agentskills`，作品显示名统一为 TeXada Studio with Agent Skills；更新安装目录、源码链接和打包名称。
-
-- 主项目采用 AGPL-3.0-only，补充第三方许可、贡献和安全说明、安装与测试文档。
-- Monaco 0.52.2 资源本地化，保留上游 MIT 许可和完整性清单；静态资源使用限路径签名 Cookie。
-- 修复空 diff 占据编辑区、未生成 diff 时导航报错、切换文件遗留 diff，以及预览折叠残留宽度的问题。
-- 移除默认 token 和固定仓库路径；管线子进程使用当前 Python，保留真实退出码。
-- 用户上传与源码样本分离；默认打开合成报表，当前源码移除无明确再分发授权的教材节选。
-- 源码包只包含已提交文件，排除运行数据和 Git 历史。教材节选及其两个历史版本已从可达提交清除；旧 clone 和清理前的私密备份不得重新推回。
+Historical runtime results remain in [validation records](docs/validation.md); previous media are listed in the [demo archive](docs/demo.md).

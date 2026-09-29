@@ -34,12 +34,11 @@ bundled in this source tree. Its source and MIT license are available in the
 The retained demonstration documents, layout records and placeholder crops in
 `samples/docs`, `samples/paper-01`, `samples/exam-01`, `samples/report-01`, and the
 checker regression catalog in `samples/evaluation` are synthetic test fixtures.
-They do not establish OCR or model accuracy.
 The historical `GTM249-p101-120.tex` textbook extract and both of its blob versions
 have been removed from the current tree and reachable `main` history because no
-redistribution grant is recorded. Old clones and private pre-rewrite backups can
-still contain it and must not be republished or merged back. The project license
-does not grant rights to that extract. See the release checklist before publication.
+redistribution grant is recorded. Old clones and private pre-rewrite backups may still contain it; exclude that
+extract from redistributed copies. Cleanup details are in the
+[security record](docs/security-scan-notes.md).
 
 ## Active Calculus research pilot
 

@@ -1,30 +1,18 @@
 # TeXada Studio with Agent Skills
 
-**Find LaTeX syntax and simple table-total problems, inspect repair candidates, and decide what to adopt.**
+Check formula syntax and simple table totals in a LaTeX editor, review repair candidates, and decide what to adopt.
 
-[中文](README.md) · [Documentation map (中文)](docs/index.md) · [Continuous demo and evidence](docs/dynamic-demo.md) · [Casebook (中文)](docs/casebook.md) · [Contributing](CONTRIBUTING.md)
+[中文](README.md) · [Continuous recording](docs/dynamic-demo.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
 
-TeXada combines a Monaco editor, deterministic checks, local text-model suggestions, Tectonic previews, and human review. It is intended for teachers, research writers, and developers working with trusted `.tex` documents.
+TeXada combines Monaco, deterministic checks, a local text model, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
 
-**Experimental prototype; no formal release yet.** The repository is currently private. Access requires authorization. Project-authored source is licensed under [AGPL-3.0-only](LICENSE); third-party components retain their licenses. The open textbook formula pilot and adaptations separately retain [CC-BY-SA-4.0](samples/research/ACTIVE_CALCULUS_NOTICE.md). This is a single-process application for trusted users, not a public multi-user service.
+This is an experimental prototype with no formal release yet. The repository is private and requires access to clone. Deployment uses one process and a shared token for trusted users.
 
-![Source, PDF preview, and candidate review](docs/images/studio-overview.png)
+![Source, preview, and candidate review](docs/images/studio-overview.png)
 
-## What it does
+## 1. Run a sample without a model
 
-- The new LaTeX demo repairs a fraction whose `\left(` has no matching `\right)`. One real model request proposed only the closing delimiter; the candidate passed syntax checking and compilation, then was manually adopted.
-- A separate lecture writes the integral of x from 0 to 1 as 1, instead of 1/2. It compiles and passes syntax checks, demonstrating that these checks do not establish mathematical truth.
-- Simple table totals remain supported: Studio can deterministically propose `105` when `45 + 60` is incorrectly recorded as `115`.
-- Repair candidates open in a diff view. Users explicitly adopt them and can export an audit report.
-- The separate CLI reads an existing `layout.json`, records every check and candidate, and writes a report for the current run. It reuses terminal results only when input and execution-context hashes match.
-
-Automatic OCR, image-based repair, general agent planning, complex tables, project uploads, and multi-user isolation are not implemented. CLI real-model mode attempts formula repair only; table repair is currently available through test fixtures, while Studio can recompute simple totals. CLI runs do not invoke Tectonic.
-
-The Studio library now contains **13 documents**, including **8 new original LaTeX teaching samples**: delimiters, fractions, index groups, integral limits, a clean control, a semantic counterexample, and extraction/reference boundaries. See the [sample catalog](samples/README.md) and [12 independent compile checks](docs/evaluation-results/studio-latex/README.md). Author reference repairs are separate from recorded model outputs.
-
-## Try the offline fixture
-
-Python 3.10+ is required; Python 3.13 is the validated environment. These are POSIX-shell commands, tested on macOS; use WSL or translate environment activation on Windows. A fresh dependency installation needs network access. This fixture needs no GPU, model, font installation, or TeX compiler.
+Requires Python 3.11+; the validated version is 3.13. Commands use a POSIX shell; Windows users can use WSL. The initial dependency installation needs network access.
 
 ```bash
 git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
@@ -36,64 +24,65 @@ PYTHONPATH=harness python -m docforensics run samples \
   --state state/quickstart --fixture-repairs samples/fixture_repairs.json
 ```
 
-Expected: `exam-01 OK=3`, `paper-01 OK=2 NEEDS_HUMAN=1`, `report-01 OK=2`. Open `state/quickstart/report.md`; it identifies the provider as an offline test double. Rerun the same command to exercise resume. Input, model, Skill, checker, or dependency changes invalidate reuse automatically; transient provider/checker failures are retried in the same directory. Use a new directory for an independent run. These counts are workflow checks, not model benchmarks. See the [CLI manual](harness/README.md).
+Expected output:
 
-Private clones require repository access and configured GitHub authentication. An authorized source archive is an alternative.
-
-## Run the checker cases
-
-After installing the Python dependencies above, run 27 synthetic formula and table cases:
-
-```bash
-python scripts/evaluate_cases.py --outdir state/evaluation-01
+```text
+exam-01: OK=3 NEEDS_HUMAN=0
+paper-01: OK=2 NEEDS_HUMAN=1
+report-01: OK=2 NEEDS_HUMAN=0
+report: state/quickstart/report.md
 ```
 
-The [runner](scripts/evaluate_cases.py) writes `report.json` and `report.md` into a new directory and refuses to overwrite existing evidence. Cases cover syntax, Decimal totals, invalid inputs, and unsupported numeric formats. Contract matches, semantic boundaries, and known gaps are reported separately; none is a model-accuracy score. No model, OCR, or network call is made during execution.
+Open `state/quickstart/report.md` for candidates and items needing review. This mode reads preset repairs to exercise the workflow; it needs no GPU, model, or TeX installation. Rerun the same command to check resume behavior. See the [CLI manual](harness/README.md).
 
-See the [case definitions and instructions](samples/evaluation/README.md), [casebook](docs/casebook.md), and [Skills technical report](docs/skills-technical-report.md) for interpretation and limitations. These detailed documents are currently in Chinese.
+## 2. Open Studio
 
-## Compare Skill instructions
-
-Real-model CLI requests default to `--skill-mode on`; Studio defaults to `SKILL_MODE=on`. An allowlisted host validates and reads the formula Skill, adding its actual instructions to the system message. Off mode keeps the base prompt and the same checking workflow. Fixture mode loads no Skill and makes no model requests. Only the formula Skill is connected to this instruction host; Python still controls tools and retries.
-
-The [research runner](scripts/evaluate_skills.py) compares checker-only, the same model without Skill instructions, and the same model with instructions. It preserves provenance, configuration hashes, every candidate, and a blinded review sheet. Start with a plan-only run:
-
-```bash
-python scripts/evaluate_skills.py run \
-  --cases samples/research/smoke_cases.json \
-  --outdir work/research-dry-01 --mode dry-run
-```
-
-Dry-run executes neither checkers nor network requests. See the [research protocol](samples/research/README.md) for fixture, real-model, and human-review commands. Semantic accuracy remains null until independent review; synthetic, injected, and naturally occurring errors must be interpreted separately.
-
-## Run Studio locally
-
-With the virtual environment activated:
+Install the Web dependencies in the same environment and start the server:
 
 ```bash
 python -m pip install -r webui/requirements.txt
 export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 printf 'http://127.0.0.1:8888/studio?token=%s&file=math-clean.tex\n' "$DEMO_TOKEN"
-python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888
+python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888 --workers 1
 ```
 
-The initial `math-clean.tex` lecture uses English text and does not require a CJK font. Switch to `math-delimiters.tex` to try the recorded example; model outputs may differ.
+Open the printed local URL; stop with `Ctrl-C`. Keep the token private. The application does not load `.env` automatically: run `set -a; . ./.env; set +a` when using a configuration file. Available settings are in [`.env.example`](.env.example).
 
-Open the printed private local URL; stop with `Ctrl-C`. Do not share the token. A missing token prevents startup. `.env` is not loaded automatically; after editing a copy of `.env.example`, load it with `set -a; . ./.env; set +a`.
+Start with `math-clean.tex`, switch to `math-delimiters.tex` for a missing closing delimiter, then inspect the valid syntax but incorrect integral in `math-semantics.tex`. The library contains [13 Studio samples](samples/README.md).
 
-Additional capabilities require:
-
-| Capability | Requirement |
+| Feature | Dependencies |
 | --- | --- |
-| PDF compilation and first-page preview | Tectonic and `pdftoppm` on `PATH`; `TECTONIC` may specify a compiler path |
-| Chinese sample compilation | `Noto Sans CJK SC` and required TeX packages |
-| Formula repair in Studio | Local Ollama-compatible endpoint fixed at `127.0.0.1:11434`; an installed model selected by `VLM_MODEL` |
+| Editing, formula analysis, simple table checks | The Python dependencies above; Monaco 0.52.2 is bundled |
+| PDF compilation and first-page preview | [Tectonic](https://tectonic-typesetting.github.io/) and Poppler's `pdftoppm` on `PATH`; `TECTONIC` can specify the compiler path |
+| Chinese sample compilation | `Noto Sans CJK SC`; the new English math samples do not need this font |
+| Formula candidate generation | The local model service in the next section |
 
-Run `ollama list` before selecting a model. The default `qwen3.8:27b-q4_K_M` is the recorded test-node label, not a guaranteed downloadable or preinstalled model. Model calls send text only. First-time Tectonic compilation may download packages. Studio bundles Monaco 0.52.2; the legacy dashboard at `/` still uses a KaTeX CDN.
+Tectonic may download TeX packages on first compilation. See [troubleshooting](docs/troubleshooting.md) for setup issues and the [deployment guide](deploy/README.md) for persistent operation and upgrades.
 
-Use a single Uvicorn worker. Active execution still depends on process memory. Completed results and per-candidate events are stored under `state/studio/jobs/<job_id>/` and can be queried by a known job ID after restart. Interrupted jobs require a new job; model calls do not resume automatically. There is no task-history browser, and unsaved browser edits are not restored. Uploaded files and results live under ignored `state/`; an upload with the same name replaces the previous upload. TeX compilation is not a sandbox. Read [SECURITY.md](SECURITY.md) before sharing an installation.
+## 3. Connect a real model
 
-## Verify and contribute
+Prepare a local Ollama-compatible service and select an installed model tag:
+
+```bash
+ollama list
+curl --fail http://127.0.0.1:11434/v1/models
+export VLM_MODEL='REPLACE_WITH_AN_INSTALLED_MODEL_TAG'
+export SKILL_MODE=on
+```
+
+Start or restart Studio from that terminal. Its model endpoint is fixed at `127.0.0.1:11434`. It sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode. Defaults differ between entry points, so set the model explicitly.
+
+To use the same model from the CLI:
+
+```bash
+PYTHONPATH=harness python -m docforensics run samples \
+  --state state/model-01 \
+  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" --skill-mode on
+```
+
+Candidates and counts depend on the model. Reports go to the `--state` directory. The [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
+
+## 4. Reproduce tests and evaluations
 
 ```bash
 python -m pip install -r webui/requirements-test.txt
@@ -105,8 +94,36 @@ node webui/test_studio.cjs
 node skills/latex-cleanup/tests/test_audit_math.cjs
 ```
 
-JavaScript checks use Node.js 22. Harness tests cover Skill loading, checker failures, hash-bound resume, and candidate evidence; runner tests cover output protocols, directory protection, and human-review imports. These checks do not require a GPU and do not replace real-browser or TeX compilation checks. There is no automated CI workflow or response-time guarantee.
+JavaScript tests use Node.js 22. These regression tests need no model. Studio sample compilation is listed below; latex-cleanup compilation tests have a [separate guide](skills/latex-cleanup/tests/CASES.md).
 
-Start with a synthetic edge-case sample, documentation correction, or a scoped task in the [roadmap](docs/roadmap.md). The [documentation map](docs/index.md) identifies the primary document for each topic and the pages that must change together. Include the exact commit, environment, reproduction steps, and actual verification results. Never attach private documents or credentials.
+| Goal | Command or guide | Output |
+| --- | --- | --- |
+| 27 deterministic checker cases | `python scripts/evaluate_cases.py --outdir state/evaluation-01` | `report.json`, `report.md` |
+| Three-group Skills execution plan | The dry-run command below | Configuration, per-case results, report, blank review sheet |
+| Same-model comparison with / without Skill | [Research protocol](samples/research/README.md) | A new run directory; semantic review is imported separately |
+| 12 Studio compilation inputs | `python scripts/compile_studio_cases.py --outdir state/studio-compile-01` | `report.json`, source copies, logs, and PDFs; [requirements and expectations](docs/evaluation-results/studio-latex/README.md) |
+| Existing experiments and compile checks | [Validation records](docs/validation.md) | Fixed inputs, environment, and original results |
 
-Maintained by [@CacinieP](https://github.com/CacinieP), team LinguistsWantTech (邓一纯, 刘丰华). See [CITATION.cff](CITATION.cff) for citation metadata and include your actual commit. [Release preparation](docs/open-source-release.md) and [third-party notices](THIRD_PARTY_NOTICES.md) apply before redistribution.
+```bash
+python scripts/evaluate_skills.py run \
+  --cases samples/research/smoke_cases.json \
+  --outdir work/research-dry-01 --mode dry-run
+```
+
+Evaluation and compilation runners require a new output directory. Dry-run validates the plan only. Each guide explains how to interpret checker, fixture, and real-model results.
+
+## Scope and data
+
+Studio accepts a single `.tex`, extracts same-line `$...$` formulas, and checks simple tables. The CLI accepts existing `layout.json` inputs and runs formula and table checks. Studio can recompute simple totals; the CLI's real-model provider repairs formulas only. PDF preview shows the first page. Project uploads, OCR, multiline formula extraction, and multi-user isolation are on the [roadmap](docs/roadmap.md).
+
+Syntax acceptance, successful compilation, and mathematical correctness are separate judgments. For example, `∫₀¹ x dx = 1` can pass the first two checks although the correct value is `1/2`. Review candidates against the intended meaning.
+
+Uploads are saved in `state/studio/documents/`; uploading the same name replaces an earlier upload. Task records are in `state/studio/jobs/`. Completed tasks can be queried by job ID; interrupted tasks must be started again. Deploy for trusted documents; see [SECURITY.md](SECURITY.md) for the TeX compilation trust boundary.
+
+## Development and license
+
+Code entry points: [`webui/`](webui/) for Studio, [`harness/`](harness/) for the CLI, [`skills/`](skills/) for instructions and checkers, [`samples/`](samples/) for runnable inputs, and [`scripts/`](scripts/) for evaluation and packaging. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
+
+Original code, documentation, and synthetic samples use **AGPL-3.0-only**; see [LICENSE](LICENSE). Third-party components and textbook samples retain their licenses, documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). Modified network deployments must provide access to corresponding source.
+
+Team LinguistsWantTech: captain 邓一纯, member 刘丰华; maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Project and release materials are listed in the [documentation index](docs/index.md). Detailed guides are currently in Chinese.

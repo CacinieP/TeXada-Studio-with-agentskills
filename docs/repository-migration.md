@@ -1,31 +1,24 @@
-# 参赛名称与仓库迁移
+# 仓库名称与迁移记录
 
-## 名称
+当前仓库为 [`CacinieP/TeXada-Studio-with-agentskills`](https://github.com/CacinieP/TeXada-Studio-with-agentskills)，显示名为 **TeXada Studio with Agent Skills · 文档质检与修复**，Web 界面沿用 TeXada Studio。名称由维护者指定，现有比赛材料未要求固定仓库前缀或编号。
 
-- 作品显示名：**TeXada Studio with Agent Skills · 文档质检与修复**。
-- GitHub 仓库：`CacinieP/TeXada-Studio-with-agentskills`。
-- Web 界面：TeXada Studio。
+六个 Skill 的目录与 frontmatter 名称保持原接口，遵循 [Agent Skills 命名规范](https://agentskills.io/specification)；仓库改名未改动这些入口。
 
-现有本地比赛材料没有记录固定仓库名前缀、队名拼接或编号格式；不能把本仓库名描述为组委会指定格式。仓库名由维护者指定为 `TeXada-Studio-with-agentskills`，保留 TeXada / Studio 标识，并标明 Agent Skills 参赛方向。
+## 清理与迁移
 
-已核验的 [Agent Skills 官方规范](https://agentskills.io/specification)要求 Skill 的 `name` 为 1–64 字符、小写字母 / 数字 / 连字符，不能首尾或连续使用连字符，并与父目录名一致。这是 **Skill 名称** 的要求，并非比赛强制仓库命名规则。当前六个 Skill 的目录名与 frontmatter 保持一致，不因仓库改名而改动其接口名称。
+| 阶段 | 已完成处理 |
+| --- | --- |
+| 原仓库教材清理 | 在 `TeXada-WebUI` 私密备份完整 bundle 后，按路径与两个 blob ID 移除 `samples/docs/GTM249-p101-120.tex`。35个提交中重写13个，当前代码 tree 保持一致；遍历可达历史与 Git 完整性检查通过。 |
+| 创建独立仓库 | 只推送清理后的可达历史到新仓库，保留 AGPL、Monaco MIT、合成样本和测试。新仓库为独立仓库，未使用 fork。 |
+| 后续历史脱敏 | 清理时的45个可达提交全部重写且保留，处理邮件元数据、旧部署端口、制作记录与含节点名图片；实验原始文件保持不变。[详情](security-scan-notes.md) |
 
-报名系统或组委会若另有团队专属命名要求，以正式通知为准；队伍名称与报名信息不在本仓库中臆造。
+原仓库重新 mirror clone 后，教材路径与两个 blob 已不可达，但已登录 API 仍能按旧 SHA 读取对象，因此另建独立仓库。新仓库 mirror clone 不含这些内容，API 查询两个旧 blob 均返回404。原仓库清理时仅有 `main`，无标签、PR、Release 或 fork。
 
-## 迁移范围
+## 迁移后的状态
 
-从原仓库 `CacinieP/TeXada-WebUI` 的清理后历史创建独立仓库，不使用 GitHub fork、导入旧 bundle 或镜像旧远端的全部对象。
+- 新旧仓库均保持 **PRIVATE**；新仓库已完成推送并核对 `main`。
+- 工作目录、`origin`、README、界面源码链接、部署示例和打包名称已切换到新名称。
+- 运行数据、私人上传、本地备份及已移除的教材内容未随迁移上传。
+- 演示服务的部署与源码仓库分别维护，部署时核对运行版本。
 
-保留可达开发历史、AGPL-3.0-only 许可证、Monaco MIT 声明、合成样本和现有测试。此前移除的教材文件、两个历史 blob、运行数据、私人上传和本地备份不随迁移上传。
-
-原仓库作为私有旧入口保留；新仓库也保持私有。新的工作目录和 `origin` 指向 `TeXada-Studio-with-agentskills`。在线演示服务器没有因本次 Git 迁移自动搬迁或重启。
-
-## 核验清单
-
-- [x] 新仓库为独立仓库（不是 fork），可见性为 PRIVATE。
-- [x] 已完成首次推送并核对远端 `main`。
-- [x] 从新远端 mirror clone 后，所有可达历史不含教材路径与两个旧 blob。
-- [x] GitHub API 在新仓库中查询两个旧 blob 均返回 404。
-- [x] README、页面源码链接、部署路径和打包名称均使用新仓库名。
-
-不得从原仓库的旧 clone merge 或 push 回新仓库。公开发布需由维护者另行决定，见 [发布清单](open-source-release.md)。
+协作者应重新 clone 清理后的仓库，避免将旧历史 merge 或 push 回来。清理前的 bundle 仅作私有恢复备份。Git 引用清理之外的平台缓存和旧副本按[扫描记录](security-scan-notes.md)处理；公开发布按[发布清单](open-source-release.md)执行。
