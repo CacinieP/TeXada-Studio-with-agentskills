@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "title": "Original Studio mathematics teaching cases",
+  "synthetic": true,
+  "license": "AGPL-3.0-only",
+  "scope": "Eight new ASCII LaTeX documents for Studio extraction, syntax and review boundaries. Existing legacy samples remain separate.",
+  "validation_scope": {
+    "analysis": "real local checker; expectations verified per case",
+    "model": "not called by catalog validation",
+    "compiler": "not called by catalog validation"
+  },
+  "interpretation": [
+    "Expected syntax results are contracts, not mathematical truth labels.",
+    "Author-supplied reference edits are offline regression inputs, not model outputs or a promised model result.",
+    "Zero findings and zero extracted formulas must be reported separately.",
+    "Use separate runtime evidence for model requests and TeX compilation."
+  ],
+  "cases": [
+    {
+      "case_id": "S06",
+      "file": "docs/math-delimiters.tex",
+      "category": "syntax_error",
+      "title": "Missing sized delimiter",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "The sized opening parenthesis deliberately has no matching closing delimiter. Recommended main video case.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "x^2-1=(x-1)(x+1)",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
+            "status": "RETRY"
+          }
+        ],
+        "problem_count": 1,
+        "status_counts": {
+          "RETRY": 1
+        },
+        "problem_types": {
+          "formula": 1
+        }
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 2,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [
+        {
+          "original": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}",
+          "candidate": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
+          "expected_status": "OK",
+          "origin": "author_supplied_not_model_output"
+        }
+      ],
+      "semantic_boundary": "Only grouping is specified; accepting a candidate does not prove a mathematical claim.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S07",
+      "file": "docs/math-fractions.tex",
+      "category": "syntax_error",
+      "title": "Missing fraction group brace",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "The fraction denominator deliberately lacks its closing brace.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "\\frac{a+b}{c}",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle \\frac{x+1}{x-1",
+            "status": "RETRY"
+          }
+        ],
+        "problem_count": 1,
+        "status_counts": {
+          "RETRY": 1
+        },
+        "problem_types": {
+          "formula": 1
+        }
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 2,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [
+        {
+          "original": "\\displaystyle \\frac{x+1}{x-1",
+          "candidate": "\\displaystyle \\frac{x+1}{x-1}",
+          "expected_status": "OK",
+          "origin": "author_supplied_not_model_output"
+        }
+      ],
+      "semantic_boundary": "A candidate must preserve the stated numerator and denominator; parsing is not a meaning check.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S08",
+      "file": "docs/math-indices.tex",
+      "category": "syntax_error",
+      "title": "Missing subscript group brace",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "The final subscript group is deliberately unclosed; the index itself is supplied in the source.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "b_n=b_1 q^{n-1}",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle b_{n+1}=q b_{n",
+            "status": "RETRY"
+          }
+        ],
+        "problem_count": 1,
+        "status_counts": {
+          "RETRY": 1
+        },
+        "problem_types": {
+          "formula": 1
+        }
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 2,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [
+        {
+          "original": "\\displaystyle b_{n+1}=q b_{n",
+          "candidate": "\\displaystyle b_{n+1}=q b_{n}",
+          "expected_status": "OK",
+          "origin": "author_supplied_not_model_output"
+        }
+      ],
+      "semantic_boundary": "This is a grouping repair, not permission to invent an absent index value.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S09",
+      "file": "docs/math-integrals.tex",
+      "category": "syntax_error",
+      "title": "Missing integral upper-limit brace",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "The closing brace after upper limit one is deliberately removed.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "F(x)=\\frac{x^3}{3}",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle \\int_{0}^{1 x^2\\,dx",
+            "status": "RETRY"
+          }
+        ],
+        "problem_count": 1,
+        "status_counts": {
+          "RETRY": 1
+        },
+        "problem_types": {
+          "formula": 1
+        }
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 2,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [
+        {
+          "original": "\\displaystyle \\int_{0}^{1 x^2\\,dx",
+          "candidate": "\\displaystyle \\int_{0}^{1} x^2\\,dx",
+          "expected_status": "OK",
+          "origin": "author_supplied_not_model_output"
+        }
+      ],
+      "semantic_boundary": "The candidate must preserve bounds, integrand and differential; evaluating the integral is separate.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S10",
+      "file": "docs/math-clean.tex",
+      "category": "positive_control",
+      "title": "Clean calculus lecture control",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "Original clean formulas covering a fraction, an integral, a limit and indexed terms; recommended video opener.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}\\right)",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle \\int_{0}^{1} x^2\\,dx=\\frac{1}{3}",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle \\lim_{x\\to 0}\\frac{\\sin x}{x}=1",
+            "status": "OK"
+          },
+          {
+            "latex": "a_{n+1}=q a_n",
+            "status": "OK"
+          }
+        ],
+        "problem_count": 0,
+        "status_counts": {},
+        "problem_types": {}
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 0,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [],
+      "semantic_boundary": "No detected syntax problem is only a syntax outcome, not a general mathematical certification.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S11",
+      "file": "docs/math-semantics.tex",
+      "category": "semantic_boundary",
+      "title": "False integral equality with valid syntax",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "The first equality deliberately gives one for an integral whose value is one half; recommended human-review example.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "\\displaystyle \\int_0^1 x\\,dx=1",
+            "status": "OK"
+          },
+          {
+            "latex": "\\frac{x^2}{2}",
+            "status": "OK"
+          },
+          {
+            "latex": "\\frac{1}{2}",
+            "status": "OK"
+          }
+        ],
+        "problem_count": 0,
+        "status_counts": {},
+        "problem_types": {}
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 0,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [],
+      "semantic_boundary": "The checker accepts syntax but does not establish equality truth; do not score this as a successful semantic repair.",
+      "extraction_boundary": [],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S12",
+      "file": "docs/math-align-boundary.tex",
+      "category": "extraction_boundary",
+      "title": "Multiline align extraction boundary",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "An unclosed sized delimiter is intentionally placed inside align*, beyond the current inline-dollar extraction scope.",
+      "expected_analysis": {
+        "formula_checks": [],
+        "problem_count": 0,
+        "status_counts": {},
+        "problem_types": {}
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 0,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [],
+      "semantic_boundary": "Zero findings with zero extracted formulas does not establish source validity.",
+      "extraction_boundary": [
+        "The align* environment is not extracted.",
+        "Its intentional delimiter defect must be reviewed independently; no automatic edit is expected."
+      ],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S13",
+      "file": "docs/math-references.tex",
+      "category": "reference_boundary",
+      "title": "Equation and citation reference boundary",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "Original notes intentionally contain an unresolved equation reference and bibliography key.",
+      "expected_analysis": {
+        "formula_checks": [],
+        "problem_count": 0,
+        "status_counts": {},
+        "problem_types": {}
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 0,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [],
+      "semantic_boundary": "Cross-reference resolution is not formula-syntax validation.",
+      "extraction_boundary": [
+        "The equation environment is not extracted.",
+        "Equation labels and bibliography keys are not audited.",
+        "Zero reported problems is not complete document validation."
+      ],
+      "compile_status": "not_run"
+    }
+  ]
+}

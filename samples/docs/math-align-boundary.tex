@@ -1,0 +1,32 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional unsupported-extraction case: a missing delimiter occurs inside align*.
+% There is no inline-dollar formula in this document.
+\title{Research Notes: A Multiline Boundary}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. A multiline derivation}
+The following environment intentionally contains an unclosed sized
+parenthesis in its second row:
+\begin{align*}
+F(x) &= \frac{x^3}{3}, \\
+G(x) &= \left( x+1
+\end{align*}
+\section*{2. What zero reported problems means here}
+The current Studio extractor scans single-line dollar-delimited
+formulas. It does not extract the mathematics inside this multiline
+environment. A zero problem count therefore says nothing about the
+validity of this source.
+\section*{3. Human and compiler review}
+Inspect the environment and use a compiler separately. The workflow
+must not invent an automatic edit to content it did not extract.
+\textbf{Teaching note.} This original boundary sample is deliberately
+damaged and outside the current extraction scope, not a passing example.
+\end{document}

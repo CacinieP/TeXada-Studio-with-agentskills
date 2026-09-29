@@ -1,0 +1,27 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional syntax error: the final subscript group lacks its closing brace.
+\title{Sequence Notes: Indices and Powers}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. A clean power expression}
+A geometric sequence can be written as $b_n=b_1 q^{n-1}$.
+\section*{2. The recurrence with a grouping error}
+The next term is q times the current term. Only the final subscript
+brace has deliberately been removed:
+$\displaystyle b_{n+1}=q b_{n$.
+\section*{3. Keep the index meaning}
+The intended change restores the grouping of the current index.
+Do not replace an index with an invented value merely because the
+new formula parses.
+\textbf{Teaching note.} This original damaged example tests a
+specific missing brace, not guessing the meaning of an absent subscript.
+Model success is not assumed; unresolved input must remain available.
+\end{document}

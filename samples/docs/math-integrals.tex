@@ -1,0 +1,26 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional syntax error: a closing brace is missing after the upper limit.
+\title{Calculus Notes: An Integral Limit}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. A clean antiderivative}
+For a quadratic integrand, use $F(x)=\frac{x^3}{3}$.
+\section*{2. The deliberately damaged integral}
+Integrate the square of x from zero to one. The closing brace immediately
+after the upper limit has deliberately been omitted:
+$\displaystyle \int_{0}^{1 x^2\,dx$.
+\section*{3. Separate syntax from evaluation}
+The candidate should restore the upper-limit group without changing
+the bounds, integrand or differential. Evaluating the integral is a
+separate mathematical task; this checker only assesses supported syntax.
+\textbf{Teaching note.} This is an original synthetic error for
+candidate review. No model success or compiler result is implied.
+\end{document}

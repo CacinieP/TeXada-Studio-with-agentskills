@@ -1,0 +1,27 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional syntax error: the fraction denominator lacks its closing brace.
+\title{Algebra Notes: A Fraction Group}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. A balanced fraction}
+This nearby expression is a clean control: $\frac{a+b}{c}$.
+\section*{2. The deliberately damaged expression}
+Assume that x is different from one. The denominator of this quotient
+is intended to be the whole expression x minus one:
+$\displaystyle \frac{x+1}{x-1$.
+\section*{3. Review scope}
+A minimal candidate closes the denominator group and leaves the
+numerator and denominator unchanged. Inspect the actual diff before
+adopting any candidate; a model is not guaranteed to find that change.
+\textbf{Teaching note.} This original sample intentionally contains
+one grouping error. Its author-supplied reference is a regression aid,
+not a recorded model output or a proof of mathematical correctness.
+\end{document}

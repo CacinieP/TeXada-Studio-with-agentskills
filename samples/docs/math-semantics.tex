@@ -1,0 +1,28 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional mathematical error with valid formula syntax.
+% Teaching purpose: syntax parsing does not evaluate the truth of an equality.
+\title{Calculus Notes: Syntax Is Not Truth}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. The deliberately false claim}
+The following displayed-sized inline formula intentionally states
+an incorrect integral value:
+$\displaystyle \int_0^1 x\,dx=1$.
+\section*{2. An independent mathematical check}
+The antiderivative is $\frac{x^2}{2}$. Evaluating it at one and zero
+gives $\frac{1}{2}$, not one.
+\section*{3. What the software can establish}
+The formula can have valid syntax while its equality is false.
+The current syntax checker does not certify the mathematical statement
+and should not invent a repair for a formula that it accepts.
+\textbf{Teaching note.} This original negative control must remain
+available for human review; zero syntax problems is not a correctness score.
+\end{document}

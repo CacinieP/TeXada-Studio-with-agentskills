@@ -1,0 +1,33 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Intentional unsupported feature: unresolved equation and citation references.
+% The equation environment is not extracted by the current inline-dollar scanner.
+\title{Research Notes: A Reference Boundary}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. A labelled equation}
+\begin{equation}
+E=mc^2
+\label{eq:energy}
+\end{equation}
+\section*{2. Deliberately unresolved links}
+Equation~\eqref{eq:missing} intentionally points to an absent label.
+The citation~\cite{missing-note} intentionally points to an absent
+bibliography key. Both are original teaching errors.
+\section*{3. Scope of the current checker}
+Studio does not audit cross-reference or bibliography resolution.
+It also does not extract the equation environment above. Zero reported
+syntax problems must not be read as a complete document validation.
+\begin{thebibliography}{1}
+\bibitem{synthetic-note} LinguistsWantTech.
+\emph{An original fictional reference for this teaching sample}.
+No external source or personal data is used.
+\end{thebibliography}
+\end{document}

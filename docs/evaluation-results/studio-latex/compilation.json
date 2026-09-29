@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-09-29",
+  "compiler": "Tectonic 0.16.9",
+  "scope": "Original synthetic documents and explicit author reference edits. No model calls. Compilation does not establish mathematical truth.",
+  "catalog_sha256": "ec2449d187d2f5b0164218ef8009a7058273ececbb729d5bb5c2732a80ba53a7",
+  "cases": [
+    {
+      "case_id": "S06",
+      "file": "math-delimiters.tex",
+      "variant": "original",
+      "source_sha256": "a58ad7adc5654a803e2ea023fa54e585cf63dcdced914c4d2c3c1ae033267e91",
+      "expected_compile_ok": false,
+      "compile_ok": false,
+      "exit_code": 1,
+      "pdf_generated": false
+    },
+    {
+      "case_id": "S06",
+      "file": "math-delimiters.tex",
+      "variant": "author_reference",
+      "source_sha256": "42bc1973f19a8537c5e06fa58cf5c99f885156d66a5bb833c66f98b427dab720",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S07",
+      "file": "math-fractions.tex",
+      "variant": "original",
+      "source_sha256": "1af5db542d6407465a283a4c0ccdc31c9aecc5088d787511edccb19560fb4088",
+      "expected_compile_ok": false,
+      "compile_ok": false,
+      "exit_code": 1,
+      "pdf_generated": false
+    },
+    {
+      "case_id": "S07",
+      "file": "math-fractions.tex",
+      "variant": "author_reference",
+      "source_sha256": "1a421ac7605d6c0154efd656cf98a7042ad85d3ccc124d6e0f5ec4abbf4196f0",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S08",
+      "file": "math-indices.tex",
+      "variant": "original",
+      "source_sha256": "55d00a1cf9ef0838e0903a18b9e7c6163003250fb2eb268938cc9919515bcbff",
+      "expected_compile_ok": false,
+      "compile_ok": false,
+      "exit_code": 1,
+      "pdf_generated": false
+    },
+    {
+      "case_id": "S08",
+      "file": "math-indices.tex",
+      "variant": "author_reference",
+      "source_sha256": "58657f09432d96110720b5a51aca116194240728792f31d6040b65e838cb904e",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S09",
+      "file": "math-integrals.tex",
+      "variant": "original",
+      "source_sha256": "0c1f5f528c67da9005c28a3de2cd43de6a886c0e02695b13af0b784062ef62b9",
+      "expected_compile_ok": false,
+      "compile_ok": false,
+      "exit_code": 1,
+      "pdf_generated": false
+    },
+    {
+      "case_id": "S09",
+      "file": "math-integrals.tex",
+      "variant": "author_reference",
+      "source_sha256": "e5cc423a2cecf7bb380447702783b36ebf3e2cea5243a8f651dc2e2ed0412558",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S10",
+      "file": "math-clean.tex",
+      "variant": "original",
+      "source_sha256": "c2a0dac827b8d2770c9a59e062cb66a9fa884413523e98e9a6e1f3f4d828bc5f",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S11",
+      "file": "math-semantics.tex",
+      "variant": "original",
+      "source_sha256": "834b8be1171ed9c6590fdc545be90f37d77c42d11c5f57648401b68bdef7e84c",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true
+    },
+    {
+      "case_id": "S12",
+      "file": "math-align-boundary.tex",
+      "variant": "original",
+      "source_sha256": "05673959e9bc9d2897d2583e2f899dd0edd8cc8ee5e9a9180515e58f980fe4a0",
+      "expected_compile_ok": false,
+      "compile_ok": false,
+      "exit_code": 1,
+      "pdf_generated": false
+    },
+    {
+      "case_id": "S13",
+      "file": "math-references.tex",
+      "variant": "original",
+      "source_sha256": "0af99d7aaae8845bfbefafe405855919ad8712b6dc57231078a8207572be9631",
+      "expected_compile_ok": true,
+      "compile_ok": true,
+      "exit_code": 0,
+      "pdf_generated": true,
+      "undefined_reference_or_citation_in_tex_log": true,
+      "reference_check_note": "Compiler exit 0 does not resolve missing equation labels or citation keys."
+    }
+  ],
+  "expectations_match": true
+}
