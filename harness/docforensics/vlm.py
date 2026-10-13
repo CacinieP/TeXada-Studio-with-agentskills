@@ -114,6 +114,24 @@ def _reject_json_constant(value):
     raise ValueError("invalid_json_constant")
 
 
+def _contains_credential(value, credential):
+    """Check decoded JSON values and keys, including escaped Unicode echoes."""
+    if not credential:
+        return False
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if credential in item:
+                return True
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return False
+
+
 class FixtureProvider:
     name = "fixture (offline test double)"
 
@@ -396,6 +414,11 @@ class OpenAICompatibleProvider:
                                     parse_constant=_reject_json_constant)
             except ValueError:
                 trace["reason"] = "bad_candidate_json"
+                return None
+            if _contains_credential(result, self._api_key):
+                trace["raw_candidate_response"] = "[redacted credential response]"
+                trace["response_truncated"] = False
+                trace["reason"] = "credential_in_response"
                 return None
             if not isinstance(result, dict):
                 trace["reason"] = "bad_candidate_type"

@@ -118,6 +118,95 @@ class PlannerTest(unittest.TestCase):
             with patch("docforensics.vlm.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(response).encode())):
                 self.assertIsNone(provider.plan_action({"state_rev": 0}))
 
+    def test_escaped_credential_echo_in_decoded_json_never_reaches_host_audit(self):
+        credential = "review-inert-secret"
+        provider = OpenAICompatibleProvider("http://localhost:9000/v1", "MiniCPM-V-4.7-1B")
+        provider._api_key = credential
+        records = [
+            {"action": "request-human", "node_id": "f-001-1", "state_rev": 0, "params": {"reason": credential}},
+            {"nested": [{credential: "value"}]},
+            {"nested": ["prefix " + credential + " suffix"]},
+        ]
+        for record in records:
+            serialized = json.dumps(record).replace(credential, "".join("\\u%04x" % ord(char) for char in credential))
+            response = {"choices": [{"message": {"content": serialized}}]}
+            with self.subTest(record=record), patch("docforensics.vlm.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(response).encode())):
+                self.assertIsNone(provider.plan_action({"state_rev": 0}))
+            self.assertEqual(provider.last_trace["reason"], "credential_in_response")
+            self.assertEqual(provider.last_trace["raw_candidate_response"], "[redacted credential response]")
+            self.assertNotIn(credential, json.dumps(provider.last_trace))
+            self.assertNotIn("\\u0072", provider.last_trace["raw_candidate_response"])
+        content = json.dumps(records[0]).replace(credential, "".join("\\u%04x" % ord(char) for char in credential))
+        response = {"choices": [{"message": {"content": content}}]}
+        host = self.make_host(budget=PlannerBudget(max_steps=1))
+        host.provider = provider
+        with patch("docforensics.vlm.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(response).encode())):
+            _, report = host.run()
+        self.assertEqual(report["executed"], 0)
+        self.assertNotIn(credential, json.dumps(self.events))
+        self.assertNotIn(credential, json.dumps(report))
+
+    def test_provider_late_return_never_starts_candidate_checker(self):
+        clock, observed, events = [0.0], [], []
+        provider = ScriptedProvider()
+        def late_repair(*args, **kwargs):
+            clock[0] = 2.0
+            return "x+1"
+        provider.repair_formula = late_repair
+        def factory(*args, **kwargs):
+            return ConstrainedPlanner(*args, **kwargs, budget=PlannerBudget(seconds=1), clock=lambda: clock[0])
+        def check(latex):
+            observed.append((clock[0], latex))
+            return {"status": "OK" if latex == "x+1" else "RETRY"}
+        with patch.object(studio, "ConstrainedPlanner", side_effect=factory), patch.object(studio, "_verify_formula", side_effect=check):
+            candidate, edits, report = studio._apply_planned_fixes("$x+$", [], provider=provider,
+                                    emit=lambda action, **fields: events.append({"action": action, **fields}))
+        self.assertEqual(observed, [(0.0, "x+")])
+        self.assertEqual(candidate, "$x+$")
+        self.assertFalse(edits)
+        self.assertEqual(report["nodes"][0]["state"], "human")
+        self.assertFalse(any(event["action"] == "CANDIDATE_ACCEPTED" for event in events))
+        self.assertTrue(any(event.get("reason") == "planner_deadline_exhausted" for event in events))
+
+    def test_checker_late_return_is_audited_without_accepting_edits(self):
+        clock, events = [0.0], []
+        def factory(*args, **kwargs):
+            return ConstrainedPlanner(*args, **kwargs, budget=PlannerBudget(seconds=1), clock=lambda: clock[0])
+        def check(latex):
+            if latex == "x+1":
+                clock[0] = 2.0
+                return {"status": "OK"}
+            return {"status": "RETRY"}
+        with patch.object(studio, "ConstrainedPlanner", side_effect=factory), patch.object(studio, "_verify_formula", side_effect=check):
+            candidate, edits, report = studio._apply_planned_fixes("$x+$", [], provider=ScriptedProvider(),
+                                    emit=lambda action, **fields: events.append({"action": action, **fields}))
+        self.assertEqual(candidate, "$x+$")
+        self.assertFalse(edits)
+        self.assertEqual(report["nodes"][0]["state"], "human")
+        self.assertTrue(any(event["action"] == "CANDIDATE_CHECK" and event["check"]["status"] == "OK" for event in events))
+        self.assertFalse(any(event["action"] == "CANDIDATE_ACCEPTED" for event in events))
+
+    def test_generic_host_discards_late_callback_edits_and_stops_after_late_check(self):
+        clock = [0.0]
+        host = self.make_host(clock=lambda: clock[0], budget=PlannerBudget(seconds=1))
+        host.execute({"action": "check-formula", "node_id": "f-001-1", "state_rev": 0, "params": {}})
+        def late_repair(*args):
+            clock[0] = 2.0
+            return {"accepted": True, "edits": [{"after": "x+1"}], "check": {"status": "OK"}}
+        host.repair = late_repair
+        self.assertFalse(host.execute({"action": "propose-repair", "node_id": "f-001-1", "state_rev": 1, "params": {}}))
+        self.assertFalse(host.edits)
+        self.assertEqual(host.nodes[0]["state"], "human")
+        clock[0] = 0.0
+        host = self.make_host(clock=lambda: clock[0], budget=PlannerBudget(seconds=1))
+        def late_check(*args):
+            clock[0] = 2.0
+            return {"status": "RETRY"}
+        host.check = late_check
+        host.run()
+        host.repair.assert_not_called()
+        self.assertEqual(host.nodes[0]["state"], "human")
+
     def test_product_job_persists_audits_and_preserves_source(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(studio, "STUDIO_STATE", directory), \
                 patch.dict(studio._jobs, clear=True), patch.object(studio, "_new_provider", return_value=ScriptedProvider(True)), \

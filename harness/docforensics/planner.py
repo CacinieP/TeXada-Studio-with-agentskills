@@ -102,6 +102,21 @@ class ConstrainedPlanner:
             return None, "model_budget_exhausted"
         return node, None
 
+    def _discard_late_result(self, node, action):
+        if self.remaining_seconds() > 0:
+            return False
+        # The authorized read-only callback did run; its result cannot become a
+        # candidate transition after the deadline. Preserve that distinction.
+        node.update(state="human", human_reason="planner_deadline_exhausted")
+        self.rejected += 1
+        self.executed += 1
+        self.state_rev += 1
+        self.emit("PLANNER_REJECTED", reason="planner_deadline_exhausted", phase="after_callback", state_rev=self.state_rev)
+        self.emit("PLANNER_EXECUTED", selected_action=action, node_id=node["id"], state_rev=self.state_rev,
+                  node_state="human", result="discarded_after_deadline")
+        self.emit("HUMAN_REQUESTED", node_id=node["id"], reason="planner_deadline_exhausted", state_rev=self.state_rev)
+        return True
+
     def execute(self, proposal):
         # Proposed content is deliberately bounded to identifiers and schema status.
         self.emit("PLANNER_PROPOSED", proposal={k: v for k, v in (proposal or {}).items()
@@ -117,6 +132,8 @@ class ConstrainedPlanner:
         if action.startswith("check-"):
             result = self.check(copy.deepcopy(node))
             node["check"] = result
+            if self._discard_late_result(node, action):
+                return False
             node["state"] = {"OK": "ok", "RETRY": "retry", "NEEDS_ENV": "needs_env"}.get(result.get("status"), "needs_human")
         elif action == "propose-repair":
             node["attempts"] += 1
@@ -125,6 +142,8 @@ class ConstrainedPlanner:
                 self.model_calls += 1
             result = self.repair(copy.deepcopy(node), min(120.0, self.remaining_seconds()))
             node["check"] = result.get("check", {})
+            if self._discard_late_result(node, action):
+                return False
             if result.get("accepted"):
                 self.edits.extend(result.get("edits", []))
                 node["state"] = "candidate"

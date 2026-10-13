@@ -601,11 +601,17 @@ def _apply_planned_fixes(content, log, *, provider, emit):
             candidate = provider.repair_formula({"id": node["id"], "data": {"latex": node["latex"]}}, timeout=timeout)
             emit("PROVIDER_RESULT", node_id=node["id"], attempt=node["attempts"], candidate=candidate,
                  provider_trace=getattr(provider, "last_trace", {}))
+            if planner.remaining_seconds() <= 0:
+                emit("CANDIDATE_REJECTED", node_id=node["id"], candidate=candidate, reason="planner_deadline_exhausted")
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "planner_deadline_exhausted"}}
             valid_candidate = (isinstance(candidate, str) and bool(candidate.strip()) and len(candidate) <= 32768
                                and not any(ord(c) < 32 or ord(c) == 127 for c in candidate))
             result = _verify_formula(candidate) if valid_candidate else {"status": "RETRY"}
             accepted = result.get("status") == "OK"
             emit("CANDIDATE_CHECK", node_id=node["id"], candidate=candidate, check=result)
+            if planner.remaining_seconds() <= 0:
+                emit("CANDIDATE_REJECTED", node_id=node["id"], candidate=candidate, reason="planner_deadline_exhausted")
+                return {"accepted": False, "check": result}
             emit("CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED", node_id=node["id"],
                  candidate=candidate, reason="checker_accepted_not_user_adopted" if accepted else "checker_rejected")
             edit = {"line": node["line"], "before": node["latex"], "after": candidate,

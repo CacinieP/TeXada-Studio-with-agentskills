@@ -33,7 +33,10 @@ planning window. Planner calls and formula repair calls share this budget. A
 failed attempt consumes its reservation. HTTP calls use the remaining window
 (up to 120 seconds per request); the existing local checker has its own bounded
 subprocess timeout. The host stops starting new actions when time expires. All
-unresolved nodes become visible human requests. Actual HTTP attempts are counted
+unresolved nodes become visible human requests. A provider response arriving
+after the deadline cannot start the candidate checker. If a checker was already
+running when the deadline expired, its observed result remains in the audit,
+but it cannot become a late candidate edit or start another repair. Actual HTTP attempts are counted
 separately from reservations, so an offline test fixture does not claim inference.
 
 The persisted job trace contains `PLANNER_PROPOSED`, `PLANNER_REJECTED`,
