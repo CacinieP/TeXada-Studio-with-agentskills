@@ -31,7 +31,7 @@ def response_for(envelope):
             "diff": {"before": envelope["original_latex"], "after": candidate},
             "evidence": {"mutation_scope": {"status": "PASS"}, "cas_transition": {"status": "SHADOW"}},
             "inference_fingerprint": {"status": "NOT_CHECKED", "fixture": True},
-            "review": {"id": "review-fixture-1", "status": "PENDING", "binding": binding, **binding}}
+            "review": {"id": "review-fixture-1", "status": "pending", "binding": binding, **binding}}
 
 
 class FakeMath:
@@ -57,7 +57,7 @@ class FakeMath:
                 if self.path == "/api/handoff/formula":
                     result = response_for(payload)
                 elif self.path == "/api/reviews/review-fixture-1/decision":
-                    result = {"id": "review-fixture-1", "status": "ACCEPTED" if payload["decision"] == "accept" else "REJECTED",
+                    result = {"id": "review-fixture-1", "status": "accepted" if payload["decision"] == "accept" else "rejected",
                               "binding": payload["binding"], **payload["binding"]}
                 else:
                     self.send_error(404)
@@ -180,8 +180,16 @@ class HandoffTest(unittest.TestCase):
         with self.assertRaisesRegex(HandoffError, "review_decision_intent_conflict"):
             self.client.decide(self.body["transfer_id"], {**decision, "decision": "reject"})
         result = self.client.decide(self.body["transfer_id"], decision)
-        self.assertEqual(result["review"]["status"], "ACCEPTED")
+        self.assertEqual(result["review"]["status"], "accepted")
         self.assertEqual(len(self.math.requests), 2)
+
+    def test_review_statuses_follow_native_lowercase_contract(self):
+        envelope = build_envelope(self.body)
+        response = response_for(envelope)
+        self.assertEqual(response["review"]["status"], "pending")
+        response["review"]["status"] = "PENDING"
+        with self.assertRaisesRegex(HandoffError, "invalid_review_response"):
+            validate_response(envelope, response)
 
     def test_completion_keeps_original_prefix_and_exact_scope(self):
         self.body["requested_action"] = "complete"
@@ -197,7 +205,7 @@ class HandoffTest(unittest.TestCase):
         proposal = self.client.propose(self.body)
         decision = {"decision": "accept", "name": self.body["name"], "content": self.body["content"], "revision": self.body["revision"]}
         result = self.client.decide(self.body["transfer_id"], decision)
-        self.assertEqual(result["review"]["status"], "ACCEPTED")
+        self.assertEqual(result["review"]["status"], "accepted")
         self.assertEqual(self.client.decide(self.body["transfer_id"], decision), result)
         self.assertEqual(len(self.math.requests), 2)
         self.assertEqual(self.math.requests[-1], ("/api/reviews/review-fixture-1/decision",
@@ -217,7 +225,7 @@ class HandoffTest(unittest.TestCase):
         self.client.propose(self.body)
         result = self.client.decide(self.body["transfer_id"], {"decision": "reject", "name": self.body["name"],
                                    "content": self.body["content"], "revision": self.body["revision"]})
-        self.assertEqual(result["review"]["status"], "REJECTED")
+        self.assertEqual(result["review"]["status"], "rejected")
         self.assertEqual(set(Path(self.temp.name).iterdir()), {Path(self.temp.name) / "handoffs"})
 
     def test_redirect_is_never_followed_and_failed_id_never_reexecutes(self):
@@ -266,7 +274,7 @@ class HandoffTest(unittest.TestCase):
                 result = app.post("/api/studio/handoff/" + self.body["transfer_id"] + "/decision", params=auth,
                                   json={"decision": "accept", "name": self.body["name"], "content": self.body["content"], "revision": self.body["revision"]})
                 self.assertEqual(result.status_code, 200)
-                self.assertEqual(result.json()["review"]["status"], "ACCEPTED")
+                self.assertEqual(result.json()["review"]["status"], "accepted")
 
 
 if __name__ == "__main__":

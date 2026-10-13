@@ -581,7 +581,7 @@ async function validateCandidate(res, source) {
         h.document_sha256 !== source.sha256 || h.input_sha256 !== inputHash || h.original_latex !== f.original ||
         h.expected_revision !== source.revision || res.source_revision !== source.revision ||
         h.source_range?.encoding !== "unicode-codepoints" || h.source_range.start !== f.range.start || h.source_range.end !== f.range.end ||
-        candidateHash !== h.candidate_sha256 || h.status !== "review_required" || h.review?.status !== "PENDING" ||
+        candidateHash !== h.candidate_sha256 || h.status !== "review_required" || h.review?.status !== "pending" ||
         !(h.parent_revision === null || (Number.isSafeInteger(h.parent_revision) && h.parent_revision >= 0)) ||
         !Number.isSafeInteger(h.candidate_revision) || h.candidate_revision < 1 ||
         typeof h.review.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(h.review.id) ||
@@ -611,7 +611,7 @@ async function decideCandidate(decision) {
       });
       if (d.transfer_id !== result.handoff_transfer_id || d.decision !== decision || d.original_sha256 !== source.sha256 ||
           d.candidate_sha256 !== result.candidate_sha256 || d.source_revision !== source.revision ||
-          d.review?.id !== result.handoff.review.id || d.review?.status !== (decision === "accept" ? "ACCEPTED" : "REJECTED") ||
+          d.review?.id !== result.handoff.review.id || d.review?.status !== (decision === "accept" ? "accepted" : "rejected") ||
           !sameReviewBinding(d.review.binding, result.handoff.review.binding))
         throw new Error("远端审阅确认与候选绑定不一致；保留原文。");
     }

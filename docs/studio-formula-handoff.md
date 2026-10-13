@@ -52,7 +52,8 @@ text and checkpoint. Studio checks candidate text/hash, typed Diff/evidence and
 fingerprint, plus the complete review tuple: `input_hash`, `parent_revision`,
 `candidate_hash`, `current_revision`. A new formula can have null Math parent
 revision; candidate/current revision must be positive and match the tuple.
-Source editor revision is independent of Math revisions. Optional flat tuple
+Source editor revision is independent of Math revisions. Native review DTO statuses are strictly lowercase `pending`, `accepted`, and
+`rejected`; uppercase aliases are rejected. Optional flat tuple
 mirrors in the review DTO must agree with its nested binding.
 
 Only the bound formula range is replaced in a separate candidate document

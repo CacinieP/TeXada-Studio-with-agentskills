@@ -145,7 +145,7 @@ def validate_response(envelope, response):
     review = response.get("review")
     expected = {"input_hash": envelope["input_sha256"], "parent_revision": response["parent_revision"],
                 "candidate_hash": response["candidate_sha256"], "current_revision": response["candidate_revision"]}
-    validate_review(review, expected, status="PENDING")
+    validate_review(review, expected, status="pending")
     return response
 
 
@@ -222,7 +222,7 @@ class FormulaHandoffClient:
                 validate_response(expected, record["response"])
             if record.get("decision_response") is not None:
                 validate_review(record["decision_response"], record["response"]["review"]["binding"],
-                                status="ACCEPTED" if record["decision"] == "accept" else "REJECTED",
+                                status="accepted" if record["decision"] == "accept" else "rejected",
                                 review_id=record["response"]["review"]["id"])
             return record
         except (ValueError, KeyError, TypeError, UnicodeDecodeError):
@@ -297,7 +297,7 @@ class FormulaHandoffClient:
         return {"fixed_content": candidate, "original_sha256": envelope["document_sha256"],
                 "candidate_sha256": sha256(candidate), "source_revision": envelope["expected_revision"],
                 "handoff_transfer_id": envelope["transfer_id"], "handoff": response,
-                "requires_review": True, "adoption_status": record.get("decision_response", {}).get("status") if record.get("decision_response") else "PENDING",
+                "requires_review": True, "adoption_status": record.get("decision_response", {}).get("status") if record.get("decision_response") else "pending",
                 "configured_model": CHECKPOINT, "model": CHECKPOINT if model_calls else None, "model_calls": model_calls, "provider": "configured-Math-Agent",
                 "skill_mode": "handoff", "elapsed_seconds": None, "problems_after": [],
                 "compile_before": {"ok": False, "status": "NOT_CHECKED", "png": None},
@@ -330,7 +330,7 @@ class FormulaHandoffClient:
                 payload = {"decision": body["decision"], "binding": binding}
                 review_id = response["review"]["id"]
                 decision_response = self._post("/api/reviews/" + urllib.parse.quote(review_id, safe="") + "/decision", payload)
-                validate_review(decision_response, binding, status="ACCEPTED" if body["decision"] == "accept" else "REJECTED", review_id=review_id)
+                validate_review(decision_response, binding, status="accepted" if body["decision"] == "accept" else "rejected", review_id=review_id)
                 record.update(decision=body["decision"], decision_response=decision_response)
                 self._write(transfer_id, record)
             proposal = self._proposal(record)

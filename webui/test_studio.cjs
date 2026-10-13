@@ -166,7 +166,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
       handoff:{schema_version:1,transfer_id:body.transfer_id,document_sha256:hash(body.content),input_sha256:hash(original),
                source_range:range, original_latex:original, expected_revision:body.revision, checkpoint:'MiniCPM-V-4.7-1B',
                status:'review_required',candidate,candidate_sha256:hash(candidate),parent_revision:null,candidate_revision:1,
-               review:{id:'test-review',status:'PENDING',binding}}};
+               review:{id:'test-review',status:'pending',binding}}};
   }
   run('handoffEnabled=true');
   context.testEditor.setValue('😀 prefix $x+$ suffix');
@@ -179,7 +179,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     }
     decisionCalls++;
     return {transfer_id:handoffProposal.handoff_transfer_id,decision:body.decision,
-            review:{...handoffProposal.handoff.review,status:body.decision==='accept'?'ACCEPTED':'REJECTED'},
+            review:{...handoffProposal.handoff.review,status:body.decision==='accept'?'accepted':'rejected'},
             original_sha256:handoffProposal.original_sha256,candidate_sha256:handoffProposal.candidate_sha256,
             source_revision:handoffProposal.source_revision};
   };
@@ -217,7 +217,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.deferredDecision=(url,options)=>new Promise(resolve=>{
     const body=JSON.parse(options.body);
     finishDecision=()=>resolve({transfer_id:handoffProposal.handoff_transfer_id,decision:body.decision,
-      review:{...handoffProposal.handoff.review,status:'ACCEPTED'},original_sha256:handoffProposal.original_sha256,
+      review:{...handoffProposal.handoff.review,status:'accepted'},original_sha256:handoffProposal.original_sha256,
       candidate_sha256:handoffProposal.candidate_sha256,source_revision:handoffProposal.source_revision});
     notifyDecision();
   });
