@@ -1,6 +1,8 @@
 """Configuration and local-document regression tests; no model/compiler required."""
 
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +14,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from test_static_assets import ROOT, studio
+from docforensics import vlm
 
 
 class AppTest(unittest.TestCase):
@@ -43,6 +46,18 @@ class AppTest(unittest.TestCase):
 
     def test_repo_resolves_from_source(self):
         self.assertEqual(Path(studio.REPO), ROOT)
+
+    def test_default_model_is_minicpm_and_explicit_environment_override_still_works(self):
+        for extra, model, base in (({}, "MiniCPM-V-4.7-1B", "http://127.0.0.1:11434"),
+                                   ({"VLM_MODEL": "other-model", "VLM_BASE_URL": "http://localhost:9000/v1"},
+                                    "other-model", "http://localhost:9000/v1")):
+            with self.subTest(model=model), patch.dict(os.environ, {"DEMO_TOKEN": "test-only-demo-token", **extra}, clear=True):
+                spec = importlib.util.spec_from_file_location("default_profile_app", ROOT / "webui/app.py")
+                configured = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(configured)
+            self.assertEqual(configured.VLM_MODEL, model)
+            self.assertEqual(configured.VLM_BASE_URL, base)
+            self.assertEqual(configured.PROVIDER.model, model)
 
     def test_upload_overlays_sample_without_modifying_it(self):
         response = self.client.post("/api/studio/upload", params=self.auth,
@@ -90,12 +105,33 @@ class AppTest(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("pdftoppm", result["log"])
 
-    def test_nodeinfo_without_gpu_or_ollama(self):
-        with patch.object(studio.subprocess, "run", side_effect=FileNotFoundError()):
+    def test_nodeinfo_reports_platform_and_model_without_subprocess_probes(self):
+        for system, machine in (("Darwin", "arm64"), ("Windows", "AMD64")):
+            with self.subTest(system=system), \
+                    patch.object(studio.platform, "node", return_value="test-host"), \
+                    patch.object(studio.platform, "system", return_value=system), \
+                    patch.object(studio.platform, "release", return_value="test-release"), \
+                    patch.object(studio.platform, "machine", return_value=machine), \
+                    patch.object(studio.subprocess, "run", side_effect=AssertionError("unexpected probe")) as run, \
+                    patch.object(studio.subprocess, "Popen", side_effect=AssertionError("unexpected probe")) as popen:
+                response = self.client.get("/api/nodeinfo", params=self.auth)
+            self.assertEqual(response.status_code, 200)
+            info = response.json()
+            self.assertEqual(info["host"], "test-host")
+            self.assertEqual(info["platform"], f"{system} test-release {machine}")
+            self.assertEqual(info["configured_model"], studio.VLM_MODEL)
+            self.assertEqual(info["model"], studio.VLM_MODEL)
+            self.assertTrue(info["python"])
+            self.assertEqual([info["gpu"], info["mem"], info["models"]], ["", "", ""])
+            run.assert_not_called()
+            popen.assert_not_called()
+        with patch.object(studio.subprocess, "run", side_effect=AssertionError("unexpected probe")) as run, \
+                patch.object(studio.subprocess, "Popen", side_effect=AssertionError("unexpected probe")) as popen:
             response = self.client.get("/api/nodeinfo", params=self.auth)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["gpu"], "")
-        self.assertEqual(response.json()["model"], studio.VLM_MODEL)
+        self.assertTrue(response.json()["platform"])
+        run.assert_not_called()
+        popen.assert_not_called()
 
     def test_pipeline_uses_current_python_no_shell_and_keeps_exit_code(self):
         model = "model name; this must stay one argument"
@@ -112,7 +148,113 @@ class AppTest(unittest.TestCase):
             self.assertTrue(studio._run["done"])
             self.assertEqual(studio._run["code"], 7)
 
+    def test_cloud_endpoint_and_key_are_shared_by_studio_and_pipeline(self):
+        model, base, key = "MiniCPM-V-4.7-1B", "https://api.modelbest.cn/v1", "test-only-api-key"
+        process = SimpleNamespace(stdout=[], returncode=0, wait=lambda: 0)
+        with patch.multiple(studio, VLM_MODEL=model, VLM_BASE_URL=base), \
+                patch.dict(os.environ, {"VLM_API_KEY": key}), \
+                patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
+                patch.object(studio.threading, "Thread"):
+            provider = studio._new_provider()
+            studio._run_pipeline(fresh=False)
+        command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("--vlm") + 1], base)
+        self.assertEqual(command[command.index("--vlm-model") + 1], model)
+        self.assertNotIn(key, " ".join(command))
+        self.assertEqual(popen.call_args.kwargs["env"]["VLM_API_KEY"], key)
+        with patch.object(vlm.urllib.request, "urlopen", return_value=io.BytesIO(
+                b'{"choices":[{"message":{"content":"{\\"latex\\":\\"a_1\\"}"}}]}')) as network:
+            self.assertEqual(provider.repair_formula({"data": {"latex": "a_"}}), "a_1")
+        request = network.call_args.args[0]
+        self.assertEqual(request.full_url, base + "/chat/completions")
+        self.assertEqual(request.get_header("Authorization"), "Bearer " + key)
+        self.assertEqual(json.loads(request.data)["chat_template_kwargs"], {"enable_thinking": False})
+
+
+class MiniCPMProfileTest(unittest.TestCase):
+    def test_example_env_preserves_exported_credentials_and_profile_endpoint_default(self):
+        check = (
+            "import json, os; print(json.dumps({"
+            "'key_preserved': os.environ['VLM_API_KEY'] == 'test-only-api-key',"
+            "'token_preserved': os.environ['DEMO_TOKEN'] == 'test-only-demo-token',"
+            "'base_unset': 'VLM_BASE_URL' not in os.environ}))")
+        environment = {"PATH": os.environ["PATH"], "VLM_API_KEY": "test-only-api-key",
+                       "DEMO_TOKEN": "test-only-demo-token", "ENV_EXAMPLE": str(ROOT / ".env.example"),
+                       "CHECK_PYTHON": sys.executable, "CHECK_CODE": check}
+        result = subprocess.run(["sh", "-c", 'set -a; . "$ENV_EXAMPLE"; set +a; "$CHECK_PYTHON" -c "$CHECK_CODE"'],
+                                env=environment, text=True, capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout),
+                         {"key_preserved": True, "token_preserved": True, "base_unset": True})
+        self.assertNotIn("test-only-api-key", result.stdout + result.stderr)
+        self.assertNotIn("test-only-demo-token", result.stdout + result.stderr)
+
+    def test_launcher_uses_one_model_and_maps_only_environment_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            capture = Path(directory) / "capture.py"
+            capture.write_text(
+                "import json, os, sys\n"
+                "print(json.dumps({'args': sys.argv[1:], 'model': os.environ['VLM_MODEL'], "
+                "'base': os.environ['VLM_BASE_URL'], 'key_matches': os.environ['VLM_API_KEY'] "
+                "== os.environ['EXPECTED_TEST_KEY'], 'skill': os.environ['SKILL_MODE']}))\n")
+            fake_python = Path(directory) / "python"
+            fake_python.write_text('#!/bin/sh\nexec "$CHECK_PYTHON" "$CHECK_CAPTURE" "$@"\n')
+            fake_python.chmod(0o700)
+            launcher = str(ROOT / "scripts/run-minicpm-v47-studio.sh")
+            for extra, key, expected_base in (
+                ({"TEXADA_OPENAI_API_KEY": "shared-test-key"}, "shared-test-key", "https://api.modelbest.cn/v1"),
+                ({"VLM_API_KEY": "studio-test-key", "TEXADA_OPENAI_API_KEY": "shared-test-key", "VLM_BASE_URL": "http://localhost:9000/v1"},
+                 "studio-test-key", "http://localhost:9000/v1"),
+            ):
+                environment = {"PATH": os.environ["PATH"], "DEMO_TOKEN": "test-only-demo-token",
+                               "CHECK_PYTHON": sys.executable, "CHECK_CAPTURE": str(capture),
+                               "TEXADA_STUDIO_PYTHON": str(fake_python), "VLM_MODEL": "legacy-model",
+                               "EXPECTED_TEST_KEY": key, **extra}
+                result = subprocess.run([launcher, "--log-level", "warning"], env=environment,
+                                        text=True, capture_output=True, check=True)
+                output = json.loads(result.stdout)
+                self.assertEqual(output["model"], "MiniCPM-V-4.7-1B")
+                self.assertEqual(output["base"], expected_base)
+                self.assertTrue(output["key_matches"])
+                self.assertEqual(output["skill"], "on")
+                self.assertEqual(output["args"][:3], ["-m", "uvicorn", "app:app"])
+                self.assertIn("127.0.0.1", output["args"])
+                self.assertEqual(output["args"][-2:], ["--log-level", "warning"])
+                self.assertNotIn(key, result.stdout + result.stderr)
+
+    def test_launcher_requires_key_and_ui_token_before_start(self):
+        launcher = str(ROOT / "scripts/run-minicpm-v47-studio.sh")
+        for extra, message in (({}, "VLM_API_KEY"), ({"VLM_API_KEY": "test-only-key"}, "DEMO_TOKEN")):
+            with self.subTest(message=message):
+                result = subprocess.run([launcher], env={"PATH": os.environ["PATH"], **extra},
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("test-only-key", result.stderr)
+
 class VerificationFailureTest(unittest.TestCase):
+    def test_invalid_cloud_response_cannot_reach_checker_or_change_document(self):
+        content = 'Original $a_$ text.\r\n'
+        key = "test-only-api-key"
+        cases = [('{"latex":"x","latex":"a_1"}', {}),
+                 ('{"latex":"a_1"}', {"finish_reason": "length"}),
+                 ('{"latex":"test\\u002donly\\u002dapi\\u002dkey"}', {})]
+        for candidate, extra in cases:
+            body = {"choices": [{"message": {"content": candidate}, **extra}]}
+            with self.subTest(candidate=candidate), patch.dict(os.environ, {"VLM_API_KEY": key}):
+                provider = vlm.OpenAICompatibleProvider("https://api.modelbest.cn/v1", "MiniCPM-V-4.7-1B")
+            problem = {"id": "formula-1", "line": 1, "latex": "a_", "status": "RETRY"}
+            events = []
+            with patch.object(studio, '_formula_problems', return_value=[problem]), \
+                 patch.object(studio, '_verify_formula') as verify, \
+                 patch.object(vlm.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(body).encode())) as network:
+                fixed, edits = studio._apply_fixes(content, [], provider=provider,
+                    emit=lambda action, **fields: events.append({"action": action, **fields}))
+            verify.assert_not_called()
+            self.assertEqual(network.call_count, 2)
+            self.assertEqual(fixed, content)
+            self.assertEqual(edits, [])
+            self.assertNotIn(key, json.dumps(events))
+
     def test_verifier_failure_is_not_green(self):
         failures = [SimpleNamespace(returncode=1, stdout='', stderr='crash'),
                     SimpleNamespace(returncode=0, stdout='not json', stderr=''),

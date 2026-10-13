@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,8 @@ if not TOKEN.strip():
     raise RuntimeError("DEMO_TOKEN must be set to a non-empty secret before starting the server")
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
-VLM_MODEL = os.environ.get("VLM_MODEL", "qwen3.8:27b-q4_K_M")
+VLM_MODEL = os.environ.get("VLM_MODEL", "MiniCPM-V-4.7-1B")
+VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://127.0.0.1:11434")
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
 app = FastAPI(title="TeXada Studio with Agent Skills demo")
@@ -82,7 +84,7 @@ def _run_pipeline(fresh: bool):
     if fresh and os.path.exists(STATE):
         shutil.rmtree(STATE)
     command = [sys.executable, "-m", "docforensics", "run", "samples", "--state", STATE,
-               "--vlm", "http://127.0.0.1:11434", "--vlm-model", VLM_MODEL]
+               "--vlm", VLM_BASE_URL, "--vlm-model", VLM_MODEL]
     env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
     try:
         p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
@@ -188,19 +190,13 @@ def index():
 @app.get("/api/nodeinfo")
 def nodeinfo(token: str = Query("")):
     _guard(token)
-    def output(command):
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
-            return result.stdout.strip() if result.returncode == 0 else ""
-        except (OSError, subprocess.SubprocessError):
-            return ""
-
-    gpu = output(["nvidia-smi", "--query-gpu=name,memory.used,memory.total", "--format=csv,noheader"])
-    mem_lines = output(["free", "-h"]).splitlines()
-    mem = mem_lines[1] if len(mem_lines) > 1 else ""
-    models = output(["ollama", "list"])
-    return {"gpu": gpu, "mem": mem, "models": models, "host": os.uname().nodename,
-            "model": VLM_MODEL}
+    runtime_platform = " ".join(part for part in (
+        platform.system(), platform.release(), platform.machine()) if part)
+    return {"host": platform.node(), "platform": runtime_platform,
+            "python": platform.python_version(), "configured_model": VLM_MODEL,
+            "model": VLM_MODEL,
+            # Empty legacy fields keep older clients compatible without probing hardware.
+            "gpu": "", "mem": "", "models": ""}
 
 
 @app.post("/api/run")
@@ -267,7 +263,7 @@ import uuid as _uuid
 from decimal import Decimal, localcontext
 
 _sys.path.insert(0, os.path.join(REPO, "harness"))
-from docforensics.vlm import OllamaProvider  # noqa: E402
+from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.path.join(REPO, "state", "studio")
@@ -277,7 +273,7 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
 def _new_provider():
-    return OllamaProvider("http://127.0.0.1:11434", VLM_MODEL, skill_mode=SKILL_MODE)
+    return OpenAICompatibleProvider(VLM_BASE_URL, VLM_MODEL, skill_mode=SKILL_MODE)
 
 
 PROVIDER = _new_provider()
@@ -508,7 +504,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
         latex = p["latex"]
         fixed, ok = None, False
         for attempt in (1, 2):
-            log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 本地模型文本修复（第 {attempt} 次）")
+            log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 模型文本修复（第 {attempt} 次）")
             emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex)
             cand = provider.repair_formula({"id": p["id"], "data": {"latex": latex}})
             provider_trace = getattr(provider, "last_trace", {})
@@ -673,7 +669,7 @@ def _studio_job(name: str, content: str, job_id: str):
                          "problems_after": _analyze(fixed),
                          "model": VLM_MODEL if model_calls else None,
                          "configured_model": VLM_MODEL, "model_calls": model_calls,
-                         "provider": "local-model-text" if model_calls else "deterministic-checks",
+                         "provider": provider.name if model_calls else "deterministic-checks",
                          "skill_mode": SKILL_MODE, "trace": trace, "job_id": job_id,
                          "elapsed_seconds": round(time.monotonic() - started, 2),
                          "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
