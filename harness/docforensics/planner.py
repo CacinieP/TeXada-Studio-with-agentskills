@@ -162,7 +162,7 @@ class ConstrainedPlanner:
                              "seconds": self.budget.seconds},
                   "executed": self.executed, "rejected": self.rejected,
                   "elapsed_seconds": round(self.clock() - self.started, 6),
-                  "nodes": [{k: n[k] for k in ("id", "kind", "state", "attempts", "human_reason") if k in n}
+                  "nodes": [{k: n[k] for k in ("id", "kind", "line", "state", "attempts", "human_reason") if k in n}
                             for n in self.nodes], "requires_review": True}
         self.emit("PLANNER_END", **result)
         return self.edits, result

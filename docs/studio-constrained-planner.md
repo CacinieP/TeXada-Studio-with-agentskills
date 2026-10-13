@@ -22,6 +22,8 @@ most two attempts. Environment failures mask repairs and request human help.
 Simple numeric total candidates come from the existing Decimal checker, without
 a model repair request. A table containing an unsupported problem goes to human
 review rather than partly treating uncertain cells as known source values.
+The result derives remaining problems from these host outcomes rather than
+re-running unchosen checks after a refusal or budget exhaustion.
 Candidate edits are bound to the source offsets and original text, assembled in
 a separate diff buffer, and never written to the original source. Syntax
 acceptance still does not establish mathematical meaning or human adoption.

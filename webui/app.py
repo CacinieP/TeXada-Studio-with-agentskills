@@ -645,6 +645,15 @@ def _apply_planned_fixes(content, log, *, provider, emit):
     return fixed, public_edits, summary
 
 
+def _planned_problems(summary):
+    # Planner candidates have already been checked. Re-running the whole source
+    # here would execute unchosen checks after a refusal or an exhausted budget.
+    return [{"id": node["id"], "type": "formula" if node["kind"] == "formula" else "table_total",
+             "line": node.get("line", 1), "status": "NEEDS_HUMAN",
+             "reason": node.get("human_reason", "planner_unresolved")}
+            for node in summary["nodes"] if node["state"] not in {"ok", "candidate"}]
+
+
 def _job_path(job_id):
     if not isinstance(job_id, str) or not _re.fullmatch(r"[a-f0-9]{8,32}", job_id):
         raise HTTPException(status_code=400, detail="bad job id")
@@ -745,7 +754,7 @@ def _studio_job(name: str, content: str, job_id: str):
         log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
-                         "problems_after": _analyze(fixed),
+                         "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
                          "model": VLM_MODEL if model_calls else None,
                          "configured_model": VLM_MODEL, "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",

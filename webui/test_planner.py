@@ -140,6 +140,23 @@ class PlannerTest(unittest.TestCase):
             self.assertTrue(any(e["action"] == "PLANNER_REJECTED" for e in result["trace"]))
             self.assertEqual(studio._read_job(result["job_id"])["result"], result)
 
+    def test_job_never_runs_unchosen_checks_after_budget_rejection(self):
+        provider = ScriptedProvider()
+        provider.plan_action = lambda snapshot, **kwargs: {"action": "run-code", "node_id": "f-001-1", "state_rev": 0, "params": {}}
+        job_id = "9" * 32
+        with tempfile.TemporaryDirectory() as directory, patch.object(studio, "STUDIO_STATE", directory), \
+                patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None, "planner_mode": True}}, clear=True), \
+                patch.object(studio, "_new_provider", return_value=provider), \
+                patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}), \
+                patch.object(studio, "_verify_formula", side_effect=AssertionError("unchosen checker must not run")) as check:
+            studio._studio_job("input.tex", "$x+$", job_id)
+            result = studio._read_job(job_id)["result"]
+        check.assert_not_called()
+        self.assertEqual(result["fixed_content"], "$x+$")
+        self.assertEqual(result["planner"]["rejected"], 12)
+        self.assertEqual(result["problems_after"][0]["line"], 1)
+        self.assertEqual(result["problems_after"][0]["status"], "NEEDS_HUMAN")
+
     def test_defaults_off_and_rejects_truthy_strings(self):
         with TestClient(studio.app) as client, patch.object(studio, "_save_job"), \
                 patch.object(studio.threading, "Thread"), patch.dict(studio._jobs, clear=True):
