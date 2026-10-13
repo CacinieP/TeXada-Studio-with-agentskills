@@ -35,7 +35,8 @@ class PlannerBudget:
 
 
 class ConstrainedPlanner:
-    def __init__(self, content, nodes, provider, check, repair, emit=None, *, budget=None, clock=time.monotonic):
+    def __init__(self, content, nodes, provider, check, repair, emit=None, *, budget=None, clock=time.monotonic,
+                 skill_selection=False, catalog=None, skill_root=None, use_model_planner=True):
         self.content_sha256 = hashlib.sha256(content.encode()).hexdigest()
         self.nodes = copy.deepcopy(nodes)
         if len({node["id"] for node in self.nodes}) != len(self.nodes):
@@ -46,8 +47,11 @@ class ConstrainedPlanner:
         self.clock, self.started = clock, clock()
         self.state_rev, self.steps, self.model_calls = 0, 0, 0
         self.edits, self.rejected, self.executed = [], 0, 0
+        self.skill_selection, self.catalog, self.skill_root = skill_selection, catalog or {}, skill_root
+        self.use_model_planner = use_model_planner
+        self.selection_calls, self.loaded_skills, self.selection_rejections = 0, [], 0
         for node in self.nodes:
-            node.update(state="pending", attempts=0)
+            node.update(state="pending", attempts=0, selection="pending" if skill_selection else "off")
 
     def remaining_seconds(self):
         return max(0.0, self.budget.seconds - (self.clock() - self.started))
@@ -60,6 +64,49 @@ class ConstrainedPlanner:
         if node["state"] in {"retry", "needs_env", "needs_human"}:
             return ["request-human"]
         return []
+
+    def select_for_node(self, node):
+        from .skill_selection import load_selected_skill, validate_selection
+        applicable = [cap for cap in self.catalog.values() if cap.applicable(node)]
+        if not applicable:
+            self.selection_rejections += 1
+            node.update(selection="rejected", state="human", human_reason="no_applicable_skill")
+            self.emit("SKILL_SELECTION_REJECTED", node_id=node["id"], reason="no_applicable_skill", state_rev=self.state_rev)
+            self.emit("HUMAN_REQUESTED", node_id=node["id"], reason="no_applicable_skill", state_rev=self.state_rev)
+            self.state_rev += 1
+            return
+        self.steps += 1
+        self.model_calls += 1
+        self.selection_calls += 1
+        snapshot = {"state_rev": self.state_rev, "node": {"id": node["id"], "kind": node["kind"], "line": node.get("line")},
+                    "catalog": [cap.public() for cap in self.catalog.values()]}
+        proposal = self.provider.select_skill(snapshot, timeout=min(120.0, self.remaining_seconds()))
+        self.emit("SKILL_SELECTION_PROPOSED", node_id=node["id"],
+                  skill_id=proposal.get("skill_id") if isinstance(proposal, dict) and isinstance(proposal.get("skill_id"), str) and len(proposal["skill_id"]) <= 64 else None,
+                  state_rev=self.state_rev, provider_trace=copy.deepcopy(getattr(self.provider, "last_trace", {})))
+        capability, reason = validate_selection(proposal, node, self.state_rev, self.catalog)
+        if self.remaining_seconds() <= 0:
+            reason = "selection_budget_exhausted"
+        if reason is None:
+            self.emit("SKILL_SELECTED", node_id=node["id"], skill_id=capability.skill_id,
+                      version=capability.version, metadata_sha256=capability.metadata_sha256, state_rev=self.state_rev)
+            try:
+                loaded = load_selected_skill(capability, skill_root=self.skill_root)
+            except (OSError, ValueError):
+                reason = "skill_load_rejected"
+            else:
+                node.update(selection="loaded", loaded_skill=loaded, capability=capability)
+                entry = {"node_id": node["id"], "skill_id": loaded.name, "version": capability.version,
+                         "capability": capability.capability, "metadata_sha256": capability.metadata_sha256,
+                         "body_sha256": loaded.sha256, "checker_sha256": loaded.checker_sha256}
+                self.loaded_skills.append(entry)
+                self.emit("SKILL_LOADED", **entry, state_rev=self.state_rev)
+        if reason is not None:
+            self.selection_rejections += 1
+            node.update(selection="rejected", state="human", human_reason=reason)
+            self.emit("SKILL_SELECTION_REJECTED", node_id=node["id"], reason=reason, state_rev=self.state_rev)
+            self.emit("HUMAN_REQUESTED", node_id=node["id"], reason=reason, state_rev=self.state_rev)
+        self.state_rev += 1
 
     def snapshot(self):
         return {"schema_version": 1, "state_rev": self.state_rev,
@@ -87,6 +134,10 @@ class ConstrainedPlanner:
         node = next((node for node in self.nodes if node["id"] == node_id), None)
         if node is None:
             return None, "unknown_node"
+        if self.skill_selection and node["selection"] != "loaded":
+            return None, "skill_not_loaded"
+        if self.skill_selection and action not in node["capability"].supported_actions:
+            return None, "skill_action_not_supported"
         if action not in self.mask(node):
             return None, "action_masked"
         if not isinstance(params, dict):
@@ -165,21 +216,33 @@ class ConstrainedPlanner:
             if (self.steps >= self.budget.max_steps or self.model_calls >= self.budget.max_model_calls
                     or self.remaining_seconds() <= 0):
                 break
+            selection_pending = next((n for n in self.nodes if self.mask(n) and n["selection"] == "pending"), None)
+            if selection_pending is not None:
+                self.select_for_node(selection_pending)
+                continue
             self.steps += 1
-            self.model_calls += 1  # Reserve exactly one planner HTTP request.
-            proposal = self.provider.plan_action(self.snapshot(), timeout=min(120.0, self.remaining_seconds()))
-            self.emit("PLANNER_RESULT", provider_trace=copy.deepcopy(getattr(self.provider, "last_trace", {})),
-                      state_rev=self.state_rev)
+            if self.use_model_planner:
+                self.model_calls += 1  # Reserve exactly one planner HTTP request.
+                proposal = self.provider.plan_action(self.snapshot(), timeout=min(120.0, self.remaining_seconds()))
+                self.emit("PLANNER_RESULT", provider_trace=copy.deepcopy(getattr(self.provider, "last_trace", {})),
+                          state_rev=self.state_rev)
+            else:
+                node = next(n for n in self.nodes if self.mask(n))
+                action = self.mask(node)[0]
+                proposal = {"action": action, "node_id": node["id"], "state_rev": self.state_rev,
+                            "params": {"reason": "fixed_host_unresolved"} if action == "request-human" else {}}
             self.execute(proposal)
         unresolved = [n for n in self.nodes if n["state"] not in {"ok", "candidate", "human"}]
         for node in unresolved:
             node.update(state="human", human_reason="planner_budget_or_unresolved")
             self.emit("HUMAN_REQUESTED", node_id=node["id"], reason="planner_budget_or_unresolved", state_rev=self.state_rev)
-        result = {"schema_version": 1, "mode": "constrained-planner", "state_rev": self.state_rev,
+        result = {"schema_version": 1, "mode": "constrained-planner" if self.use_model_planner else "fixed-skill-selection", "state_rev": self.state_rev,
                   "steps": self.steps, "reserved_model_calls": self.model_calls,
                   "budget": {"max_steps": self.budget.max_steps, "max_model_calls": self.budget.max_model_calls,
                              "seconds": self.budget.seconds},
                   "executed": self.executed, "rejected": self.rejected,
+                  "skill_selection": self.skill_selection, "selection_calls": self.selection_calls,
+                  "selection_rejections": self.selection_rejections, "loaded_skills": self.loaded_skills,
                   "elapsed_seconds": round(self.clock() - self.started, 6),
                   "nodes": [{k: n[k] for k in ("id", "kind", "line", "state", "attempts", "human_reason") if k in n}
                             for n in self.nodes], "requires_review": True}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "skill_id": "doc-table-audit",
+  "version": "1.0.0",
+  "capability": "simple_tabular_totals",
+  "node_kind": "table",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "document_text"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "document_text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 262144
+      }
+    }
+  },
+  "supported_actions": [
+    "check-table",
+    "propose-repair",
+    "request-human"
+  ]
+}

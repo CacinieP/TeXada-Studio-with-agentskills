@@ -40,3 +40,5 @@
 每个主题保留一个主要说明，其他页面链接到它。新增结果另存运行目录；文档引用准确的输入和结果，不覆盖既有实验记录。
 
 - [Studio 受限 Agent 规划实验](studio-constrained-planner.md)：默认关闭、宿主预算与动作约束、成对离线/实时评测。
+
+- [Studio 公式/表格 Skill 选择实验](studio-skill-selection.md)：独立默认关闭的选择开关、能力 schema/version、先验证再加载与拒绝路径。

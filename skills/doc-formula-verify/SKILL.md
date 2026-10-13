@@ -1,5 +1,6 @@
 ---
 name: doc-formula-verify
+version: 1.0.0
 description: Check LaTeX formula syntax with SymPy and review repair candidates from an explicitly configured text model. Use when a LaTeX formula fails to parse or OCR-derived formula text needs syntax checks. Parsing does not validate mathematical meaning.
 ---
 
@@ -31,3 +32,5 @@ The bundled runtime uses fixed Python orchestration. In explicit `skill_mode=on`
 The provider records the loaded Skill hash, prompt hash, HTTP request count and a bounded response excerpt for each completed repair call. Request counts include failures such as timeouts and do not prove that inference completed. Checker acceptance is a syntax result, not user adoption or mathematical validation. CLI reuse additionally requires matching input and execution context; an interrupted call can retain a start event without a response.
 
 Studio extracts dollar-delimited text with a per-line regex, not a complete TeX parser; comments and verbatim text may also be considered formula candidates. Formula repair is text-only, and semantic review remains mandatory.
+
+Studio has an optional, default-off constrained planner and a separate, default-off Skill selection experiment. With selection enabled, the model sees capability metadata before any job-specific body loading; the host validates formula applicability and version before loading this body. Selection and loading have separate audit events. Python still owns revision validation, action masks, budgets, checker execution and candidate construction. The formula body can inform text repair, but does not grant code execution, OCR or semantic verification.

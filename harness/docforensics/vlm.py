@@ -221,11 +221,12 @@ class OpenAICompatibleProvider:
         skill_path = Path(skill_root or DEFAULT_SKILL_ROOT) / "doc-formula-verify" / "scripts" / "verify.py"
         self.checker_sha256 = file_sha256(skill_path)
 
-    def _system_prompt(self):
+    def _system_prompt(self, loaded_skill=None):
         prompt = FORMULA_SYSTEM_PROMPT
-        if self.skill:
+        skill = loaded_skill if loaded_skill is not None else self.skill
+        if skill:
             prompt += ("\n\nThe fixed host loaded these local Skill instructions:\n"
-                       '<loaded_skill name="doc-formula-verify">\n' + self.skill.instructions + "\n</loaded_skill>")
+                       '<loaded_skill name="doc-formula-verify">\n' + skill.instructions + "\n</loaded_skill>")
         if self.disable_thinking:
             prompt += _minicpm_json_contract()
         return prompt
@@ -282,7 +283,7 @@ class OpenAICompatibleProvider:
             raise _ResponseTooLarge()
         return json.loads(raw)
 
-    def repair_formula(self, node, *, timeout=120):
+    def repair_formula(self, node, *, timeout=120, loaded_skill=None):
         trace = self._new_trace("repair_formula")
         started = time.monotonic()
         try:
@@ -293,12 +294,21 @@ class OpenAICompatibleProvider:
             if not isinstance(latex, str) or not latex.strip():
                 trace["reason"] = "bad_input"
                 return None
-            if self.skill:
-                trace.update(skill_loaded=True, skill_id=self.skill.name, skill_name=self.skill.name,
-                             skill_sha256=self.skill.sha256)
+            skill = loaded_skill if loaded_skill is not None else self.skill
+            if skill:
+                if skill.name != "doc-formula-verify":
+                    trace["reason"] = "skill_not_applicable"
+                    return None
+                trace.update(skill_mode="selected" if loaded_skill is not None else self.skill_mode,
+                             skill_loaded=True, skill_id=skill.name, skill_name=skill.name,
+                             skill_sha256=skill.sha256)
             prompt = _canonical({"task": "repair_formula_syntax", "latex": latex})
             try:
-                response = self._chat(prompt) if timeout == 120 else self._chat(prompt, timeout=timeout)
+                if loaded_skill is not None:
+                    response = self._chat(prompt, system=self._system_prompt(loaded_skill),
+                                          examples=_minicpm_json_examples() if self.disable_thinking else [], timeout=timeout)
+                else:
+                    response = self._chat(prompt) if timeout == 120 else self._chat(prompt, timeout=timeout)
             except _ResponseTooLarge:
                 trace["reason"] = "response_too_large"
                 return None
@@ -427,6 +437,10 @@ class OpenAICompatibleProvider:
             return result
         finally:
             trace["elapsed_seconds"] = round(time.monotonic() - started, 6)
+
+    def select_skill(self, snapshot, *, timeout=120):
+        from .skill_selection import SKILL_SELECTION_SYSTEM
+        return self.structured_decision("select_skill", snapshot, SKILL_SELECTION_SYSTEM, timeout=timeout)
 
     def plan_action(self, snapshot, *, timeout=120):
         from .planner import PLANNER_SYSTEM
