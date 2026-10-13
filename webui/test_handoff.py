@@ -183,6 +183,16 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(result["review"]["status"], "accepted")
         self.assertEqual(len(self.math.requests), 2)
 
+    def test_budget_seconds_match_native_float_serialization(self):
+        envelope = build_envelope(self.body)
+        self.assertIs(type(envelope["budget"]["max_seconds"]), float)
+        response = copy.deepcopy(response_for(envelope))
+        response["budget"]["max_seconds"] = float(response["budget"]["max_seconds"])
+        self.assertEqual(validate_response(envelope, response), response)
+        response["budget"]["max_seconds"] = True
+        with self.assertRaisesRegex(HandoffError, "handoff_binding_mismatch"):
+            validate_response(envelope, response)
+
     def test_review_statuses_follow_native_lowercase_contract(self):
         envelope = build_envelope(self.body)
         response = response_for(envelope)

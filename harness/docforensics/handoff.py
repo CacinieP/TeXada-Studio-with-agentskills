@@ -106,7 +106,8 @@ def build_envelope(body):
             "input_sha256": sha256(original), "source_range": dict(source_range), "formula_id": formula_id,
             "expected_revision": revision, "original_latex": original, "requested_action": action,
             "allowed_scope": "syntax_repair" if action == "repair" else "completion_prefix",
-            "checkpoint": CHECKPOINT, "budget": {"max_steps": 3, "max_seconds": 90, "max_tokens": 2048},
+            # Match the native TransferBudget float serialization without relaxing bindings.
+            "checkpoint": CHECKPOINT, "budget": {"max_steps": 3, "max_seconds": 90.0, "max_tokens": 2048},
             "requires_review": True, "evidence": []}
 
 
