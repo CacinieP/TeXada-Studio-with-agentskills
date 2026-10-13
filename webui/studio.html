@@ -111,6 +111,10 @@
       <label class="hint"><input type="checkbox" id="plannerMode"> 受限 Agent 规划（默认关闭）</label>
       <div class="hint">最多 12 步 / 12 次模型请求；候选仍需人工采用。</div>
       <label class="hint"><input type="checkbox" id="skillSelection"> 模型选择公式/表格 Skill（默认关闭）</label>
+      <h4 style="margin-top:12px">单公式交接 · 实验</h4>
+      <button class="act ghost" id="btnHandoff" disabled>交接当前公式修复</button>
+      <button class="act ghost" id="btnHandoffComplete" disabled>交接当前公式续写</button>
+      <div class="hint" id="handoffHint">服务默认关闭；仅交接当前行内公式，不读取图像。</div>
       <h4 style="margin-top:12px">工作流与 Skills</h4>
       <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>工作流说明 · 尚未接入 OCR</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
@@ -152,6 +156,7 @@
       <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
       <div class="panel"><h4>修复候选</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。修复后请查看对比，再决定是否采用。</div>
         <button class="act" id="btnAccept" disabled>采用候选到编辑器</button>
+        <button class="act ghost" id="btnReject" disabled>拒绝候选并保留原文</button>
         <button class="act ghost" id="btnReport" disabled style="margin-top:8px">导出质检报告</button></div>
       <div class="panel"><h4>编译 · Tectonic</h4><div id="compile" class="kv hint">修复时自动编译对比</div></div>
       <div class="panel"><h4>预览 · Preview</h4><div id="preview" class="hint">修复后显示渲染页面</div></div>
@@ -282,6 +287,9 @@ require(["vs/editor/editor.main"], () => {
     value: "", language: "latex", theme: "texada-blue", automaticLayout: true,
     fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: true, scrollBeyondLastLinePercent: 0, renderWhitespace: "none", verticalScrollbarSize: 10
   });
+  editor.onDidChangeModelContent(() => {
+    if (lastCandidateSource && !sourceMatches(lastCandidateSource)) invalidateCandidate("原文已编辑，候选已过期；请重新生成。");
+  });
   loadFile(P.get("file") || "report-01.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
 });
 
@@ -293,12 +301,12 @@ async function loadFiles() {
     `<div class="file${f === curName ? " active" : ""}" onclick="loadFile('${f}')">${f}</div>`).join("");
 }
 
-let fileEpoch = 0, previewEpoch = 0, lastResult = null;
+let fileEpoch = 0, previewEpoch = 0, lastResult = null, lastCandidateSource = null, handoffEnabled = false;
 async function loadFile(name) {
   if (busy) return;
   const epoch = ++fileEpoch;
-  ++previewEpoch; lastResult = null; lastPreviewTag = null;
-  $("btnAccept").disabled = true; $("btnReport").disabled = true;
+  ++previewEpoch; lastResult = null; lastCandidateSource = null; lastPreviewTag = null;
+  $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true;
   $("btnPdf").classList.add("hide");
   $("preview").textContent = "修复后显示候选预览";
   $("compile").textContent = "修复时自动编译对比";
@@ -467,10 +475,11 @@ $("btnFix").onclick = async () => {
   showCenter("edit"); ++previewEpoch;
   busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
   $("btnAnalyze").disabled = true; $("btnCompile").disabled = true;
-  $("btnAccept").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
-  preFix = editor.getValue();
+  $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
   $("joblog").innerHTML = "";
   try {
+    const source = await captureSource();
+    preFix = source.content; lastResult = null; lastCandidateSource = null;
     const d0 = await j(`/api/studio/fix?token=${T}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true, skill_selection: $("skillSelection").checked === true })
@@ -483,7 +492,7 @@ $("btnFix").onclick = async () => {
       $("joblog").scrollTop = 1e9;
       done = s.done;
       if (s.done && s.error) { alert("修复任务出错：" + s.error); return; }
-      if (s.done && s.result) applyResult(s.result);
+      if (s.done && s.result) await applyResult(s.result, source);
     }
   } catch (e) { alert(e.message); }
   finally {
@@ -500,15 +509,18 @@ function lineStyle(l) {
   return esc(l);
 }
 
-function applyResult(res) {
-  ++previewEpoch; lastResult = res;
-  $("btnAccept").disabled = false; $("btnReport").disabled = false;
+async function applyResult(res, source = null) {
+  source = source || await captureSource();
+  await validateCandidate(res, source);
+  if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
+  ++previewEpoch; lastResult = res; lastCandidateSource = source;
+  $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
     (humanRequests ? ` 规划器请求人工核对 ${humanRequests} 个节点；详情见报告事件。` : "");
   disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
-  origModel = monaco.editor.createModel(preFix, "latex");
+  origModel = monaco.editor.createModel(source.content, "latex");
   diffEditor = monaco.editor.createDiffEditor($("diff"), {
     theme: "texada-blue", automaticLayout: true, fontSize: 14,
     renderSideBySide: true, readOnly: true, minimap: { enabled: false }
@@ -519,8 +531,8 @@ function applyResult(res) {
   renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
   showCenter("diff");
   $("compile").innerHTML =
-    `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
-    `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
+    `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.status === "NOT_CHECKED" ? "未检查" : res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
+    `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
   if (res.compile_after.png) {
     $("preview").className = "";
     $("preview").innerHTML = `<img src="${res.compile_after.png}&token=${T}">`;
@@ -535,26 +547,151 @@ function applyResult(res) {
   }
 }
 
-$("btnAccept").onclick = () => {
-  if (!lastResult || busy) return;
-  editor.setValue(lastResult.fixed_content);
-  showCenter("edit");
-  $("btnAccept").disabled = true;
-  $("reviewHint").textContent = "已采用候选到编辑器，可继续编辑或导出。报告保留此次修复记录。";
-  analyze(); compilePreview(editor.getValue());
-};
+
+function sourceMatches(source) {
+  return !!editor && !!editor.getModel() && source.name === curName && source.epoch === fileEpoch &&
+    source.revision === editor.getModel().getVersionId() && source.content === editor.getValue();
+}
+async function sha256Text(text) {
+  if (!globalThis.crypto?.subtle) throw new Error("需要安全的本机浏览器环境进行候选校验。");
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function captureSource() {
+  const source = { name: curName, epoch: fileEpoch, revision: editor.getModel().getVersionId(), content: editor.getValue() };
+  source.sha256 = await sha256Text(source.content);
+  if (!sourceMatches(source)) throw new Error("原文或文件在校验时已变化。");
+  return Object.freeze(source);
+}
+function sameReviewBinding(a, b) {
+  const keys = ["input_hash", "parent_revision", "candidate_hash", "current_revision"];
+  return !!a && !!b && Object.keys(a).length === keys.length && Object.keys(b).length === keys.length &&
+    keys.every(key => Object.hasOwn(a, key) && Object.hasOwn(b, key) && a[key] === b[key]);
+}
+async function validateCandidate(res, source) {
+  if (!sourceMatches(source) || res.requires_review !== true || typeof res.fixed_content !== "string" ||
+      res.original_sha256 !== source.sha256 || await sha256Text(res.fixed_content) !== res.candidate_sha256)
+    throw new Error("候选与原文绑定不一致；保留原文。");
+  if (res.handoff) {
+    const h = res.handoff, f = source.formula;
+    const inputHash = f ? await sha256Text(f.original) : null;
+    const candidateHash = typeof h.candidate === "string" ? await sha256Text(h.candidate) : null;
+    const originalPoints = Array.from(source.content);
+    if (!f || h.schema_version !== 1 || h.transfer_id !== f.transfer_id || res.handoff_transfer_id !== f.transfer_id || h.checkpoint !== "MiniCPM-V-4.7-1B" ||
+        h.document_sha256 !== source.sha256 || h.input_sha256 !== inputHash || h.original_latex !== f.original ||
+        h.expected_revision !== source.revision || res.source_revision !== source.revision ||
+        h.source_range?.encoding !== "unicode-codepoints" || h.source_range.start !== f.range.start || h.source_range.end !== f.range.end ||
+        candidateHash !== h.candidate_sha256 || h.status !== "review_required" || h.review?.status !== "PENDING" ||
+        !(h.parent_revision === null || (Number.isSafeInteger(h.parent_revision) && h.parent_revision >= 0)) ||
+        !Number.isSafeInteger(h.candidate_revision) || h.candidate_revision < 1 ||
+        typeof h.review.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(h.review.id) ||
+        !sameReviewBinding(h.review.binding, {input_hash: inputHash, parent_revision: h.parent_revision,
+                                            candidate_hash: candidateHash, current_revision: h.candidate_revision}) ||
+        originalPoints.slice(0, f.range.start).join("") + h.candidate + originalPoints.slice(f.range.end).join("") !== res.fixed_content)
+      throw new Error("单公式交接的范围、版本或审阅绑定不一致。");
+  }
+  if (!sourceMatches(source)) throw new Error("原文在异步校验时已变化；保留原文。");
+}
+function invalidateCandidate(message) {
+  $("btnAccept").disabled = true; $("btnReject").disabled = true;
+  $("reviewHint").textContent = message;
+}
+async function decideCandidate(decision) {
+  const result = lastResult, source = lastCandidateSource;
+  if (!result || !source || busy || result.local_decision) return;
+  busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
+  $("btnAccept").disabled = true; $("btnReject").disabled = true;
+  try {
+    await validateCandidate(result, source);
+    if (modModel && modModel.getValue() !== result.fixed_content) throw new Error("候选视图已变化；请重新生成。");
+    if (result.handoff) {
+      const d = await j(`/api/studio/handoff/${result.handoff_transfer_id}/decision?token=${T}`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({decision, name:source.name, content:source.content, revision:source.revision})
+      });
+      if (d.transfer_id !== result.handoff_transfer_id || d.decision !== decision || d.original_sha256 !== source.sha256 ||
+          d.candidate_sha256 !== result.candidate_sha256 || d.source_revision !== source.revision ||
+          d.review?.id !== result.handoff.review.id || d.review?.status !== (decision === "accept" ? "ACCEPTED" : "REJECTED") ||
+          !sameReviewBinding(d.review.binding, result.handoff.review.binding))
+        throw new Error("远端审阅确认与候选绑定不一致；保留原文。");
+    }
+    await validateCandidate(result, source);
+    if (lastResult !== result || lastCandidateSource !== source || !sourceMatches(source))
+      throw new Error("请求期间原文或文件已变化；本地未采用候选。");
+    result.local_decision = decision; lastCandidateSource = null;
+    if (decision === "accept") {
+      editor.setValue(result.fixed_content);
+      showCenter("edit");
+      $("reviewHint").textContent = "已采用此版本候选到编辑器；原始文件仍保留，需自行导出。";
+      analyze(); compilePreview(editor.getValue());
+    } else {
+      showCenter("edit");
+      $("reviewHint").textContent = "已拒绝候选并保留原文。报告仍保留此次候选记录。";
+    }
+  } catch (error) {
+    invalidateCandidate("采用/拒绝未完成；原文保持不变。" + error.message);
+  } finally {
+    busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
+  }
+}
+$("btnAccept").onclick = () => decideCandidate("accept");
+$("btnReject").onclick = () => decideCandidate("reject");
+
+function formulaAtSelection(source) {
+  const model = editor.getModel(), selection = editor.getSelection(), position = editor.getPosition();
+  const from = model.getOffsetAt(selection.getStartPosition()), to = model.getOffsetAt(selection.getEndPosition());
+  const cursor = model.getOffsetAt(position);
+  const matches = [...source.content.matchAll(/(?<!\\)\$([^$\r\n]+)(?<!\\)\$/gu)];
+  const match = matches.find(m => { const start = m.index + 1, end = start + m[1].length;
+    return from === to ? start <= cursor && cursor <= end : from === start && to === end; });
+  if (!match) throw new Error("请将光标放在一个 $...$ 行内公式内，或只选择它的完整正文。");
+  const start = match.index + 1, end = start + match[1].length;
+  return {original: match[1], range: {start: Array.from(source.content.slice(0, start)).length,
+                                   end: Array.from(source.content.slice(0, end)).length, encoding:"unicode-codepoints"}};
+}
+async function requestFormulaHandoff(action) {
+  if (busy || !handoffEnabled) return;
+  busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
+  try {
+    const source = await captureSource();
+    const formula = {...formulaAtSelection(source), transfer_id: crypto.randomUUID()};
+    const boundSource = Object.freeze({...source, formula});
+    if (!sourceMatches(boundSource)) throw new Error("原文或文件已变化。");
+    preFix = source.content; lastCandidateSource = null; lastResult = null;
+    invalidateCandidate("正在交接单公式；原文保持不变。");
+    const result = await j(`/api/studio/handoff?token=${T}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name:source.name, content:source.content, revision:source.revision,
+                            source_range:formula.range, requested_action:action, transfer_id:formula.transfer_id})
+    });
+    if (!sourceMatches(boundSource)) throw new Error("交接期间原文或文件已变化；保留原文。");
+    await applyResult(result, boundSource);
+  } catch (error) {
+    invalidateCandidate("交接未完成；原文保持不变。" + error.message);
+  } finally {
+    busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
+  }
+}
+$("btnHandoff").onclick = () => requestFormulaHandoff("repair");
+$("btnHandoffComplete").onclick = () => requestFormulaHandoff("complete");
+j(`/api/studio/handoff/config?token=${T}`).then(config => {
+  handoffEnabled = config.enabled === true && config.checkpoint === "MiniCPM-V-4.7-1B";
+  $("btnHandoff").disabled = !handoffEnabled; $("btnHandoffComplete").disabled = !handoffEnabled;
+  $("handoffHint").textContent = handoffEnabled ? "同一 MiniCPM 4.7 checkpoint；仅生成单公式候选，需人工审阅。" : "服务默认关闭；仅交接当前行内公式，不读取图像。";
+}).catch(() => {});
+
 $("btnReport").onclick = () => {
   if (!lastResult) return;
   const r = lastResult;
   const report = ["# TeXada Studio 质检报告", "", `文档：${curName}`,
-    `实际模型请求：${r.model_calls ?? "旧记录未计数"}；模型：${r.model || "本次未调用"}；耗时：${r.elapsed_seconds} 秒`,
+    `实际模型请求：${r.model_calls ?? "未记录"}；模型：${r.model || (r.model_calls === 0 ? "本次未调用" : "未核实实际调用模型")}；耗时：${typeof r.elapsed_seconds === "number" ? r.elapsed_seconds + " 秒" : "未记录"}`,
     `Skill 指令：${r.skill_mode || "旧记录未记录"}`,
     `受限规划：${r.planner_mode ? "开启" : "关闭"}；拒绝动作：${r.planner?.rejected ?? 0}`,
     `模型选 Skill：${r.skill_selection ? "开启" : "关闭"}；选择拒绝：${r.planner?.selection_rejections ?? 0}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
-    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,
-    `候选编译：${r.compile_after.ok ? "通过" : "失败"}`,
+    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.status === "NOT_CHECKED" ? "未检查" : r.compile_before.ok ? "通过" : "失败"}`,
+    `候选编译：${r.compile_after.status === "NOT_CHECKED" ? "未检查" : r.compile_after.ok ? "通过" : "失败"}`,
     `修改数：${(r.edits || []).length}；剩余问题：${r.problems_after.length}`, "", "## 修改记录", ""];
   for (const e of (r.edits || [])) report.push(`L${e.line} · ${e.skill}`, "", "原文：", "~~~~latex", e.before, "~~~~", "候选：", "~~~~latex", e.after, "~~~~", "");
   for (const p of r.problems_after) report.push(`待处理 L${p.line}：${p.reason || p.status}`);

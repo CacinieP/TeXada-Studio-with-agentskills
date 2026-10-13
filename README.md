@@ -39,6 +39,8 @@ TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务
 
 Studio 提供默认关闭的[受限 Agent 规划实验](docs/studio-constrained-planner.md)。模型只能选择公式检查、表格检查、提议修复或请求人工；Python 校验节点、状态版本、动作 mask 和共享预算，保留 proposed/rejected/executed 事件。实验仍生成供人工采用的候选，不自动修改原文。另一个默认关闭的[多 Skill 选择开关](docs/studio-skill-selection.md)可独立开启：模型只在公式/表格能力元数据中选择，宿主验证适用后才加载正文，并记录版本与内容 hash。
 
+默认关闭的[单公式 Math Agent 交接](docs/studio-formula-handoff.md)可将当前行内公式送到服务器配置的同一 MiniCPM 4.7 链路，返回受版本和 hash 绑定的候选。Studio 显式审阅后才调用远端 accept/reject；普通候选和交接候选均会拒绝覆盖已编辑的原文。
+
 ## 1. 先跑无需模型的样本
 
 需要 Python 3.11+，已验证版本为 3.13。以下命令在 POSIX shell 中执行，Windows 可使用 WSL。首次安装依赖需要网络。
