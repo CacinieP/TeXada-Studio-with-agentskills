@@ -266,6 +266,7 @@ _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
+from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.path.join(REPO, "state", "studio")
@@ -888,3 +889,35 @@ def studio_fixstatus(id: str = Query(""), token: str = Query("")):
         raise HTTPException(status_code=404, detail="no job")
     return {"done": job["done"], "log": job["log"][-30:], "result": job.get("result"),
             "error": job.get("error"), "trace": job.get("trace", [])}
+
+
+# Default-off single-formula handoff to one server-configured Math Agent.
+def _handoff_client():
+    return FormulaHandoffClient(STUDIO_STATE)
+
+
+def _handoff_call(operation):
+    try:
+        return operation()
+    except HandoffError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="handoff_storage_unavailable") from None
+
+
+@app.get("/api/studio/handoff/config")
+def studio_handoff_config(token: str = Query("")):
+    _guard(token)
+    return {"enabled": os.environ.get("TEXADA_MATH_HANDOFF_ENABLED", "0") == "1", "checkpoint": CHECKPOINT}
+
+
+@app.post("/api/studio/handoff")
+def studio_formula_handoff(token: str = Query(""), body: dict = None):
+    _guard(token)
+    return _handoff_call(lambda: _handoff_client().propose(body))
+
+
+@app.post("/api/studio/handoff/{transfer_id}/decision")
+def studio_handoff_decision(transfer_id: str, token: str = Query(""), body: dict = None):
+    _guard(token)
+    return _handoff_call(lambda: _handoff_client().decide(transfer_id, body))
