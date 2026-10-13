@@ -110,6 +110,7 @@
       <h4 style="margin-top:12px">实验功能</h4>
       <label class="hint"><input type="checkbox" id="plannerMode"> 受限 Agent 规划（默认关闭）</label>
       <div class="hint">最多 12 步 / 12 次模型请求；候选仍需人工采用。</div>
+      <label class="hint"><input type="checkbox" id="skillSelection"> 模型选择公式/表格 Skill（默认关闭）</label>
       <h4 style="margin-top:12px">工作流与 Skills</h4>
       <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>工作流说明 · 尚未接入 OCR</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
@@ -472,7 +473,7 @@ $("btnFix").onclick = async () => {
   try {
     const d0 = await j(`/api/studio/fix?token=${T}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true })
+      body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true, skill_selection: $("skillSelection").checked === true })
     });
     let done = false;
     while (!done) {
@@ -549,6 +550,7 @@ $("btnReport").onclick = () => {
     `实际模型请求：${r.model_calls ?? "旧记录未计数"}；模型：${r.model || "本次未调用"}；耗时：${r.elapsed_seconds} 秒`,
     `Skill 指令：${r.skill_mode || "旧记录未记录"}`,
     `受限规划：${r.planner_mode ? "开启" : "关闭"}；拒绝动作：${r.planner?.rejected ?? 0}`,
+    `模型选 Skill：${r.skill_selection ? "开启" : "关闭"}；选择拒绝：${r.planner?.selection_rejections ?? 0}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
     `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,

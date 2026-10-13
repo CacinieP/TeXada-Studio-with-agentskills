@@ -265,6 +265,7 @@ from decimal import Decimal, localcontext
 _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
+from docforensics.skill_selection import load_catalog  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.path.join(REPO, "state", "studio")
@@ -273,8 +274,9 @@ VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.p
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
-def _new_provider():
-    return OpenAICompatibleProvider(VLM_BASE_URL, VLM_MODEL, skill_mode=SKILL_MODE)
+def _new_provider(*, skill_selection=False):
+    # Selection must see metadata first; do not eagerly load the fixed formula body.
+    return OpenAICompatibleProvider(VLM_BASE_URL, VLM_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
 PROVIDER = _new_provider()
@@ -572,7 +574,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
     return content, edits
 
 
-def _apply_planned_fixes(content, log, *, provider, emit):
+def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False, use_model_planner=True):
     """Install explicit checker/repair callbacks; the planner cannot supply edits."""
     nodes, offset, nid = [], 0, 0
     for line_no, line in enumerate(content.splitlines(keepends=True), 1):
@@ -582,7 +584,7 @@ def _apply_planned_fixes(content, log, *, provider, emit):
                           "latex": match.group(1), "start": offset + match.start(1), "end": offset + match.end(1)})
         offset += len(line)
     if r"\begin{tabular}" in content:
-        nodes.append({"id": "table-document", "kind": "table", "line": 1})
+        nodes.append({"id": "table-document", "kind": "table", "line": 1, "document_text": content})
 
     def check(node):
         if node["kind"] == "formula":
@@ -598,7 +600,10 @@ def _apply_planned_fixes(content, log, *, provider, emit):
     def repair(node, timeout):
         if node["kind"] == "formula":
             emit("PROVIDER_START", node_id=node["id"], attempt=node["attempts"], original=node["latex"])
-            candidate = provider.repair_formula({"id": node["id"], "data": {"latex": node["latex"]}}, timeout=timeout)
+            repair_options = {"timeout": timeout}
+            if skill_selection:
+                repair_options["loaded_skill"] = node["loaded_skill"]
+            candidate = provider.repair_formula({"id": node["id"], "data": {"latex": node["latex"]}}, **repair_options)
             emit("PROVIDER_RESULT", node_id=node["id"], attempt=node["attempts"], candidate=candidate,
                  provider_trace=getattr(provider, "last_trace", {}))
             if planner.remaining_seconds() <= 0:
@@ -638,7 +643,14 @@ def _apply_planned_fixes(content, log, *, provider, emit):
                           "end": line_offsets[line_idx] + cell_offset + end})
         return {"accepted": True, "check": {"status": "OK"}, "edits": edits}
 
-    planner = ConstrainedPlanner(content, nodes, provider, check, repair, emit)
+    catalog = None
+    if skill_selection:
+        try:
+            catalog = load_catalog()
+        except (OSError, ValueError):
+            emit("SKILL_SELECTION_REJECTED", reason="catalog_unavailable", state_rev=0)
+    planner = ConstrainedPlanner(content, nodes, provider, check, repair, emit, skill_selection=skill_selection,
+                                 catalog=catalog, use_model_planner=use_model_planner)
     edits, summary = planner.run()
     fixed = content
     for edit in sorted(edits, key=lambda edit: edit["start"], reverse=True):
@@ -737,7 +749,8 @@ def _studio_job(name: str, content: str, job_id: str):
     try:
         input_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
         _save_job(job_id, job)
-        provider = _new_provider()
+        skill_selection = job.get("skill_selection", False)
+        provider = _new_provider(skill_selection=True) if skill_selection else _new_provider()
         emit("JOB_START", name=name, provider_context=provider.fingerprint())
         log.append(f"[studio] 编译修复前版本（原始文档）…")
         before = _studio_compile(content, name, "before-" + job_id)
@@ -745,8 +758,9 @@ def _studio_job(name: str, content: str, job_id: str):
         emit("COMPILE", phase="before", ok=before["ok"])
         planner_mode = job.get("planner_mode", False)
         planner_summary = None
-        if planner_mode:
-            fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit)
+        if planner_mode or skill_selection:
+            fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit,
+                                                                 skill_selection=skill_selection, use_model_planner=planner_mode)
         else:
             fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
         log.append(f"[studio] 共应用 {len(edits)} 处修复")
@@ -754,7 +768,7 @@ def _studio_job(name: str, content: str, job_id: str):
         after = _studio_compile(fixed, name, "after-" + job_id)
         emit("COMPILE", phase="after", ok=after["ok"])
         model_calls = sum(e.get("provider_trace", {}).get("model_calls") or 0
-                          for e in trace if e["action"] in {"PROVIDER_RESULT", "PLANNER_RESULT"})
+                          for e in trace if e["action"] in {"PROVIDER_RESULT", "PLANNER_RESULT", "SKILL_SELECTION_PROPOSED"})
         emit("JOB_END", model_calls=model_calls, edits=len(edits),
              candidate_sha256=hashlib.sha256(fixed.encode()).hexdigest())
         log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
@@ -764,7 +778,8 @@ def _studio_job(name: str, content: str, job_id: str):
                          "model": VLM_MODEL if model_calls else None,
                          "configured_model": VLM_MODEL, "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",
-                         "skill_mode": SKILL_MODE, "planner_mode": planner_mode, "planner": planner_summary,
+                         "skill_mode": "selected" if skill_selection else SKILL_MODE,
+                         "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,
                          "trace": trace, "job_id": job_id,
                          "elapsed_seconds": round(time.monotonic() - started, 2),
                          "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
@@ -848,9 +863,12 @@ def studio_fix(token: str = Query(""), body: dict = None):
     planner_mode = body.get("planner_mode", False)
     if type(planner_mode) is not bool:
         raise HTTPException(status_code=400, detail="planner_mode must be boolean")
+    skill_selection = body.get("skill_selection", False)
+    if type(skill_selection) is not bool:
+        raise HTTPException(status_code=400, detail="skill_selection must be boolean")
     job_id = _uuid.uuid4().hex
     _jobs[job_id] = {"done": False, "log": [f"[studio] 任务 {job_id} 接收：{name}"],
-                     "result": None, "planner_mode": planner_mode}
+                     "result": None, "planner_mode": planner_mode, "skill_selection": skill_selection}
     # Persist acceptance before returning an ID, even if shutdown precedes the worker.
     try:
         _save_job(job_id, _jobs[job_id])
