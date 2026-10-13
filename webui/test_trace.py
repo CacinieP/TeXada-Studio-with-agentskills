@@ -11,6 +11,8 @@ from test_static_assets import studio
 
 
 class Provider:
+    name = "openai-compatible"
+
     def __init__(self):
         self.last_trace = {}
         self.calls = 0
@@ -94,6 +96,7 @@ class TraceTest(unittest.TestCase):
             self.assertTrue(job["done"])
             self.assertIsNone(job["result"]["model"])
             self.assertEqual(job["result"]["model_calls"], 0)
+            self.assertEqual(job["result"]["provider"], "deterministic-checks")
             rows = [json.loads(line) for line in (Path(directory) / "jobs" / job_id / "events.jsonl").read_text().splitlines()]
             self.assertEqual(rows[0]["action"], "JOB_START")
             self.assertEqual(rows[-1]["action"], "JOB_END")
@@ -103,6 +106,28 @@ class TraceTest(unittest.TestCase):
                 response = client.get("/api/studio/fixstatus", params={"id": job_id, "token": studio.TOKEN})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["result"], job["result"])
+
+    def test_model_job_reports_actual_provider_and_preserves_source(self):
+        job_id = "1" * 32
+        content = "Value $x+$"
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "documents" / "plain.tex"
+            source.parent.mkdir()
+            source.write_text(content)
+            with patch.object(studio, "STUDIO_STATE", directory), \
+                    patch.object(studio, "STUDIO_DOCS", str(source.parent)), \
+                    patch.object(studio, "_new_provider", return_value=Provider()), \
+                    patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}), \
+                    patch.object(studio, "_verify_formula", side_effect=[
+                        {"status": "RETRY"}, {"status": "RETRY"}, {"status": "OK"}, {"status": "OK"}]), \
+                    patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None}}, clear=True):
+                studio._studio_job("plain.tex", content, job_id)
+                result = studio._jobs[job_id]["result"]
+                self.assertEqual(result["provider"], "openai-compatible")
+                self.assertEqual(result["model_calls"], 2)
+                self.assertTrue(result["requires_review"])
+                self.assertEqual(result["fixed_content"], "Value $x+1$")
+                self.assertEqual(source.read_text(), content)
 
     def test_incomplete_job_is_interrupted_not_silently_resumed(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(studio, "STUDIO_STATE", directory):

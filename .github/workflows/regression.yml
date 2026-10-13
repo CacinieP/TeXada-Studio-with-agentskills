@@ -1,0 +1,53 @@
+name: Studio regression
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Install test dependencies
+        run: python -m pip install -r webui/requirements-test.txt
+      - name: Harness regression
+        run: python -m unittest discover -s harness/tests -p 'test_*.py'
+      - name: Studio regression
+        run: python -m unittest discover -s webui -p 'test_*.py'
+      - name: Script regression
+        run: python -m unittest discover -s scripts -p 'test_*.py'
+      - name: Python and launcher syntax
+        run: |
+          python -m compileall -q harness webui scripts skills
+          sh -n scripts/run-minicpm-v47-studio.sh
+      - name: Inline JavaScript syntax
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          for name in ('index.html', 'studio.html'):
+              source = (Path('webui') / name).read_text()
+              blocks = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', source, re.S)
+              target = Path(os.environ['RUNNER_TEMP']) / (name + '.js')
+              target.write_text('\n'.join(blocks))
+              subprocess.run(['node', '--check', str(target)], check=True)
+          PY

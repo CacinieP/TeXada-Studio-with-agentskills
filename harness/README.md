@@ -36,24 +36,25 @@ CLI 保存检查和候选，不写回输入。样本 crop 为占位图；PDF/OCR
 | 参数 | 行为 |
 | --- | --- |
 | `--fixture-repairs <JSON>` | 读取公式和表格的预设候选，无模型请求 |
-| `--vlm <服务根地址> --vlm-model <标签>` | 请求 `/v1/chat/completions`，修复公式 |
+| `--vlm <服务根地址或 /v1 地址> --vlm-model <模型>` | 通过 OpenAI-compatible Chat Completions 请求公式候选 |
 | 两者均省略 | 仅检查；遇到需修复节点时没有候选可用 |
 
-若同时提供，`--vlm` 优先。模型接口接收文本，当前没有 API key 配置；CLI 可指定兼容端点，建议使用可信本机服务。模型提供方的表格修复尚未实现，相关节点进入人工处理。
+若同时提供，`--vlm` 优先。模型接口接收公式文本。MiniCPM-V 4.7-1B API profile 使用 ModelBest 端点，通过进程环境中的 `VLM_API_KEY` 发送 Bearer 鉴权；凭据不加入提供方指纹或候选报告。模型提供方的表格修复尚未实现，相关节点进入人工处理。
 
 ```bash
-ollama list
-export VLM_MODEL='替换为已安装的完整模型标签'
+export VLM_API_KEY='YOUR_API_KEY'
 PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" \
+  --vlm https://api.modelbest.cn/v1 --vlm-model MiniCPM-V-4.7-1B \
   --skill-mode on --seed 0 --max-tokens 300
 ```
+
+使用已经部署的本机 MiniCPM 服务时，替换 `--vlm` 为本机服务地址，模型名以该服务的实际标签为准。旧 `OllamaProvider` 名称作为兼容别名保留。MiniCPM-V 4.7 请求关闭 thinking，候选只接受含一个非空 `latex` 字符串字段的严格 JSON；具体规则与 Q4 验收边界见 [4.7 适配说明](../docs/minicpm-v47.md)。
 
 | 参数 | 默认值 | 用途 |
 | --- | --- | --- |
 | `--state` | `state/run1` | 事件和报告目录 |
-| `--vlm-model` | `qwen2.5vl:7b` | 模型标签，建议显式指定已安装标签 |
+| `--vlm-model` | `MiniCPM-V-4.7-1B` | 本机服务使用实际标签；可显式覆盖模型名 |
 | `--skill-mode` | `on` | 加载公式 Skill；`off` 用于对照 |
 | `--seed` | `0` | 传给模型服务的 seed |
 | `--max-tokens` | `300` | 每次响应的 token 上限 |
