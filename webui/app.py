@@ -264,6 +264,7 @@ from decimal import Decimal, localcontext
 
 _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
+from docforensics.planner import ConstrainedPlanner  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.path.join(REPO, "state", "studio")
@@ -571,6 +572,79 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
     return content, edits
 
 
+def _apply_planned_fixes(content, log, *, provider, emit):
+    """Install explicit checker/repair callbacks; the planner cannot supply edits."""
+    nodes, offset, nid = [], 0, 0
+    for line_no, line in enumerate(content.splitlines(keepends=True), 1):
+        for match in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
+            nid += 1
+            nodes.append({"id": f"f-{line_no:03d}-{nid}", "kind": "formula", "line": line_no,
+                          "latex": match.group(1), "start": offset + match.start(1), "end": offset + match.end(1)})
+        offset += len(line)
+    if r"\begin{tabular}" in content:
+        nodes.append({"id": "table-document", "kind": "table", "line": 1})
+
+    def check(node):
+        if node["kind"] == "formula":
+            result = _verify_formula(node["latex"])
+            emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
+                 checker="doc-formula-verify", check=result)
+            return result
+        problems = _table_problems(content)
+        emit("TABLE_CHECK", node_id=node["id"], problems=problems, model_calls=0)
+        status = "NEEDS_HUMAN" if any(p["status"] != "RETRY" for p in problems) else ("RETRY" if problems else "OK")
+        return {"status": status, "problems": problems}
+
+    def repair(node, timeout):
+        if node["kind"] == "formula":
+            emit("PROVIDER_START", node_id=node["id"], attempt=node["attempts"], original=node["latex"])
+            candidate = provider.repair_formula({"id": node["id"], "data": {"latex": node["latex"]}}, timeout=timeout)
+            emit("PROVIDER_RESULT", node_id=node["id"], attempt=node["attempts"], candidate=candidate,
+                 provider_trace=getattr(provider, "last_trace", {}))
+            valid_candidate = (isinstance(candidate, str) and bool(candidate.strip()) and len(candidate) <= 32768
+                               and not any(ord(c) < 32 or ord(c) == 127 for c in candidate))
+            result = _verify_formula(candidate) if valid_candidate else {"status": "RETRY"}
+            accepted = result.get("status") == "OK"
+            emit("CANDIDATE_CHECK", node_id=node["id"], candidate=candidate, check=result)
+            emit("CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED", node_id=node["id"],
+                 candidate=candidate, reason="checker_accepted_not_user_adopted" if accepted else "checker_rejected")
+            edit = {"line": node["line"], "before": node["latex"], "after": candidate,
+                    "skill": "doc-formula-verify", "start": node["start"], "end": node["end"]}
+            return {"accepted": accepted, "check": result, "edits": [edit] if accepted and candidate != node["latex"] else []}
+        edits, line_offsets, offset = [], [], 0
+        lines = content.splitlines(keepends=True)
+        for line in lines:
+            line_offsets.append(offset)
+            offset += len(line)
+        for problem in node["check"]["problems"]:
+            if problem["status"] != "RETRY" or not isinstance(problem.get("right"), str):
+                continue
+            line_idx = problem["line"] - 1
+            cells = lines[line_idx].split("&")
+            cell_idx = problem["col"]
+            match = _table_number_match(cells[cell_idx])
+            if not match or not _re.fullmatch(_TABLE_NUMBER, problem["right"]):
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}}
+            cell_offset = sum(len(cell) + 1 for cell in cells[:cell_idx])
+            start, end = match.span("number")
+            edits.append({"line": problem["line"], "before": match.group("number"), "after": problem["right"],
+                          "skill": "doc-table-audit", "start": line_offsets[line_idx] + cell_offset + start,
+                          "end": line_offsets[line_idx] + cell_offset + end})
+        return {"accepted": True, "check": {"status": "OK"}, "edits": edits}
+
+    planner = ConstrainedPlanner(content, nodes, provider, check, repair, emit)
+    edits, summary = planner.run()
+    fixed = content
+    for edit in sorted(edits, key=lambda edit: edit["start"], reverse=True):
+        if fixed[edit["start"]:edit["end"]] != edit["before"]:
+            raise ValueError("candidate_source_mismatch")
+        fixed = fixed[:edit["start"]] + edit["after"] + fixed[edit["end"]:]
+        emit("CANDIDATE_EDIT", **{k: v for k, v in edit.items() if k not in {"start", "end"}})
+    public_edits = [{k: v for k, v in edit.items() if k not in {"start", "end"}} for edit in edits]
+    log.append(f"[planner] 执行 {summary['executed']}，拒绝 {summary['rejected']}；候选需人工采用")
+    return fixed, public_edits, summary
+
+
 def _job_path(job_id):
     if not isinstance(job_id, str) or not _re.fullmatch(r"[a-f0-9]{8,32}", job_id):
         raise HTTPException(status_code=400, detail="bad job id")
@@ -654,13 +728,18 @@ def _studio_job(name: str, content: str, job_id: str):
         before = _studio_compile(content, name, "before-" + job_id)
         log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败，请检查编译日志'}")
         emit("COMPILE", phase="before", ok=before["ok"])
-        fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
+        planner_mode = job.get("planner_mode", False)
+        planner_summary = None
+        if planner_mode:
+            fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit)
+        else:
+            fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
         log.append(f"[studio] 共应用 {len(edits)} 处修复")
         log.append(f"[studio] 编译修复后版本…")
         after = _studio_compile(fixed, name, "after-" + job_id)
         emit("COMPILE", phase="after", ok=after["ok"])
         model_calls = sum(e.get("provider_trace", {}).get("model_calls") or 0
-                          for e in trace if e["action"] == "PROVIDER_RESULT")
+                          for e in trace if e["action"] in {"PROVIDER_RESULT", "PLANNER_RESULT"})
         emit("JOB_END", model_calls=model_calls, edits=len(edits),
              candidate_sha256=hashlib.sha256(fixed.encode()).hexdigest())
         log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
@@ -670,7 +749,8 @@ def _studio_job(name: str, content: str, job_id: str):
                          "model": VLM_MODEL if model_calls else None,
                          "configured_model": VLM_MODEL, "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",
-                         "skill_mode": SKILL_MODE, "trace": trace, "job_id": job_id,
+                         "skill_mode": SKILL_MODE, "planner_mode": planner_mode, "planner": planner_summary,
+                         "trace": trace, "job_id": job_id,
                          "elapsed_seconds": round(time.monotonic() - started, 2),
                          "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
                          "candidate_sha256": hashlib.sha256(fixed.encode()).hexdigest(),
@@ -750,8 +830,12 @@ def studio_fix(token: str = Query(""), body: dict = None):
         content.encode("utf-8")
     except UnicodeEncodeError:
         raise HTTPException(status_code=400, detail="content must be valid UTF-8 text") from None
+    planner_mode = body.get("planner_mode", False)
+    if type(planner_mode) is not bool:
+        raise HTTPException(status_code=400, detail="planner_mode must be boolean")
     job_id = _uuid.uuid4().hex
-    _jobs[job_id] = {"done": False, "log": [f"[studio] 任务 {job_id} 接收：{name}"], "result": None}
+    _jobs[job_id] = {"done": False, "log": [f"[studio] 任务 {job_id} 接收：{name}"],
+                     "result": None, "planner_mode": planner_mode}
     # Persist acceptance before returning an ID, even if shutdown precedes the worker.
     try:
         _save_job(job_id, _jobs[job_id])

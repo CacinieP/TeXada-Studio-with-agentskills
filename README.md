@@ -37,6 +37,8 @@ TeXada 将 Monaco 编辑器、规则检查、MiniCPM 候选生成和 Tectonic �
 
 TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务包。Python 宿主明确加载指令并管理状态，每个公式最多请求两次候选；检查器回判候选，使用者审阅后决定是否采用，请求、候选和检查结果都会保存。当前只有 `doc-formula-verify` 正文加载到模型的系统消息；其他任务包通过各自脚本或操作约定使用。
 
+Studio 提供默认关闭的[受限 Agent 规划实验](docs/studio-constrained-planner.md)。模型只能选择公式检查、表格检查、提议修复或请求人工；Python 校验节点、状态版本、动作 mask 和共享预算，保留 proposed/rejected/executed 事件。实验仍生成供人工采用的候选，不自动修改原文。
+
 ## 1. 先跑无需模型的样本
 
 需要 Python 3.11+，已验证版本为 3.13。以下命令在 POSIX shell 中执行，Windows 可使用 WSL。首次安装依赖需要网络。
