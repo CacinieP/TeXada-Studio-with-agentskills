@@ -96,6 +96,8 @@ PYTHONPATH=harness python -m docforensics run samples \
 
 Candidates and counts depend on the model. Reports go to the `--state` directory. The [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
 
+See the [2026-10-15 local verification](docs/validation.md#本地重新验证2026-10-15) for current results and environment limitations (Chinese).
+
 ## 4. Reproduce tests and evaluations
 
 ```bash

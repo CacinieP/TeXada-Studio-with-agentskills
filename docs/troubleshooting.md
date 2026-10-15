@@ -18,6 +18,19 @@ PYTHONPATH=harness python -m docforensics run --help
 
 从仓库根目录运行，并保留 `PYTHONPATH=harness`。requirements 固定 ANTLR 4.11；已验证 Python 3.13。Windows 命令建议在 WSL 中运行。
 
+## 安装时提示找不到固定依赖版本
+
+先确认虚拟环境实际使用 Python 3.11 或更高版本；终端中的 `python3` 可能与系统安装的其他 Python 指向不同位置。可用 `python3.11 -m venv .venv` 显式创建环境，再激活并检查 `python --version`。
+
+若包源未同步，安装错误中的版本列表可能不完整。先向官方 PyPI 核对，再尝试：
+
+```bash
+python -m pip install --index-url https://pypi.org/simple -r webui/requirements-test.txt
+python -m pip check
+```
+
+不要仅根据镜像的版本列表修改仓库固定依赖。2026-10-15 的本地复现使用 Python 3.11.15 和官方 PyPI 成功安装，详见[本轮验证](validation.md#本地重新验证2026-10-15)。
+
 ## 服务拒绝启动、401 或编辑器空白
 
 启动前设置非空 `DEMO_TOKEN`，用对应的带 token 链接打开 `/studio`。复制 `.env.example` 后，还需执行 `set -a; . ./.env; set +a` 加载配置。
@@ -44,6 +57,14 @@ export VLM_MODEL='替换为已安装的完整模型标签'
 ```
 
 在同一终端重启 Studio。Studio 固定请求本机接口；CLI 用 `--vlm` 指定兼容服务根地址。默认模型标签只来自开发环境，显式选择已安装模型更可靠。
+
+## 更换模型后仍复用旧结果，或没有返回候选
+
+修改 `VLM_MODEL` 后重启 Studio；CLI 需显式传入 `--vlm-model`，不会自动读取该环境变量。先用 `/v1/models` 核对完整标签；`.env.example` 中的标签只是示例，不会安装模型。
+
+独立模型验证使用新的状态目录，并保存 `/api/tags` 返回的模型 digest 和 `/api/version`。即使标签相同，更换权重后也要使用新目录，避免旧终态复用。
+
+请求成功但没有候选时，查看 `provider_trace.reason`、`raw_candidate_response` 和 `usage`。推理模型可能用完输出预算而未返回正文；这类记录不能计为修复成功。先保留失败记录，再在新目录用明确的输出预算重试，或选择适合短文本修复的模型。语法接受也仍需语义复核。
 
 ## Skill 配置错误或看不到模型请求
 
