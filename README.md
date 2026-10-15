@@ -96,6 +96,8 @@ PYTHONPATH=harness python -m docforensics run samples \
 
 真实候选和计数取决于模型。报告仍写入 `--state` 指定目录。Skill 加载记录、请求参数和续跑规则见 [CLI 手册](harness/README.md)。
 
+本地重新验证与环境限制见 [2026-10-15 验证记录](docs/validation.md#本地重新验证2026-10-15)。
+
 ## 4. 测试与评估复现
 
 ```bash

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Fresh local verification records for 2026-10-15, with installation and model-switch troubleshooting.
+
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
 - Twenty-seven checker cases, a casebook and reproducible evaluation reports.
 - Formula Skill instruction loading, on/off comparison runs, per-candidate events and context-bound CLI resume.
