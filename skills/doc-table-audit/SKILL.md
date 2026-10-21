@@ -1,5 +1,6 @@
 ---
 name: doc-table-audit
+version: 1.0.0
 description: Check supplied table grids for declared row and column counts and numeric totals. Use for simple extracted reports or LaTeX tables that have explicit totals. This repository does not implement merged-cell or cross-page reconstruction.
 ---
 
@@ -24,3 +25,5 @@ CLI `shape_mismatch / sum_mismatch / bad_number` produce `RETRY`; invalid JSON, 
 Studio separately parses rectangular, one-row-per-line `tabular` with a textual header and one final total row. Unsupported formats become `NEEDS_HUMAN` with no edit. It records an edit only when source text actually changes. CLI permits English/Chinese grouping commas; Studio currently permits English grouping commas. Neither path interprets currency or percentages. See `evals/evals.json` for T01–T17 and the shared evaluation runner.
 
 Table orchestration remains fixed Python code. The formula instruction host does not load this table Skill into the model. The real provider's table method returns `not_supported` without an HTTP request; fixture replacement grids are test data, and Studio's total candidates are deterministic calculations. Distinguish these paths from model-generated repairs in reports.
+
+The default fixed formula instruction host does not load this table body. Studio's independent default-off Skill selection experiment exposes the versioned simple-tabular capability metadata, validates applicability, then reads and hashes this body for the allowlisted deterministic table host. Loading does not make table repairs model-generated: the existing Decimal checker supplies total candidates and unsupported tables still require human review. No OCR or arbitrary script execution is added.
