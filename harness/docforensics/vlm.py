@@ -114,6 +114,24 @@ def _reject_json_constant(value):
     raise ValueError("invalid_json_constant")
 
 
+def _contains_credential(value, credential):
+    """Check decoded JSON values and keys, including escaped Unicode echoes."""
+    if not credential:
+        return False
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if credential in item:
+                return True
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return False
+
+
 class FixtureProvider:
     name = "fixture (offline test double)"
 
@@ -168,12 +186,12 @@ class FixtureProvider:
 
 
 class OpenAICompatibleProvider:
-    """Fixed text workflow over OpenAI-compatible /v1/chat/completions.
+    """Text repair and opt-in strict decisions over /v1/chat/completions.
 
     ``on`` reads the allowlisted local SKILL.md into the system message. ``off``
     keeps the same base prompt and parameters. Invalid Skills fail at init.
     Callers must snapshot ``last_trace`` before another call and serialize access
-    to a shared provider instance. This is an instruction host, not a planner.
+    to a shared provider instance. The constrained planner host owns execution.
     """
 
     name = "openai-compatible"
@@ -237,9 +255,11 @@ class OpenAICompatibleProvider:
         self.last_trace = trace
         return trace
 
-    def _chat(self, prompt):
-        messages = [{"role": "system", "content": self._system_prompt()}]
-        if self.disable_thinking:
+    def _chat(self, prompt, *, system=None, examples=None, timeout=120):
+        messages = [{"role": "system", "content": self._system_prompt() if system is None else system}]
+        if examples is not None:
+            messages.extend(examples)
+        elif self.disable_thinking and system is None:
             messages.extend(_minicpm_json_examples())
         messages.append({"role": "user", "content": prompt})
         payload = {"model": self.model,
@@ -256,13 +276,13 @@ class OpenAICompatibleProvider:
                                      data=_canonical(payload).encode("utf-8"),
                                      headers=headers)
         self.last_trace.update(model_called=True, model_calls=1)
-        with urllib.request.urlopen(req, timeout=120) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             raw = response.read(RESPONSE_BYTES_LIMIT + 1)
         if len(raw) > RESPONSE_BYTES_LIMIT:
             raise _ResponseTooLarge()
         return json.loads(raw)
 
-    def repair_formula(self, node):
+    def repair_formula(self, node, *, timeout=120):
         trace = self._new_trace("repair_formula")
         started = time.monotonic()
         try:
@@ -278,7 +298,7 @@ class OpenAICompatibleProvider:
                              skill_sha256=self.skill.sha256)
             prompt = _canonical({"task": "repair_formula_syntax", "latex": latex})
             try:
-                response = self._chat(prompt)
+                response = self._chat(prompt) if timeout == 120 else self._chat(prompt, timeout=timeout)
             except _ResponseTooLarge:
                 trace["reason"] = "response_too_large"
                 return None
@@ -354,6 +374,63 @@ class OpenAICompatibleProvider:
             return record["latex"]
         finally:
             trace["elapsed_seconds"] = round(time.monotonic() - started, 6)
+
+    def structured_decision(self, operation, snapshot, system, *, timeout=120):
+        """One bounded strict JSON response. The host validates its action schema."""
+        trace = self._new_trace(operation)
+        started = time.monotonic()
+        try:
+            if not isinstance(snapshot, dict) or not 0 < timeout <= 120:
+                trace["reason"] = "bad_input"
+                return None
+            try:
+                response = self._chat(_canonical(snapshot), system=system, examples=[], timeout=timeout)
+                choice = response["choices"][0]
+                message = choice["message"]
+                content = message["content"]
+            except (TimeoutError, socket.timeout):
+                trace["reason"] = "timeout"
+                return None
+            except _ResponseTooLarge:
+                trace["reason"] = "response_too_large"
+                return None
+            except Exception:
+                trace["reason"] = "provider_error"
+                return None
+            trace["usage"] = _usage(response.get("usage"))
+            if message.get("refusal") or choice.get("finish_reason") in {"content_filter", "length"}:
+                trace["reason"] = "refused_or_incomplete_response"
+                return None
+            if not isinstance(content, str):
+                trace["reason"] = "bad_response_shape"
+                return None
+            safe_content = content.replace(self._api_key, "[redacted]") if self._api_key else content
+            trace["raw_candidate_response"], trace["response_truncated"] = _bounded(safe_content)
+            if self._api_key and self._api_key in content:
+                trace["reason"] = "credential_in_response"
+                return None
+            try:
+                result = json.loads(content, object_pairs_hook=_unique_json_object,
+                                    parse_constant=_reject_json_constant)
+            except ValueError:
+                trace["reason"] = "bad_candidate_json"
+                return None
+            if _contains_credential(result, self._api_key):
+                trace["raw_candidate_response"] = "[redacted credential response]"
+                trace["response_truncated"] = False
+                trace["reason"] = "credential_in_response"
+                return None
+            if not isinstance(result, dict):
+                trace["reason"] = "bad_candidate_type"
+                return None
+            trace["reason"] = "ok"
+            return result
+        finally:
+            trace["elapsed_seconds"] = round(time.monotonic() - started, 6)
+
+    def plan_action(self, snapshot, *, timeout=120):
+        from .planner import PLANNER_SYSTEM
+        return self.structured_decision("plan_action", snapshot, PLANNER_SYSTEM, timeout=timeout)
 
     def repair_table(self, node):
         trace = self._new_trace("repair_table")

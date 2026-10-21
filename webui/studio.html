@@ -107,6 +107,9 @@
     <div id="sidebar">
       <h4>资源管理器 · 文档</h4>
       <div id="files"></div>
+      <h4 style="margin-top:12px">实验功能</h4>
+      <label class="hint"><input type="checkbox" id="plannerMode"> 受限 Agent 规划（默认关闭）</label>
+      <div class="hint">最多 12 步 / 12 次模型请求；候选仍需人工采用。</div>
       <h4 style="margin-top:12px">工作流与 Skills</h4>
       <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>工作流说明 · 尚未接入 OCR</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
@@ -469,7 +472,7 @@ $("btnFix").onclick = async () => {
   try {
     const d0 = await j(`/api/studio/fix?token=${T}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: curName, content: preFix })
+      body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true })
     });
     let done = false;
     while (!done) {
@@ -499,7 +502,9 @@ function lineStyle(l) {
 function applyResult(res) {
   ++previewEpoch; lastResult = res;
   $("btnAccept").disabled = false; $("btnReport").disabled = false;
-  $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。";
+  const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
+  $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
+    (humanRequests ? ` 规划器请求人工核对 ${humanRequests} 个节点；详情见报告事件。` : "");
   disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
   origModel = monaco.editor.createModel(preFix, "latex");
@@ -543,6 +548,7 @@ $("btnReport").onclick = () => {
   const report = ["# TeXada Studio 质检报告", "", `文档：${curName}`,
     `实际模型请求：${r.model_calls ?? "旧记录未计数"}；模型：${r.model || "本次未调用"}；耗时：${r.elapsed_seconds} 秒`,
     `Skill 指令：${r.skill_mode || "旧记录未记录"}`,
+    `受限规划：${r.planner_mode ? "开启" : "关闭"}；拒绝动作：${r.planner?.rejected ?? 0}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
     `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,
