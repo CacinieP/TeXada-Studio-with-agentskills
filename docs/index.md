@@ -46,3 +46,5 @@
 - [Studio 受限 Agent 规划实验](studio-constrained-planner.md)：默认关闭、宿主预算与动作约束、成对离线/实时评测。
 
 - [Studio 公式/表格 Skill 选择实验](studio-skill-selection.md)：独立默认关闭的选择开关、能力 schema/version、先验证再加载与拒绝路径。
+
+- [Studio 单公式 Math Agent 交接 v1](studio-formula-handoff.md)：默认关闭、Unicode范围和revision/hash绑定、幂等及人工accept/reject。
