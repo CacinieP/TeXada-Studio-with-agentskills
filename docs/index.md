@@ -17,6 +17,10 @@
 | 修改项目 | [贡献说明](../CONTRIBUTING.md) · [路线图](roadmap.md) | 开发约定、相关测试和后续工作 |
 | 部署与维护 | [部署手册](../deploy/README.md) · [安全说明](../SECURITY.md) | 配置、升级、数据备份和信任边界 |
 
+## 当前复现状态
+
+最新本地复现见[2026-10-15 验证记录](validation.md#本地重新验证2026-10-15)。遇到安装或模型切换问题，先查[排错说明](troubleshooting.md)。历史演示与实验保留原日期、模型和环境，不能代替当前版本的复现。
+
 ## 项目、技术与发布
 
 - 项目介绍：[项目报告](project-report.md)、[微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[技术文章](technical-article.md)、[材料清单](submission-checklist.md)。

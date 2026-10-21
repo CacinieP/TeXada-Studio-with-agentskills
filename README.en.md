@@ -113,6 +113,8 @@ To keep using a local Ollama-compatible service, check installed tags with `olla
 
 Candidates and counts depend on the model. Reports go to the `--state` directory. The [4.7 adaptation guide](docs/minicpm-v47.md) covers the MiniCPM request contract and validation scope; the [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
 
+See the [2026-10-15 local verification](docs/validation.md#本地重新验证2026-10-15) for current results and environment limitations (Chinese).
+
 ## 4. Reproduce tests and evaluations
 
 ```bash

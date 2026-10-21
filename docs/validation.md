@@ -2,6 +2,52 @@
 
 TeXada Studio with Agent Skills · LinguistsWantTech。以下按验证对象记录输入、环境和结果；运行命令见[README](../README.md)、[案例手册](casebook.md)和[研究协议](../samples/research/README.md)。
 
+## 本地重新验证（2026-10-15）
+
+检出 `f738799a7271efc9e4c10420c52e4b347b623bff` 后在 macOS arm64 上重新执行。此次修改限于文档，未改变运行时、模型默认值、Skill 或样本。环境为 Python 3.11.15、SymPy 1.14.0、ANTLR 4.11.0、Node.js 26.3.0；Web 固定依赖从官方 PyPI 安装，`pip check` 通过。Node.js 22 和 Python 3.13 是历史环境，本轮未重新验证这两个版本。
+
+| 检查 | 本轮实际结果 |
+| --- | --- |
+| Web / Harness / 评估运行器 / latex-cleanup Python | 分别 55 / 57 / 35 / 77 项通过，共 224 项 |
+| Studio JavaScript / latex-cleanup JavaScript | Studio 检查通过；整理工具 37 项通过 |
+| CLI fixture 首跑 / 相同输入续跑 | 7 个 `OK`、1 个 `NEEDS_HUMAN`；续跑 8 个 `SKIP`，无模型请求 |
+| 确定性案例 | 27/27 符合预期 |
+| Skills dry-run / fixture | 各 3 例 × 3 组，共 9 条结果；各 0 次模型请求 |
+| 实际 HTTP 服务 | 启动成功；未鉴权样本接口 401；鉴权页面、样本与分析接口 200；13 份样本；`math-clean.tex` 分析无问题；检查后停止服务 |
+| 开放样本重建 | 下载固定版本并核对来源摘要，12 条输入与仓库 JSON 逐字节一致 |
+| 文档链接 | 整理后 423 个本地链接的路径及 Markdown 标题锚点核对无问题；未核实远端链接 |
+| Studio 样本编译 | Tectonic 0.17.0 缓存资源后 12/12 符合预期：7 份 PDF、5 份预期语法失败 |
+| 编译输出保护 | 已有目录退出码 2 且标记文件保留；缺编译器退出码 2 且不创建目录 |
+
+### 真实模型冒烟检查
+
+使用本机已安装的 `qwen3:8b`，Ollama `0.40.3`；这是本轮另选的测试标签，不代表仓库默认模型或用户指定的新模型。digest 为 `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41`。
+
+```bash
+python scripts/evaluate_skills.py run \
+  --cases samples/research/smoke_cases.json \
+  --outdir work/verification-20261015/model-qwen3-8b --mode model \
+  --base http://127.0.0.1:11434 --model qwen3:8b --seed 0 --max-tokens 300
+```
+
+3 例 × 3 组完成，共 2 次真实 HTTP 请求。on / off 两组各请求一次，均记录 `empty_response`，各消耗 300 个 completion token，没有返回可用候选，语法接受候选数为 0。此结果只确认请求、Skill 切换和失败记录可运行，不能证明修复能力或 Skill 收益；语义正确率仍为空。没有把增加预算后的结果或其他模型结果混入此运行。
+
+### PDF 编译复现
+
+本机原先没有 Tectonic；下载官方 0.17.0 arm64 发行包到 `work/tools/`，未更改系统安装。首次运行每项限时 30 秒，得到 5/12 符合预期，另外 7 项在下载 TeX 资源时超时。保留该目录后，在新目录以默认 120 秒预算重跑，12/12 符合预期，没有超时。预期失败的五份原稿以退出码、无 PDF 及对应 TeX 诊断判定通过，不能将它们计为成功编译。
+
+```bash
+python scripts/compile_studio_cases.py \
+  --compiler work/tools/tectonic \
+  --outdir work/verification-20261015/compile-warm --timeout 120
+```
+
+### 复现注意事项
+
+本机默认解释器曾创建 Python 3.9 虚拟环境，且默认包源的版本列表落后；显式使用 Python 3.11 和官方 PyPI 后，原固定版本安装成功。不要将该安装故障误判为依赖版本不存在。安装与更换模型步骤见[排错说明](troubleshooting.md)。
+
+原始日志与运行产物保存在本地 `work/verification-20261015/`，不覆盖历史实验，不将本机状态目录提交为项目数据。本轮未做浏览器布局、人工采用与完整下载操作验证。
+
 ## 文档复现核对（2026-09-29）
 
 本轮整理文档并增加样本编译运行器，应用运行时、Skill正文及样本输入保持原版本。使用本机Python 3.13和Tectonic 0.16.9完成以下核对；项目最低Python版本统一为3.11。
@@ -35,7 +81,7 @@ TeXada Studio with Agent Skills · LinguistsWantTech。以下按验证对象记�
 
 ## 既有自动回归
 
-下表汇总运行时及样本开发阶段已执行的检查。本次文档整理没有重跑这些完整测试组。Python环境为3.13.13、SymPy 1.14.0、ANTLR 4.11.0；完整命令列于README。
+下表汇总运行时及样本开发阶段已执行的检查。2026-09-29 的文档整理没有重跑这些完整测试组；2026-10-15 的重新运行见本页顶部。Python环境为3.13.13、SymPy 1.14.0、ANTLR 4.11.0；完整命令列于README。
 
 | 检查组 | 最近记录 | 覆盖内容 |
 | --- | ---: | --- |
