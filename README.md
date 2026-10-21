@@ -1,25 +1,38 @@
-# TeXada Studio with Agent Skills
+# TeXada Studio
 
-在 LaTeX 编辑器里检查公式语法和简单表格合计，审阅修复候选，再决定是否采用。
+使用 MiniCPM 生成公式修复候选，在 LaTeX 编辑器里检查语法和简单表格合计，审阅 diff 后决定是否采用。
 
-[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
+![TeXada Studio · MiniCPM 文档审阅](assets/texada-studio-cover.png)
 
-TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放在同一个工作台中。公式候选以 diff 展示，手动采用后可导出 `.tex`、PDF 和质检报告。
+[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
+
+## TeXada 系列
+
+从公式输入到文档审阅，TeXada 系列提供两个互补工具：
+
+| 工具 | 适合什么任务 | 仓库 |
+| --- | --- | --- |
+| TeXada Math Agent | 桌面端自然语言转公式、公式截图 OCR 和 LaTeX 补全；MiniCPM-V 4.7-1B 单模型链路正在本地适配 | [TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) |
+| TeXada Studio | MiniCPM-V 4.7-1B 生成公式候选；单个 `.tex` 的公式语法、简单表格合计、diff 审阅与 Tectonic 预览 | [TeXada-Studio-with-agentskills](https://github.com/CacinieP/TeXada-Studio-with-agentskills) |
+
+在 Math Agent 中得到公式 LaTeX 后，可手动复制到 Studio 文档继续检查。两个工具沿用“候选 → 确定性检查 → 证据与差异 → 人工决定”的设计方向。工作流、当前能力与迭代计划见 [TeXada 系列说明](docs/texada-series.md)。
+
+2026-10-13：系列材料与两个工具的 MiniCPM-V 4.7-1B 适配处于本地审阅阶段，尚未发布；本轮通过 ModelBest API 验证，Q4 部署需另行验收。
+
+TeXada 将 Monaco 编辑器、规则检查、MiniCPM 候选生成和 Tectonic 预览放在同一个工作台中。公式候选以 diff 展示，手动采用后可导出 `.tex`、PDF 和质检报告。
 
 当前为可复现的实验原型，源码采用 AGPL-3.0-only，尚无正式 Release。部署面向可信用户，使用单进程和共享 token。
 
 ![Studio 源码、预览与候选审阅](docs/images/studio-overview.png)
 
-## 演示与参赛材料
-
-第三届 NVIDIA DGX Spark 黑客松 · Agent Skills 开发挑战赛参赛项目。
+## 演示与技术材料
 
 | 内容 | 入口 |
 | --- | --- |
 | 实机演示 | [B 站视频](https://www.bilibili.com/video/BV16Kan6rEGv/)：约3分42秒，保留模型等待、diff 审阅和人工采用；[录制说明与证据](docs/dynamic-demo.md) |
 | 项目介绍 | [项目报告](docs/project-report.md)：使用场景、工作流与实现范围 |
 | Skill 技术报告 | [设计与实现](docs/skills-technical-report.md)：职责划分、状态契约、加载方式、扩展与验证 |
-| 参赛征文 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](docs/technical-article.md) |
+| 技术文章 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](docs/technical-article.md) |
 | 可复现结果 | [案例手册](docs/casebook.md) · [验证记录](docs/validation.md) · [Skill 对照实验](docs/skills-pilot-analysis.md) |
 
 TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务包。Python 宿主明确加载指令并管理状态，每个公式最多请求两次候选；检查器回判候选，使用者审阅后决定是否采用，请求、候选和检查结果都会保存。当前只有 `doc-formula-verify` 正文加载到模型的系统消息；其他任务包通过各自脚本或操作约定使用。
@@ -69,32 +82,36 @@ python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888 --workers
 | 编辑、公式分析、简单表格检查 | 上述 Python 依赖；Monaco 0.52.2 已随仓库提供 |
 | PDF 编译与第一页预览 | [Tectonic](https://tectonic-typesetting.github.io/) 和 Poppler 的 `pdftoppm`，放入 `PATH`；也可用 `TECTONIC` 指定编译器路径 |
 | 中文样本编译 | `Noto Sans CJK SC` 字体；新增英文数学样本无需该字体 |
-| 公式候选生成 | 下一节中的本机模型服务 |
+| 公式候选生成 | 下一节中的 MiniCPM 模型服务 |
 
 Tectonic 首次编译可能下载 TeX 包。安装与预览问题见[排错说明](docs/troubleshooting.md)，持久运行和升级见[部署手册](deploy/README.md)。
 
 ## 3. 接入真实模型
 
-先准备本机 Ollama 兼容服务，选择已经安装的模型标签：
+本轮推荐 MiniCPM-V 4.7-1B API profile。模型来源为 [官方 1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B) 和 [官方 GGUF 仓库](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf)；以下命令使用 ModelBest API，Q4 本机部署需另行验证。
+
+完成前一节依赖安装后，在本机设置 API Key 并启动：
 
 ```bash
-ollama list
-curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='替换为已安装的完整模型标签'
-export SKILL_MODE=on
+export TEXADA_OPENAI_API_KEY='YOUR_API_KEY'
+export VLM_BASE_URL='https://api.modelbest.cn/v1'
+export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+bash scripts/run-minicpm-v47-studio.sh
 ```
 
-在设置这些变量的终端启动或重启 Studio。模型接口固定为 `127.0.0.1:11434`；程序发送公式文本，最多尝试两次候选。`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。默认模型标签因入口而异，显式设置可避免误用。
+上述配置选择 `https://api.modelbest.cn/v1`，启动脚本固定 `VLM_MODEL=MiniCPM-V-4.7-1B`。适配器读取 `VLM_API_KEY`；未提供时启动器从 `TEXADA_OPENAI_API_KEY` 继承。密钥仅放在本机环境变量中。程序发送公式文本，最多尝试两次候选；`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。
 
-CLI 使用同一模型时：
+CLI 使用同一 API 时：
 
 ```bash
-PYTHONPATH=harness python -m docforensics run samples \
+VLM_API_KEY="$TEXADA_OPENAI_API_KEY" PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" --skill-mode on
+  --vlm https://api.modelbest.cn/v1 --vlm-model MiniCPM-V-4.7-1B --skill-mode on
 ```
 
-真实候选和计数取决于模型。报告仍写入 `--state` 指定目录。Skill 加载记录、请求参数和续跑规则见 [CLI 手册](harness/README.md)。
+如需沿用本机 Ollama 兼容服务，先用 `ollama list` 确认已经安装的标签，再设置 `VLM_BASE_URL=http://127.0.0.1:11434`、`VLM_MODEL='已安装的完整模型标签'` 和 `SKILL_MODE=on`，按上一节启动 Studio。通用启动入口仍沿用本机服务；API profile 由脚本显式选择。可配置项见 [`.env.example`](.env.example)。
+
+真实候选和计数取决于模型。报告仍写入 `--state` 指定目录。MiniCPM 请求契约与验证边界见 [4.7 适配说明](docs/minicpm-v47.md)，Skill 加载记录、请求参数和续跑规则见 [CLI 手册](harness/README.md)。
 
 本地重新验证与环境限制见 [2026-10-15 验证记录](docs/validation.md#本地重新验证2026-10-15)。
 
@@ -142,4 +159,4 @@ Studio 接收单个 `.tex`，目前按行提取 `$...$` 公式并检查简单表
 
 原创代码、文档和合成样本采用 **AGPL-3.0-only**，见 [LICENSE](LICENSE)。第三方组件及开放教材样本保留各自许可，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。网络部署的修改版本应提供对应源代码入口。
 
-团队 LinguistsWantTech：队长邓一纯，队员刘丰华；维护者 [@CacinieP](https://github.com/CacinieP)。引用见 [CITATION.cff](CITATION.cff)。赛事材料和发布资料集中在[文档导航](docs/index.md)。
+团队 LinguistsWantTech：邓一纯、刘丰华；维护者 [@CacinieP](https://github.com/CacinieP)。引用见 [CITATION.cff](CITATION.cff)。技术材料和发布资料集中在[文档导航](docs/index.md)。

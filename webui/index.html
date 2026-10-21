@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="no-referrer">
-<title>TeXada Studio with Agent Skills · 文档解析质检套件</title>
+<title>TeXada Studio · 文档质检</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
@@ -58,11 +58,16 @@
 </style>
 </head>
 <body>
-  <h1>TeXada Studio with Agent Skills <small>文档解析质检套件 · DGX Spark 黑客松 · Agent Skills</small></h1>
+  <h1>TeXada Studio <small>MiniCPM 公式候选 · 检查证据与人工审阅</small></h1>
+  <nav style="display:flex;gap:18px;margin:10px 0;font-size:13px">
+    <a id="studioLink" href="/studio" style="color:var(--accent)">打开 LaTeX 工作台</a>
+    <a href="https://github.com/CacinieP/TeXada-the-Math-Agent" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">系列工具 · Math Agent</a>
+    <a href="https://github.com/CacinieP/TeXada-Studio-with-agentskills" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">项目源码</a>
+  </nav>
 
   <div class="grid">
-    <div class="card"><h3>节点信息</h3><div class="kv" id="gpu">—</div></div>
-    <div class="card"><h3>常驻模型 · Ollama</h3><div class="kv" id="models">—</div></div>
+    <div class="card"><h3>运行环境</h3><div class="kv" id="environment">—</div></div>
+    <div class="card"><h3>已配置模型</h3><div class="kv" id="models">—</div></div>
   </div>
 
   <div class="card">
@@ -91,6 +96,7 @@
 
 <script>
 const P = new URLSearchParams(location.search); const T = P.get("token") || "";
+document.getElementById("studioLink").href = `/studio?token=${encodeURIComponent(T)}`;
 const TOTAL_NODES = 8;
 let doneShown = false;
 
@@ -98,8 +104,9 @@ async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw n
 
 async function nodeinfo() {
   try { const d = await j(`/api/nodeinfo?token=${T}`);
-    gpu.textContent = d.gpu || "—"; models.textContent = d.models || "—";
-  } catch (e) { gpu.textContent = "nodeinfo failed"; }
+    document.getElementById("environment").textContent = [d.host, d.platform].filter(Boolean).join("\n") || "—";
+    document.getElementById("models").textContent = d.configured_model || d.model || "—";
+  } catch (e) { document.getElementById("environment").textContent = "运行环境加载失败"; }
 }
 
 async function run(fresh) {
@@ -214,7 +221,7 @@ async function fetchRender(nid) {
 }
 
 async function loop(){ try { render(await j(`/api/status?token=${T}`)); } catch(e){} }
-nodeinfo(); loop(); setInterval(nodeinfo, 5000); setInterval(loop, 1000);
+nodeinfo(); loop(); setInterval(loop, 1000);
 </script>
 <footer><a href="https://github.com/CacinieP/TeXada-Studio-with-agentskills" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">源码 · AGPL-3.0</a></footer>
 </body>

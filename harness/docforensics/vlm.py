@@ -7,10 +7,12 @@ retains orchestration and verification in either mode.
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import socket
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .skills_runtime import DEFAULT_SKILL_ROOT, file_sha256, load_skill
@@ -27,10 +29,30 @@ FORMULA_SYSTEM_PROMPT = (
     "Do not add Markdown fences or commentary."
 )
 FORMULA_USER_SCHEMA = {"task": "repair_formula_syntax", "latex": "<document text>"}
+MINICPM_JSON_EXAMPLE_INPUT = {"task": "repair_formula_syntax", "latex": r"\frac{a^2+b^2}{2"}
+MINICPM_JSON_EXAMPLE_OUTPUT = {"latex": r"\frac{a^2+b^2}{2}"}
 
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _minicpm_json_contract():
+    return (
+        "\n\nMiniCPM-V 4.7 JSON serialization contract. "
+        "The following user/assistant example demonstrates format; repair the final user formula. "
+        "All TeX braces, including its final closing brace, belong INSIDE the quoted latex string. "
+        "Close the latex string only after the complete repaired formula; then close the JSON object once. "
+        "Serialize every TeX backslash as two backslashes in JSON source. "
+        "The decoded latex value must be a single line with no control characters. "
+        "Return only one valid JSON object with exactly one nonempty string field named latex. "
+        "Do not add Markdown fences, other fields, or commentary."
+    )
+
+
+def _minicpm_json_examples():
+    return [{"role": "user", "content": _canonical(MINICPM_JSON_EXAMPLE_INPUT)},
+            {"role": "assistant", "content": _canonical(MINICPM_JSON_EXAMPLE_OUTPUT)}]
 
 
 def _hash(value):
@@ -51,6 +73,45 @@ def _usage(value):
         return {}
     return {key: value[key] for key in ("prompt_tokens", "completion_tokens", "total_tokens")
             if isinstance(value.get(key), int) and not isinstance(value[key], bool) and value[key] >= 0}
+
+
+def _chat_endpoint(base):
+    """Accept a host or an API root ending in /v1, without duplicating /v1."""
+    parts = urllib.parse.urlsplit(base.strip())
+    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.fragment:
+        raise ValueError("invalid_provider_config")
+    try:
+        parts.port
+    except ValueError:
+        raise ValueError("invalid_provider_config") from None
+    path = parts.path.rstrip("/")
+    if not path.endswith("/v1"):
+        path += "/v1"
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path + "/chat/completions", parts.query, ""))
+
+
+def _endpoint_identity(endpoint):
+    """Credential changes must never affect the saved endpoint fingerprint."""
+    parts = urllib.parse.urlsplit(endpoint)
+    host = parts.hostname
+    if ":" in host:
+        host = "[" + host + "]"
+    if parts.port is not None:
+        host += ":" + str(parts.port)
+    return urllib.parse.urlunsplit((parts.scheme, host, parts.path, "", ""))
+
+
+def _unique_json_object(pairs):
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise ValueError("duplicate_json_field")
+        record[key] = value
+    return record
+
+
+def _reject_json_constant(value):
+    raise ValueError("invalid_json_constant")
 
 
 class FixtureProvider:
@@ -106,7 +167,7 @@ class FixtureProvider:
         return self._repair(node, "rows")
 
 
-class OllamaProvider:
+class OpenAICompatibleProvider:
     """Fixed text workflow over OpenAI-compatible /v1/chat/completions.
 
     ``on`` reads the allowlisted local SKILL.md into the system message. ``off``
@@ -115,9 +176,9 @@ class OllamaProvider:
     to a shared provider instance. This is an instruction host, not a planner.
     """
 
-    name = "local-vlm"
+    name = "openai-compatible"
 
-    def __init__(self, base="http://127.0.0.1:11434", model="qwen2.5vl:7b", *,
+    def __init__(self, base="http://127.0.0.1:11434", model="MiniCPM-V-4.7-1B", *,
                  skill_mode="off", skill_root=None, seed=0, max_tokens=300):
         if skill_mode not in {"on", "off"}:
             raise ValueError("invalid_skill_mode")
@@ -127,8 +188,13 @@ class OllamaProvider:
             raise ValueError("invalid_seed")
         if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
             raise ValueError("invalid_max_tokens")
-        self.base = base.rstrip("/")
-        self.model = model
+        self.base = base.strip().rstrip("/")
+        self.endpoint = _chat_endpoint(self.base)
+        self._api_key = os.environ.get("VLM_API_KEY", "").strip()
+        if "\r" in self._api_key or "\n" in self._api_key:
+            raise ValueError("invalid_provider_config")
+        self.model = model.strip()
+        self.disable_thinking = self.model.casefold().startswith("minicpm-v-4.7")
         self.skill_mode = skill_mode
         self.seed = seed
         self.max_tokens = max_tokens
@@ -138,22 +204,27 @@ class OllamaProvider:
         self.checker_sha256 = file_sha256(skill_path)
 
     def _system_prompt(self):
-        if not self.skill:
-            return FORMULA_SYSTEM_PROMPT
-        return (FORMULA_SYSTEM_PROMPT + "\n\nThe fixed host loaded these local Skill instructions:\n"
-                '<loaded_skill name="doc-formula-verify">\n' + self.skill.instructions + "\n</loaded_skill>")
+        prompt = FORMULA_SYSTEM_PROMPT
+        if self.skill:
+            prompt += ("\n\nThe fixed host loaded these local Skill instructions:\n"
+                       '<loaded_skill name="doc-formula-verify">\n' + self.skill.instructions + "\n</loaded_skill>")
+        if self.disable_thinking:
+            prompt += _minicpm_json_contract()
+        return prompt
 
     def fingerprint(self):
         return {"schema_version": 1, "provider": self.name, "model": self.model,
                 "skill_mode": self.skill_mode, "skill_id": self.skill.name if self.skill else None,
                 "skill_sha256": self.skill.sha256 if self.skill else None,
-                "endpoint_sha256": _hash(self.base),
+                "endpoint_sha256": _hash(_endpoint_identity(self.endpoint)),
                 "base_prompt_sha256": _hash(FORMULA_SYSTEM_PROMPT),
                 "system_prompt_sha256": _hash(self._system_prompt()),
                 "user_template_sha256": _hash(_canonical(FORMULA_USER_SCHEMA)),
+                "fewshot_sha256": _hash(_canonical(_minicpm_json_examples())) if self.disable_thinking else None,
                 "tool_sha256": {"doc-formula-verify": self.checker_sha256},
                 "parameters": {"temperature": 0, "seed": self.seed, "max_tokens": self.max_tokens,
-                               "timeout_seconds": 120},
+                               "timeout_seconds": 120,
+                               **({"enable_thinking": False} if self.disable_thinking else {})},
                 "implementation_sha256": _implementation_hashes()}
 
     def _new_trace(self, operation):
@@ -167,14 +238,23 @@ class OllamaProvider:
         return trace
 
     def _chat(self, prompt):
+        messages = [{"role": "system", "content": self._system_prompt()}]
+        if self.disable_thinking:
+            messages.extend(_minicpm_json_examples())
+        messages.append({"role": "user", "content": prompt})
         payload = {"model": self.model,
-                   "messages": [{"role": "system", "content": self._system_prompt()},
-                                {"role": "user", "content": prompt}],
-                   "temperature": 0, "max_tokens": self.max_tokens, "seed": self.seed}
+                   "messages": messages,
+                   "temperature": 0, "max_tokens": self.max_tokens, "seed": self.seed,
+                   "stream": False}
+        if self.disable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         self.last_trace["prompt_sha256"] = _hash(_canonical(payload["messages"]))
-        req = urllib.request.Request(self.base + "/v1/chat/completions",
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = "Bearer " + self._api_key
+        req = urllib.request.Request(self.endpoint,
                                      data=_canonical(payload).encode("utf-8"),
-                                     headers={"Content-Type": "application/json"})
+                                     headers=headers)
         self.last_trace.update(model_called=True, model_calls=1)
         with urllib.request.urlopen(req, timeout=120) as response:
             raw = response.read(RESPONSE_BYTES_LIMIT + 1)
@@ -222,20 +302,36 @@ class OllamaProvider:
                 return None
             trace["usage"] = _usage(response.get("usage"))
             try:
-                content = response["choices"][0]["message"]["content"]
+                choice = response["choices"][0]
+                message = choice["message"]
+                content = message["content"]
             except (KeyError, IndexError, TypeError):
                 trace["reason"] = "bad_response_shape"
+                return None
+            if not isinstance(message, dict):
+                trace["reason"] = "bad_response_shape"
+                return None
+            if message.get("refusal") or choice.get("finish_reason") == "content_filter":
+                trace["reason"] = "refused_response"
+                return None
+            if choice.get("finish_reason") == "length":
+                trace["reason"] = "incomplete_response"
                 return None
             if not isinstance(content, str):
                 trace["reason"] = "bad_response_shape"
                 return None
-            trace["raw_candidate_response"], trace["response_truncated"] = _bounded(content)
+            safe_content = content.replace(self._api_key, "[redacted]") if self._api_key else content
+            trace["raw_candidate_response"], trace["response_truncated"] = _bounded(safe_content)
+            if self._api_key and self._api_key in content:
+                trace["reason"] = "credential_in_response"
+                return None
             if not content.strip():
                 trace["reason"] = "empty_response"
                 return None
             try:
-                record = json.loads(content)
-            except json.JSONDecodeError:
+                record = json.loads(content, object_pairs_hook=_unique_json_object,
+                                    parse_constant=_reject_json_constant)
+            except ValueError:
                 trace["reason"] = "bad_candidate_json"
                 return None
             if not isinstance(record, dict) or set(record) != {"latex"} or not isinstance(record["latex"], str):
@@ -243,6 +339,13 @@ class OllamaProvider:
                 return None
             if not record["latex"].strip():
                 trace["reason"] = "empty_candidate"
+                return None
+            if self._api_key and self._api_key in record["latex"]:
+                trace["raw_candidate_response"] = "[redacted credential response]"
+                trace["reason"] = "credential_in_response"
+                return None
+            if any(ord(char) < 32 or ord(char) == 127 for char in record["latex"]):
+                trace["reason"] = "bad_candidate_text"
                 return None
             if len(record["latex"]) > CANDIDATE_TEXT_LIMIT:
                 trace["reason"] = "candidate_too_large"
@@ -260,3 +363,7 @@ class OllamaProvider:
 
 class _ResponseTooLarge(Exception):
     pass
+
+
+# Keep existing CLI, evaluation scripts, and integrations source-compatible.
+OllamaProvider = OpenAICompatibleProvider

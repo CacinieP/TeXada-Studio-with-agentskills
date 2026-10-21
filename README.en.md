@@ -1,25 +1,38 @@
-# TeXada Studio with Agent Skills
+# TeXada Studio
 
-Check formula syntax and simple table totals in a LaTeX editor, review repair candidates, and decide what to adopt.
+Generate formula repair candidates with MiniCPM, check syntax and simple table totals in a LaTeX editor, review diffs, and decide what to adopt.
+
+![TeXada Studio · MiniCPM document review](assets/texada-studio-cover.png)
 
 [中文](README.md) · [Demo video](https://www.bilibili.com/video/BV16Kan6rEGv/) · [WeChat article](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill design and technical report](docs/skills-technical-report.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
 
-TeXada combines Monaco, deterministic checks, a local text model, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
+## TeXada series
+
+The TeXada series connects formula input with document review through two complementary tools:
+
+| Tool | Use case | Repository |
+| --- | --- | --- |
+| TeXada Math Agent | Desktop natural language to formulas, formula screenshot OCR, and LaTeX completion; the MiniCPM-V 4.7-1B single-model profile is being adapted locally | [TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) |
+| TeXada Studio | MiniCPM-V 4.7-1B formula candidates; formula syntax and simple table totals in one `.tex` file, diff review, and Tectonic preview | [TeXada-Studio-with-agentskills](https://github.com/CacinieP/TeXada-Studio-with-agentskills) |
+
+Copy a formula's LaTeX from Math Agent into a Studio document to continue checking it. Both tools follow the design direction of candidate → deterministic checks → evidence and differences → human decision. See the [TeXada series guide](docs/texada-series.md) for the workflow, current scope, and iteration plan.
+
+As of 2026-10-13, the series materials and both tools' MiniCPM-V 4.7-1B adaptations are awaiting local review and publication. This iteration uses the ModelBest API; Q4 deployment requires separate acceptance.
+
+TeXada combines Monaco, deterministic checks, MiniCPM candidate generation, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
 
 This is a reproducible experimental prototype under AGPL-3.0-only, with no formal release yet. Deployment uses one process and a shared token for trusted users.
 
 ![Source, preview, and candidate review](docs/images/studio-overview.png)
 
-## Demo and project materials
-
-An entry in the third NVIDIA DGX Spark Hackathon, Agent Skills Development Challenge.
+## Demo and technical materials
 
 | Material | Link |
 | --- | --- |
 | Live demonstration | [Bilibili video](https://www.bilibili.com/video/BV16Kan6rEGv/): about 3:42, including the model wait, diff review, and manual adoption; [recording and evidence](docs/dynamic-demo.md) |
 | Project overview | [Project report](docs/project-report.md): use cases, workflow, and implementation scope |
 | Skill technical report | [Design and implementation](docs/skills-technical-report.md): responsibilities, state contracts, loading, extension, and validation |
-| Competition article | [Published on WeChat (Chinese)](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Repository text](docs/technical-article.md) |
+| Technical article | [Published on WeChat (Chinese)](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Repository text](docs/technical-article.md) |
 | Reproducible results | [Casebook](docs/casebook.md) · [Validation](docs/validation.md) · [Skill comparison](docs/skills-pilot-analysis.md) |
 
 TeXada organizes instructions, checking scripts, and cases into Skill task packages that can be maintained separately. The Python host explicitly loads instructions and manages states, allowing at most two candidate requests per formula. The checker evaluates each candidate, and the user reviews it before deciding whether to adopt it; requests, candidates, and check results are saved. Currently, only the `doc-formula-verify` instructions enter the model's system message; other task packages use their own scripts or operating procedures.
@@ -69,32 +82,36 @@ Start with `math-clean.tex`, switch to `math-delimiters.tex` for a missing closi
 | Editing, formula analysis, simple table checks | The Python dependencies above; Monaco 0.52.2 is bundled |
 | PDF compilation and first-page preview | [Tectonic](https://tectonic-typesetting.github.io/) and Poppler's `pdftoppm` on `PATH`; `TECTONIC` can specify the compiler path |
 | Chinese sample compilation | `Noto Sans CJK SC`; the new English math samples do not need this font |
-| Formula candidate generation | The local model service in the next section |
+| Formula candidate generation | The MiniCPM model service in the next section |
 
 Tectonic may download TeX packages on first compilation. See [troubleshooting](docs/troubleshooting.md) for setup issues and the [deployment guide](deploy/README.md) for persistent operation and upgrades.
 
 ## 3. Connect a real model
 
-Prepare a local Ollama-compatible service and select an installed model tag:
+This iteration recommends the MiniCPM-V 4.7-1B API profile. Model sources are the [official 1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B) and [official GGUF repository](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf). The commands below use the ModelBest API; local Q4 deployment requires separate validation.
+
+After installing the dependencies in the preceding section, set your API key locally and start Studio:
 
 ```bash
-ollama list
-curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='REPLACE_WITH_AN_INSTALLED_MODEL_TAG'
-export SKILL_MODE=on
+export TEXADA_OPENAI_API_KEY='YOUR_API_KEY'
+export VLM_BASE_URL='https://api.modelbest.cn/v1'
+export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+bash scripts/run-minicpm-v47-studio.sh
 ```
 
-Start or restart Studio from that terminal. Its model endpoint is fixed at `127.0.0.1:11434`. It sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode. Defaults differ between entry points, so set the model explicitly.
+The configuration above selects `https://api.modelbest.cn/v1`, and the launcher fixes `VLM_MODEL=MiniCPM-V-4.7-1B`. The adapter reads `VLM_API_KEY`; if it is unset, the launcher inherits `TEXADA_OPENAI_API_KEY`. Keep the key in your local environment. Studio sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode.
 
-To use the same model from the CLI:
+To use the same API from the CLI:
 
 ```bash
-PYTHONPATH=harness python -m docforensics run samples \
+VLM_API_KEY="$TEXADA_OPENAI_API_KEY" PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" --skill-mode on
+  --vlm https://api.modelbest.cn/v1 --vlm-model MiniCPM-V-4.7-1B --skill-mode on
 ```
 
-Candidates and counts depend on the model. Reports go to the `--state` directory. The [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
+To keep using a local Ollama-compatible service, check installed tags with `ollama list`, set `VLM_BASE_URL=http://127.0.0.1:11434`, `VLM_MODEL='AN_INSTALLED_MODEL_TAG'`, and `SKILL_MODE=on`, then start Studio as described above. The generic startup entry retains the local service; the launcher explicitly selects the API profile. See [`.env.example`](.env.example) for configuration variables.
+
+Candidates and counts depend on the model. Reports go to the `--state` directory. The [4.7 adaptation guide](docs/minicpm-v47.md) covers the MiniCPM request contract and validation scope; the [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
 
 See the [2026-10-15 local verification](docs/validation.md#本地重新验证2026-10-15) for current results and environment limitations (Chinese).
 
@@ -142,4 +159,4 @@ Code entry points: [`webui/`](webui/) for Studio, [`harness/`](harness/) for the
 
 Original code, documentation, and synthetic samples use **AGPL-3.0-only**; see [LICENSE](LICENSE). Third-party components and textbook samples retain their licenses, documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). Modified network deployments must provide access to corresponding source.
 
-Team LinguistsWantTech: captain 邓一纯, member 刘丰华; maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Project and release materials are listed in the [documentation index](docs/index.md). Detailed guides are currently in Chinese.
+Team LinguistsWantTech: 邓一纯 and 刘丰华; maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Technical and release materials are listed in the [documentation index](docs/index.md). Detailed guides are currently in Chinese.

@@ -1,6 +1,6 @@
 ---
 name: doc-formula-verify
-description: Check LaTeX formula syntax with SymPy and review repair candidates from a local text model. Use when a LaTeX formula fails to parse or OCR-derived formula text needs syntax checks. Parsing does not validate mathematical meaning.
+description: Check LaTeX formula syntax with SymPy and review repair candidates from an explicitly configured text model. Use when a LaTeX formula fails to parse or OCR-derived formula text needs syntax checks. Parsing does not validate mathematical meaning.
 ---
 
 # Formula Verification
@@ -10,16 +10,17 @@ description: Check LaTeX formula syntax with SymPy and review repair candidates 
 1. Read formula text from a supplied layout tree or the user's LaTeX source. Preserve the original text and location.
 2. Run `scripts/verify.py` with the formula as one command argument, or send JSONL records on stdin. Never build a shell command from document text.
 3. `OK` means the parser accepted the expression; it is not a semantic proof. `RETRY` means parsing failed. `NEEDS_ENV` means dependencies or the checker need attention; do not call the model for an environment error. `NEEDS_HUMAN / bad_input` means malformed JSON or a missing/non-string `latex` field; correct the input contract without a model call.
-4. For `RETRY`, the supplied harness can ask the explicitly configured local Ollama text model for a candidate and run the checker again. Limit this to two attempts. The current provider sends text only and does not inspect crops.
+4. For `RETRY`, the supplied harness can ask the explicitly configured OpenAI-compatible model endpoint for a text candidate and run the checker again. The operator selects a loopback endpoint or an authorized cloud endpoint; the MiniCPM profile selects the configured MiniCPM checkpoint. Limit this to two attempts. The current provider sends text only and does not inspect crops.
 5. Preserve a diff and the source evidence. Ask the reviewer to verify meaning, especially when an index or symbol was missing. After unsuccessful attempts, keep the original and mark `NEEDS_HUMAN`.
 6. The CLI records each repair attempt, provider outcome and candidate check in `state.jsonl`; Studio persists job events and presents a candidate for the user to adopt into the editor. Preserve rejected candidates and their reasons as evidence, not just the final candidate. Raw provider response excerpts are size-limited and carry an explicit truncation flag.
+7. A model candidate must be a single-line formula without control characters, even when its JSON syntax is valid. JSON backslash escapes such as `\f` can decode to control characters instead of a TeX command; reject these candidates before running the formula checker. Never silently add escapes or alter a malformed model response.
 
 ## Boundaries
 
 - Do not invent an original image, confidence score, or semantic validation result.
 - Existing crop files can accompany CLI evidence; missing crops must be disclosed.
 - Re-cropping and image-based repair are future integration work, not implemented by these scripts.
-- Use only the configured local model service. Do not send document content to a cloud provider without authorization.
+- Use only the endpoint explicitly selected by the operator. A cloud endpoint requires the user's authorization or explicit cloud profile selection; an existing explicit API authorization is sufficient. Keep credentials in the server process environment, outside prompts and document evidence.
 
 ## Executable contract
 

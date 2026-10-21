@@ -220,7 +220,7 @@ def main(argv=None):
     r.add_argument("samples", nargs="+", help="样本目录（含 layout.json）或其父目录")
     r.add_argument("--state", default="state/run1")
     r.add_argument("--vlm", help="OpenAI 兼容端点（如 http://127.0.0.1:11434）；缺省用 fixture 测试替身")
-    r.add_argument("--vlm-model", default="qwen2.5vl:7b")
+    r.add_argument("--vlm-model", default="MiniCPM-V-4.7-1B")
     r.add_argument("--fixture-repairs", help="fixture 修复表 JSON（仅离线测试用）")
     r.add_argument("--skill-mode", choices=("on", "off"), default="on",
                    help="模型请求是否加载公式 Skill 正文；off 用于受控对照")
