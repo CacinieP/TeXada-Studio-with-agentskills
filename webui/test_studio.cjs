@@ -42,10 +42,11 @@ function editor(value = '') {
   return {
     model: model(value), disposed: false,
     getModel() { return this.model; }, getValue() { return this.model.getValue(); },
-    setValue(value) { this.model.setValue(value); },
-    getPosition() { return {lineNumber:1,column:(this.cursor || 0)+1}; },
-    getSelection() { const p=this.getPosition(); return {getStartPosition:()=>p,getEndPosition:()=>p}; },
-    layout() {}, updateOptions() {}, revealLineInCenter(line) { this.line = line; }, setPosition() {}, focus() {},
+    setValue(value) { this.model.setValue(value); this.position=null; },
+    getPosition() { return this.position || {lineNumber:1,column:(this.cursor || 0)+1}; },
+    getSelection() { const p=this.getPosition(); return this.selection || {getStartPosition:()=>p,getEndPosition:()=>p}; },
+    options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true; },
+    getAction(id) { return {run:async()=>{this.lastAction=id;}}; },
     dispose() { this.disposed = true; },
   };
 }
@@ -345,6 +346,93 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   run('ocrFile=null');context.oversizeImage={name:'too-large.png',type:'image/png',size:13*1024*1024};
   run('chooseOcrFile(oversizeImage)');assert.equal(run('ocrFile'),null,'OCR file size must match 12 MiB server limit');
 
+  // TeX outlines exclude comments and literal regions without shifting line positions.
+  context.outlineSource=String.raw`% \section{Commented}
+\section[Short]{A \textbf{nested {title}}}
+\subsection{Second \% literal}
+\begin{verbatim}
+\section{Inside verbatim}
+\end{verbatim}
+\verb|\section{Inside verb}| \section*{Visible starred}
+\begin{minted}{tex}
+\section{Inside minted}
+\end{minted}
+\\section{Escaped command}
+\subsubsection{你好 <script>}
+`;
+  const outline=run('extractDocumentOutline(outlineSource)');
+  assert.deepEqual(Array.from(outline,entry=>[entry.label,entry.line,entry.level]),[
+    ['A nested title',2,1],['Second % literal',3,2],['Visible starred',7,1],['你好 <script>',12,3],
+  ]);
+  assert.equal(outline[2].starred,true);
+  assert.equal(run("extractDocumentOutline('\\\\section{Unclosed').length"),0);
+  context.testEditor.setValue(context.outlineSource);run("showCenter('edit');updateOutline();jumpToOutline(1)");
+  assert.equal(context.testEditor.position.lineNumber,3);
+  assert.match(get('outline').innerHTML,/&lt;script&gt;/);
+  assert.doesNotMatch(get('outline').innerHTML,/<script>/);
+
+  // Preferences apply to Monaco and persist, without touching source text.
+  const beforePreferences=context.testEditor.getValue();
+  get('prefFontSize').value='19';get('prefFontSize').listeners.get('change')();
+  get('prefWordWrap').checked=false;get('prefWordWrap').listeners.get('change')();
+  get('prefMinimap').checked=true;get('prefMinimap').listeners.get('change')();
+  assert.equal(context.testEditor.options.fontSize,19);
+  assert.equal(context.testEditor.options.wordWrap,'off');
+  assert.equal(context.testEditor.options.minimap.enabled,true);
+  assert.equal(context.testEditor.getValue(),beforePreferences);
+  get('btnEditorReset').onclick();assert.equal(context.testEditor.options.wordWrap,'on');
+  assert.equal(context.testEditor.options.minimap.enabled,false);
+  assert.equal(context.testEditor.options.fontSize,14);
+
+  // Statistics count Unicode characters and reflect cursor and selection positions.
+  context.testEditor.setValue('你好 x\nabc');
+  context.testEditor.position={lineNumber:2,column:3};
+  context.testEditor.selection={getStartPosition:()=>({lineNumber:1,column:1}),getEndPosition:()=>({lineNumber:1,column:3})};
+  run('updateEditorStatus()');assert.equal(get('sb-position').textContent,'行 2，列 3');
+  assert.equal(get('sb-selection').textContent,'已选 2 字符');
+  assert.equal(run("editorStatistics('😀汉 a').characters"),4);
+  context.testEditor.selection=null;
+
+  // A real command list filters, navigates, executes Monaco actions and restores focus.
+  let restoredFocus=0;context.document.activeElement={isConnected:true,focus:()=>{restoredFocus++;}};
+  context.imeShortcut={isComposing:true,metaKey:true,shiftKey:true,key:'P',preventDefault:()=>{throw new Error('IME shortcut intercepted');}};
+  run('handleGlobalEditorKey(imeShortcut)');assert.equal(run('commandPaletteOpen'),false);
+  context.commandShortcut={metaKey:true,shiftKey:true,key:'P',preventDefault(){},stopPropagation(){}};
+  run('handleGlobalEditorKey(commandShortcut)');assert.equal(run('commandPaletteOpen'),true);
+  const initialCommand=run('selectedCommand');run('moveCommandSelection(1)');
+  assert.notEqual(run('selectedCommand'),initialCommand);
+  get('commandInput').value='查找和替换';get('commandInput').listeners.get('input')();
+  assert.equal(run('filteredCommands.length'),1);
+  await run('executeCommand()');assert.equal(context.testEditor.lastAction,'editor.action.startFindReplaceAction');
+  assert.equal(run('commandPaletteOpen'),false);assert.equal(restoredFocus,1);
+  run('openCommandPalette()');context.escapeCommand={key:'Escape',preventDefault(){},stopPropagation(){}};
+  run('handleGlobalEditorKey(escapeCommand)');assert.equal(run('commandPaletteOpen'),false);
+  assert.equal(restoredFocus,2);
+  get('btnFind').onclick();assert.equal(context.testEditor.lastAction,'actions.find');
+  assert.equal(get('tab-edit').getAttribute('role'),'tab');
+  assert.equal(get('tab-edit').getAttribute('aria-selected'),'true');
+  assert.match(html,/src="\/static\/brand\/texada-agent\.png"/);
+  assert.match(html,/href="\/static\/brand\/texada-favicon\.png"/);
+  assert.match(html,/src="\/static\/editor\/latex\.js"/);
+  assert.match(get('btnSave').innerHTML,/<svg[^>]+aria-hidden="true"/);
+
+  // Cursor and selection updates reuse full-text statistics and outline for one model version.
+  let statisticsScans=0,outlineScans=0;
+  context.originalStatistics=run('editorStatistics');context.originalOutlineExtractor=run('extractDocumentOutline');
+  context.countedStatistics=(...args)=>{statisticsScans++;return context.originalStatistics(...args);};
+  context.countedOutline=(...args)=>{outlineScans++;return context.originalOutlineExtractor(...args);};
+  run('editorStatistics=countedStatistics;extractDocumentOutline=countedOutline;');
+  context.testEditor.setValue(String.raw`\section{Cache regression}`+'\nA longer document line.'.repeat(10000));
+  run("showCenter('edit');updateOutline();updateEditorStatus();");
+  for(let i=1;i<=30;i++){context.testEditor.position={lineNumber:i,column:1};run('updateEditorStatus();updateOutline();');}
+  assert.equal(statisticsScans,1,'moving cursor must not rescan full text statistics');
+  assert.equal(outlineScans,1,'moving cursor must not re-extract document outline');
+  context.testEditor.setValue(String.raw`\section{Changed version}`);
+  run('updateEditorStatus();updateOutline();updateEditorStatus();updateOutline();');
+  assert.equal(statisticsScans,2,'edited model version must rebuild cached statistics once');
+  assert.equal(outlineScans,2,'edited model version must rebuild outline once');
+  run('editorStatistics=originalStatistics;extractDocumentOutline=originalOutlineExtractor;');
+
   get('sepE').listeners.get('mousedown')({ target: { closest: () => get('sepBtnE') }, preventDefault() { throw new Error('button started drag'); } });
   assert.equal(documentListeners.has('mousemove'), false);
   get('sepBtnE').onclick();
@@ -366,5 +454,5 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.doesNotMatch(script, /MonacoEnvironment|getWorkerUrl|cdn\.jsdelivr/);
   assert.match(html, /\.hide\s*\{\s*display:none\s*!important;/);
   assert.match(html, /#previewPane\.collapsed\s*\{[^}]*padding:0\s*!important;/);
-  console.log('PASS: same-origin pinned Monaco configuration; JS syntax; unavailable/available diff navigation; problem navigation; file-switch disposal/reset; new-file diff; stale/reverted source guard; unicode handoff; async edit guards; idempotent adopt/reject; preview collapse/reopen/drag; snapshot-save race; escaped filenames; PDF/source binding; late compile guard; persisted review; deferred PDF and document mutation guards; critical CSS rules.');
+  console.log('PASS: same-origin pinned Monaco configuration; JS syntax; unavailable/available diff navigation; problem navigation; file-switch disposal/reset; new-file diff; stale/reverted source guard; unicode handoff; async edit guards; idempotent adopt/reject; preview collapse/reopen/drag; snapshot-save race; escaped filenames; PDF/source binding; late compile guard; persisted review; deferred PDF and document mutation guards; outline literal-region exclusion; editor preferences and Unicode status; command filtering/navigation/actions/focus; IME guard; brand assets; model/version statistics and outline cache; critical CSS rules.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

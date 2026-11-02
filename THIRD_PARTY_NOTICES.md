@@ -39,6 +39,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## TeXada Agent brand asset
+
+`webui/static/brand/` contains unchanged 32px and 128px icons plus the 1024px
+source from
+[CacinieP/TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent),
+`tauri-shell/src-tauri/icons/32x32.png`, `tauri-shell/src/app-icon.png` and
+`assets/TeXada-icon-source.png`, revision
+`a560c06ba9491f3dc356fc67e157080938a9cde1`. They are authored by the same
+maintainer and remain under AGPL-3.0-only.
+Studio's toolbar SVG symbols and LaTeX language support are authored in this
+repository; they do not fetch a remote icon library or model.
+
 ## Monaco Editor 0.52.2
 
 - Upstream: https://github.com/microsoft/monaco-editor/tree/v0.52.2

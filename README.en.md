@@ -2,7 +2,7 @@
 
 Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review MiniCPM candidates, and save or export the result on your own computer.
 
-The interface combines the light cards and dark editor workspace from [TeXWizard](https://github.com/CacinieP/TeXWizard) with TeXada's deterministic checks and explicit candidate review.
+The interface combines the light cards and dark editor workspace from [TeXWizard](https://github.com/CacinieP/TeXWizard), the TeXada Agent formula icon and blue palette, and TeXada's deterministic checks and explicit candidate review.
 
 [中文](README.md) · [Local guide](docs/local-studio.md) · [Local acceptance](docs/local-studio-acceptance.md) · [Samples](samples/README.md) · [Documentation](docs/index.md)
 
@@ -14,12 +14,14 @@ This is a local, single-user development candidate, with no formal release for t
 | --- | --- |
 | Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
 | Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; review the candidate before creating a document |
-| Edit and inspect | Bundled Monaco editor, conservative inline/display math extraction, formula syntax checks, and simple totals |
+| Edit and inspect | LaTeX highlighting and snippets, find/replace, section outline, command palette, formula syntax checks, and simple totals |
 | Review repairs | Bounded MiniCPM candidate generation, diffs, accept/reject decisions, and persistent task history |
 | Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
 | Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
 
 Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
+
+Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets need no model call; `Ctrl+Space` can request suggestions. The status bar shows cursor, selection, and word counts.
 
 ## Start
 

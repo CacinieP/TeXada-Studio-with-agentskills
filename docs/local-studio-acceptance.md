@@ -1,5 +1,7 @@
 # TeXada Studio 本地版验收记录
 
+编辑器品牌、命令面板、大纲、查找替换与长文档交互的后续验收见[编辑器升级验收](editor-polish-acceptance.md)：26 项 Chrome 检查和两套 Node 前端回归通过，Python 回归维持 283 项通过。
+
 日期：2026-11-02，Asia/Shanghai。基于 `main@9cb4133` 的 `feat/texada-studio-complete` 功能分支。本轮交付是单用户本地浏览器工作台，没有发布正式 Release。
 
 ## 交付范围
@@ -58,7 +60,7 @@ node webui/test_studio.cjs
 .venv/bin/python scripts/prepare-local-tex.py
 ```
 
-这些计数是软件行为回归，不是 279 次真实模型任务。
+这些计数是软件行为回归，不代表相同数量的真实模型任务。
 
 ## 实际浏览器流程
 

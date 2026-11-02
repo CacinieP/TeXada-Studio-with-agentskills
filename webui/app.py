@@ -1,4 +1,4 @@
-"""TeXada Studio with Agent Skills 演示 Web UI 后端（FastAPI）。
+"""TeXada Studio 本地编辑器后端（FastAPI）。
 
 启动（仓库根目录，先设置 DEMO_TOKEN）:
   python -m uvicorn app:app --host 127.0.0.1 --port 8888 --app-dir webui
@@ -35,7 +35,7 @@ VLM_MODEL = os.environ.get("VLM_MODEL", "MiniCPM-V-4.7-1B")
 VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://127.0.0.1:11434")
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
-app = FastAPI(title="TeXada Studio with Agent Skills demo")
+app = FastAPI(title="TeXada Studio Local")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 
@@ -83,6 +83,12 @@ class MonacoStaticFiles(StaticFiles):
 app.mount(MONACO_PREFIX, MonacoStaticFiles(
     directory=os.path.join(os.path.dirname(__file__), "static", "monaco", "0.52.2")
 ), name="monaco")
+
+# Public assets contain only application code and branding, never user documents.
+for _asset_name in ("brand", "editor"):
+    app.mount(f"/static/{_asset_name}", StaticFiles(
+        directory=os.path.join(os.path.dirname(__file__), "static", _asset_name)
+    ), name=_asset_name)
 
 
 def _run_pipeline(fresh: bool):
