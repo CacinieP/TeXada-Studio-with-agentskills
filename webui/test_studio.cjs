@@ -72,11 +72,13 @@ const context = vm.createContext({
   },
   ResizeObserver: class { observe() {} },
   fetch: async () => ({ ok: true, json: async () => ({ files: [], host: 'offline', mem: '' }) }),
-  setTimeout: fn => fn(), alert: message => { throw new Error(message); },
+  setTimeout: fn => fn(), clearTimeout() {}, alert: message => { throw new Error(message); },
 });
 const run = source => vm.runInContext(source, context);
 new vm.Script(script);
 run(script);
+const pageLoadFiles = run('loadFiles');
+const pageCompilePreview = run('compilePreview');
 windowListeners.get('load')();
 
 const testWatchdog = setTimeout(() => { console.error("Studio behavior test did not complete"); process.exitCode = 1; }, 10000);
@@ -154,6 +156,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   const beforeVersion=context.testEditor.model.version;
   await get('btnAccept').onclick();
   assert.equal(context.testEditor.getValue(),'candidate');
+  assert.equal(get('btnSave').disabled,false,'accepted candidate must be immediately saveable');
   await get('btnAccept').onclick();
   assert.equal(context.testEditor.model.version,beforeVersion+1,'duplicate adoption must not apply again');
 
@@ -233,6 +236,115 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(context.testEditor.getValue(),'😀 prefix $x+$ suffix');
   assert.equal(run('lastResult.local_decision'),'reject');
 
+  // A saved snapshot may finish after new typing; never mark the newer text saved.
+  context.testEditor.setValue('draft snapshot');
+  run("showCenter('edit'); curName='saved.tex'; savedContent='previous'; savedHash='previous-hash';");
+  let saveRequest, finishSave, notifySave;
+  const sawSave = new Promise(resolve => { notifySave=resolve; });
+  context.saveWire=(url,options)=>new Promise(resolve=>{ saveRequest=JSON.parse(options.body);finishSave=()=>resolve({name:'saved.tex',sha256:hash('draft snapshot')});notifySave(); });
+  run('j=saveWire');
+  const saving=run('saveDocument()');await sawSave;
+  context.testEditor.setValue('new typing');finishSave();await saving;
+  assert.equal(saveRequest.expected_sha256,'previous-hash');
+  assert.equal(run('savedContent'),'draft snapshot');
+  assert.equal(run('isDirty()'),true);
+  assert.equal(context.testEditor.getValue(),'new typing');
+
+  // File names render as data and text, never as executable inline handlers.
+  context.listWire=async()=>({files:['<img src=x onerror=alert(1)>.tex']});run('j=listWire');
+  await pageLoadFiles();
+  assert.match(get('files').innerHTML,/&lt;img/);
+  assert.doesNotMatch(get('files').innerHTML,/<img|onclick=/);
+
+  // A PDF without raster support remains downloadable, bound to its actual source.
+  context.testEditor.setValue('compiled source');run("curName='saved.tex'; showCenter('edit');");
+  context.previewWire=async()=>({compile_ok:true,preview_ok:false,ok:false,tag:'live-a',pdf:'/api/studio/pdf/saved.tex/live-a',pages:[],log:'raster unavailable'});
+  run('j=previewWire');await pageCompilePreview('compiled source');
+  assert.equal(get('btnPdf').classList.contains('hide'),false);
+  let pdfFetches=0;
+  context.fetch=async()=>{pdfFetches++;return {ok:true,blob:async()=>new Blob(['PDF'])};};
+  await get('btnPdf').onclick();assert.equal(pdfFetches,1);
+  context.testEditor.setValue('edited after compilation');
+  await get('btnPdf').onclick();assert.equal(pdfFetches,1,'stale PDF must not be fetched');
+  run('invalidatePreview()');assert.equal(run('lastPreviewTag'),null);
+  assert.equal(get('btnPdf').classList.contains('hide'),true);
+
+  // Even a response whose PDF bytes arrive later must keep its source binding.
+  context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};");
+  let finishPdf,notifyPdf;const sawPdf=new Promise(resolve=>{notifyPdf=resolve;});let raceDownloads=0;
+  context.captureRaceDownload=()=>{raceDownloads++;};run('download=captureRaceDownload');
+  context.fetch=async()=>({ok:true,blob:()=>new Promise(resolve=>{finishPdf=()=>resolve(new Blob(['A PDF']));notifyPdf();})});
+  const downloading=get('btnPdf').onclick();await sawPdf;
+  context.testEditor.setValue('PDF B');run("curName='b.tex';fileEpoch++;");finishPdf();await downloading;
+  assert.equal(raceDownloads,0,'late PDF must not be saved with another document name');
+
+  // Document mutations freeze controls and preserve any concurrent editor change.
+  context.testEditor.setValue('rename original');
+  run("curName='rename-a.tex';savedContent='rename original';savedHash='hash-a';documentOrigin='local';");
+  context.prompt=()=> 'rename-b.tex';
+  let finishRename,notifyRename;const sawRename=new Promise(resolve=>{notifyRename=resolve;});
+  context.renameWire=(url,options)=>new Promise(resolve=>{assert.match(url,/rename/);finishRename=()=>resolve({name:'rename-b.tex'});notifyRename();});
+  run('j=renameWire');const renaming=get('btnRename').onclick();await sawRename;
+  assert.equal(run('busy'),true);assert.equal(get('btnNew').disabled,true);
+  context.testEditor.setValue('NEW DURING RENAME');finishRename();await renaming;
+  assert.equal(context.testEditor.getValue(),'NEW DURING RENAME');
+  assert.equal(run('curName'),'rename-a.tex');assert.equal(run('isDirty()'),true);assert.equal(run('busy'),false);
+  context.prompt=()=> 'created.tex';
+  let finishCreate,notifyCreate;const sawCreate=new Promise(resolve=>{notifyCreate=resolve;});
+  context.createWire=()=>new Promise(resolve=>{finishCreate=()=>resolve({name:'created.tex'});notifyCreate();});
+  run('j=createWire');const creating=get('btnNew').onclick();await sawCreate;
+  context.testEditor.setValue('NEW DURING CREATE');finishCreate();await creating;
+  assert.equal(context.testEditor.getValue(),'NEW DURING CREATE');assert.equal(run('curName'),'rename-a.tex');
+  assert.equal(run('isDirty()'),true);assert.equal(run('busy'),false);
+
+  context.testEditor.setValue('delete original');run("savedContent='delete original';documentOrigin='local';");context.confirm=()=>true;
+  let finishDelete,notifyDelete;const sawDelete=new Promise(resolve=>{notifyDelete=resolve;});
+  context.deleteWire=(url)=>url.includes('/delete?') ? new Promise(resolve=>{finishDelete=()=>resolve({ok:true});notifyDelete();}) : Promise.resolve({files:['remaining.tex']});
+  run('j=deleteWire');const deleting=get('btnDelete').onclick();await sawDelete;
+  context.testEditor.setValue('NEW DURING DELETE');finishDelete();await deleting;
+  assert.equal(context.testEditor.getValue(),'NEW DURING DELETE');assert.equal(run('curName'),'rename-a.tex');
+
+  context.testEditor.setValue('upload original');run("savedContent='upload original';j=async()=>({ok:true});");
+  let finishRead,notifyRead;const sawRead=new Promise(resolve=>{notifyRead=resolve;});
+  const uploadEvent={target:{value:'selected',files:[{name:'uploaded.tex',size:20,text:()=>new Promise(resolve=>{finishRead=()=>resolve('uploaded content');notifyRead();})}]}};
+  const uploading=get('fileInput').onchange(uploadEvent);await sawRead;
+  context.testEditor.setValue('NEW DURING UPLOAD');finishRead();await uploading;
+  assert.equal(context.testEditor.getValue(),'NEW DURING UPLOAD');assert.equal(run('curName'),'rename-a.tex');
+
+  context.testEditor.setValue('ocr original');run("savedContent='ocr original';");get('ocrName').value='ocr-new.tex';get('ocrCandidate').value='OCR source';
+  let finishOcrCreate,notifyOcrCreate;const sawOcrCreate=new Promise(resolve=>{notifyOcrCreate=resolve;});
+  context.ocrCreateWire=()=>new Promise(resolve=>{finishOcrCreate=()=>resolve({ok:true});notifyOcrCreate();});
+  run('j=ocrCreateWire');const ocrCreating=get('btnOcrCreate').onclick();await sawOcrCreate;
+  context.testEditor.setValue('NEW DURING OCR CREATE');finishOcrCreate();await ocrCreating;
+  assert.equal(context.testEditor.getValue(),'NEW DURING OCR CREATE');assert.equal(run('curName'),'rename-a.tex');
+  assert.equal(run('isDirty()'),true);assert.equal(run('busy'),false);
+
+  // A late compile for earlier text cannot enable export for current edits.
+  context.testEditor.setValue('pending compile');
+  let finishCompile, notifyCompile;const sawCompile=new Promise(resolve=>{notifyCompile=resolve;});
+  context.compileWire=()=>new Promise(resolve=>{finishCompile=()=>resolve({compile_ok:true,tag:'live-b',pdf:'/api/studio/pdf/saved.tex/live-b',pages:[]});notifyCompile();});
+  run('j=compileWire');const compiling=pageCompilePreview('pending compile');await sawCompile;
+  context.testEditor.setValue('newer edit');finishCompile();await compiling;
+  assert.equal(run('previewBinding'),null,'late compilation must not bind newer editor content');
+
+  // Normal candidate decisions persist before changing the editor.
+  context.testEditor.setValue('review original');
+  context.persistedResult={...resultFor('review original','review candidate'),job_id:'a'.repeat(32)};
+  await run('applyResult(persistedResult)');let decisions=0;
+  context.reviewWire=async(url,options)=>{const body=JSON.parse(options.body);decisions++;assert.match(url,/jobs\/a{32}\/decision/);return {job_id:'a'.repeat(32),decision:body.decision,original_sha256:hash('review original'),candidate_sha256:hash('review candidate')};};
+  run('j=reviewWire');await get('btnReject').onclick();
+  assert.equal(decisions,1);assert.equal(context.testEditor.getValue(),'review original');
+  assert.equal(run('previewBinding'),null);
+
+  // Testing a draft model address must never save or replace active configuration.
+  get('modelBaseUrl').value='http://127.0.0.1:8080/v1';get('modelName').value='draft-model';
+  const activeModelLabel=get('sb-model').textContent;let probeCalls=0;
+  context.probeWire=async(url,options)=>{assert.match(url,/\/probe\?/);assert.equal(JSON.parse(options.body).model,'draft-model');probeCalls++;return {model_available:true,model:'draft-model'};};
+  run('j=probeWire');await get('btnTestModel').onclick();
+  assert.equal(probeCalls,1);assert.equal(get('sb-model').textContent,activeModelLabel,'probe must not display draft model as active');
+  run('ocrFile=null');context.oversizeImage={name:'too-large.png',type:'image/png',size:13*1024*1024};
+  run('chooseOcrFile(oversizeImage)');assert.equal(run('ocrFile'),null,'OCR file size must match 12 MiB server limit');
+
   get('sepE').listeners.get('mousedown')({ target: { closest: () => get('sepBtnE') }, preventDefault() { throw new Error('button started drag'); } });
   assert.equal(documentListeners.has('mousemove'), false);
   get('sepBtnE').onclick();
@@ -240,7 +352,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('previewPane').style.overflow, 'hidden');
   get('sepBtnE').onclick();
   assert.equal(get('previewPane').classList.contains('collapsed'), false);
-  assert.equal(get('previewPane').style.width, '38%');
+  assert.equal(get('previewPane').style.width, '43%');
   get('sepBtnE').onclick();
   get('sepE').listeners.get('mousedown')({ preventDefault() {} });
   documentListeners.get('mousemove')({ clientX: 600 });
@@ -254,5 +366,5 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.doesNotMatch(script, /MonacoEnvironment|getWorkerUrl|cdn\.jsdelivr/);
   assert.match(html, /\.hide\s*\{\s*display:none\s*!important;/);
   assert.match(html, /#previewPane\.collapsed\s*\{[^}]*padding:0\s*!important;/);
-  console.log('PASS: same-origin pinned Monaco configuration; JS syntax; unavailable/available diff navigation; problem navigation; file-switch disposal/reset; new-file diff; stale/reverted source guard; unicode handoff; async edit guards; idempotent adopt/reject; preview collapse/reopen/drag; critical CSS rules.');
+  console.log('PASS: same-origin pinned Monaco configuration; JS syntax; unavailable/available diff navigation; problem navigation; file-switch disposal/reset; new-file diff; stale/reverted source guard; unicode handoff; async edit guards; idempotent adopt/reject; preview collapse/reopen/drag; snapshot-save race; escaped filenames; PDF/source binding; late compile guard; persisted review; deferred PDF and document mutation guards; critical CSS rules.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

@@ -65,15 +65,13 @@ class AppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual((self.samples / "example.tex").read_text(), "synthetic sample")
         self.assertEqual((self.uploads / "example.tex").read_text(), "user document")
-        self.assertEqual(self.client.get("/api/studio/files", params=self.auth).json(),
-                         {"files": ["example.tex"]})
+        self.assertEqual(self.client.get("/api/studio/files", params=self.auth).json()["files"], ["example.tex"])
         response = self.client.get("/api/studio/file", params={**self.auth, "name": "example.tex"})
         self.assertEqual(response.json()["content"], "user document")
 
     def test_samples_work_before_first_upload(self):
         self.assertFalse(self.uploads.exists())
-        self.assertEqual(self.client.get("/api/studio/files", params=self.auth).json(),
-                         {"files": ["example.tex"]})
+        self.assertEqual(self.client.get("/api/studio/files", params=self.auth).json()["files"], ["example.tex"])
         response = self.client.get("/api/studio/file", params={**self.auth, "name": "example.tex"})
         self.assertEqual(response.json()["content"], "synthetic sample")
 
@@ -98,11 +96,18 @@ class AppTest(unittest.TestCase):
                 self.assertTrue(response.json()["log"])
 
     def test_missing_preview_converter_is_reported(self):
-        with patch.object(studio.subprocess, "run", side_effect=[
-            SimpleNamespace(returncode=0, stdout="", stderr=""), FileNotFoundError()
-        ]):
+        output = Path(studio.STUDIO_STATE) / "example" / "test"
+        output.mkdir(parents=True)
+        (output / "main.pdf").write_bytes(b"%PDF-synthetic")
+        def run(command, **kwargs):
+            if command[0] == "pdftoppm":
+                raise FileNotFoundError()
+            return SimpleNamespace(returncode=0, stdout="Pages: 1\n" if command[0] == "pdfinfo" else "", stderr="")
+        with patch.object(studio.subprocess, "run", side_effect=run):
             result = studio._studio_compile("synthetic", "example.tex", "test")
         self.assertFalse(result["ok"])
+        self.assertTrue(result["compile_ok"])
+        self.assertTrue(result["pdf"])
         self.assertIn("pdftoppm", result["log"])
 
     def test_nodeinfo_reports_platform_and_model_without_subprocess_probes(self):
@@ -152,7 +157,7 @@ class AppTest(unittest.TestCase):
         model, base, key = "MiniCPM-V-4.7-1B", "https://api.modelbest.cn/v1", "test-only-api-key"
         process = SimpleNamespace(stdout=[], returncode=0, wait=lambda: 0)
         with patch.multiple(studio, VLM_MODEL=model, VLM_BASE_URL=base), \
-                patch.dict(os.environ, {"VLM_API_KEY": key}), \
+                patch.dict(os.environ, {"VLM_API_KEY": key, "TEXADA_LOCAL_MODE": "0"}), \
                 patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(studio.threading, "Thread"):
             provider = studio._new_provider()

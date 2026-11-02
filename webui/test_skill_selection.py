@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -157,7 +158,8 @@ class SkillSelectionTest(unittest.TestCase):
         provider.repair_formula.assert_not_called()
 
     def test_selected_formula_body_reaches_actual_sdk_prompt_only_after_loading(self):
-        with patch("docforensics.vlm.load_skill", side_effect=AssertionError("eager body loading")):
+        with patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "0"}), \
+                patch("docforensics.vlm.load_skill", side_effect=AssertionError("eager body loading")):
             provider = studio._new_provider(skill_selection=True)
         self.assertIsNone(provider.skill)
         loaded = load_selected_skill(load_catalog()["doc-formula-verify"])
