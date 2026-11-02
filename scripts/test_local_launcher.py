@@ -218,6 +218,63 @@ class LocalLauncherTest(unittest.TestCase):
         process.terminate.assert_called_once()
         process.wait.assert_called_once_with(timeout=8)
 
+    def test_reachable_ollama_without_target_model_does_not_block_auto_model(self):
+        args = self.args()
+        config = {"base_url": launcher.DEFAULT_BASE, "model": launcher.DEFAULT_MODEL}
+
+        def probe(base, model):
+            self.assertEqual(model, launcher.DEFAULT_MODEL)
+            return {"reachable": base == launcher.DEFAULT_BASE, "available": False}
+
+        with patch.object(launcher, "_probe_service", side_effect=probe):
+            self.assertIsNone(launcher.select_service(config, args))
+            args.no_auto_model = True
+            self.assertEqual(launcher.select_service(config, args), launcher.DEFAULT_BASE)
+
+    def test_auto_mode_reuses_only_a_service_containing_the_target_model(self):
+        args = self.args()
+        target = f"http://127.0.0.1:{args.model_port}/v1"
+        config = {"base_url": launcher.DEFAULT_BASE, "model": launcher.DEFAULT_MODEL}
+        with patch.object(launcher, "_probe_service", side_effect=lambda base, _model: {
+            "reachable": True, "available": base == target
+        }):
+            self.assertEqual(launcher.select_service(config, args), target)
+
+    def test_other_model_name_cannot_alias_default_minicpm_weights(self):
+        args = self.args("--model", "Gemma-local")
+        with patch.object(launcher, "find_model_files", side_effect=AssertionError("default weights selected")), \
+                patch.object(launcher.subprocess, "Popen", side_effect=AssertionError("wrong model launched")), \
+                contextlib.redirect_stdout(io.StringIO()) as capture:
+            result = launcher.launch_owned_model(args, {"model": "Gemma-local"}, self.directory, {})
+        self.assertIsNone(result)
+        self.assertIn("未自动加载或重命名权重", capture.getvalue())
+
+    def test_explicit_unavailable_endpoint_is_preserved_without_auto_model_or_rerouting(self):
+        base = "http://127.0.0.1:19000/v1"
+        args = self.args("--base-url", base)
+        observed = {}
+
+        class Server:
+            def __init__(self, _config):
+                pass
+
+            def run(self):
+                observed["base"] = os.environ["VLM_BASE_URL"]
+
+        module = SimpleNamespace(Config=lambda *_args, **kwargs: kwargs, Server=Server)
+        capture = io.StringIO()
+        with patch.object(launcher, "dependency_status", return_value=READY), \
+                patch.object(launcher, "_listen_available", return_value=True), \
+                patch.object(launcher, "select_service", return_value=None), \
+                patch.object(launcher, "launch_owned_model", side_effect=AssertionError("explicit route changed")), \
+                patch.dict(sys.modules, {"uvicorn": module}), patch.dict(os.environ, dict(os.environ), clear=True), \
+                contextlib.redirect_stdout(capture):
+            self.assertEqual(launcher.run(args), 0)
+        self.assertEqual(observed["base"], base)
+        self.assertEqual(json.loads((self.directory / "local-runtime.json").read_text())["base_url"], base)
+        self.assertIsNone(json.loads((self.directory / "session.json").read_text())["owned_model_pid"])
+        self.assertIn("没有切换路由或自动启动其他服务", capture.getvalue())
+
     def test_application_data_default_respects_platform_and_override(self):
         with patch.dict(os.environ, {"TEXADA_STUDIO_STATE_DIR": str(self.directory)}):
             self.assertEqual(launcher.default_state_dir(), self.directory)

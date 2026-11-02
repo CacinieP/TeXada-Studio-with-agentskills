@@ -176,10 +176,15 @@ def select_service(config, args):
             return base
         if status["reachable"] and reachable is None:
             reachable = base
-    return reachable
+    # A running Ollama service does not imply the requested MiniCPM is loaded.
+    # Automatic mode must still be allowed to start the actual local checkpoint.
+    return reachable if args.no_auto_model else None
 
 
 def launch_owned_model(args, config, state, environment):
+    if args.gguf is None and config["model"] != DEFAULT_MODEL:
+        print("当前模型名称与默认 MiniCPM 权重不同；未自动加载或重命名权重。请连接对应模型服务，或用 --gguf 明确指定权重。", flush=True)
+        return None
     executable, gguf, mmproj = find_model_files(args)
     if not executable or not gguf.is_file() or not mmproj.is_file():
         print("本机模型尚未连接，且未找到完整的 llama-server/1B GGUF/projector。可先使用编辑与检查，之后在连接设置中配置。", flush=True)
@@ -285,9 +290,12 @@ def run(args):
             config = runtime.update_settings(values)
         base = select_service(config, args)
         if base is None and not args.no_auto_model:
-            owned_model = launch_owned_model(args, config, state, environment)
-            if owned_model is not None:
-                base = f"http://127.0.0.1:{args.model_port}/v1"
+            if args.base_url:
+                print("指定的本机地址未提供目标模型；已保留该地址，没有切换路由或自动启动其他服务。请在 Studio 中检查连接。", flush=True)
+            else:
+                owned_model = launch_owned_model(args, config, state, environment)
+                if owned_model is not None:
+                    base = f"http://127.0.0.1:{args.model_port}/v1"
         if base is not None:
             config = runtime.update_settings({"base_url": base, "model": config["model"]})
             environment["VLM_BASE_URL"] = base

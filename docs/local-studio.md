@@ -161,7 +161,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或运行：
 | 公式候选 | 缺失括号样例经一次实际模型请求修复；不据此推算总体修复成功率 |
 | 编译与交付 | 英文两页 PDF、页面 PNG 与 PDF 导出；中文 Fandol、标题和粗斜体离线资源检查通过 |
 | Chrome 主流程 | 新建/保存/刷新、多页切换与下载、编辑后旧 PDF 失效、表格零模型候选的拒绝与采用记录、刷新历史恢复、采用后保存刷新及 390px 界面检查 |
-| 自动化回归 | 当前记录为 Web 144、harness 87、scripts 48，共 279 项 Python 检查；前端 VM 检查通过，确定性检查器 27/27 |
+| 自动化回归 | 当前记录为 Web 144、harness 87、scripts 52，共 283 项 Python 检查；前端 VM 检查通过，确定性检查器 27/27 |
 
 这些结果覆盖固定输入和当前机器，不是手写、真实论文或多来源 OCR 准确率评测，也不证明数学真值或 Windows/Linux 实机表现。完整版本与步骤见[验收报告](local-studio-acceptance.md)。
 
