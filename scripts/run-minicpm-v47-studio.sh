@@ -21,5 +21,7 @@ export VLM_MODEL=MiniCPM-V-4.7-1B
 export VLM_BASE_URL="${VLM_BASE_URL:-https://api.modelbest.cn/v1}"
 export VLM_API_KEY="${VLM_API_KEY:-${TEXADA_OPENAI_API_KEY:-}}"
 export SKILL_MODE="${SKILL_MODE:-on}"
+# This explicitly selected legacy API profile is separate from the local launcher.
+export TEXADA_LOCAL_MODE=0
 
 exec "${TEXADA_STUDIO_PYTHON:-python3}" -m uvicorn app:app --host 127.0.0.1 --port 8888 --app-dir webui "$@"

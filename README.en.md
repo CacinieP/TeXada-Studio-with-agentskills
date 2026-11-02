@@ -1,162 +1,92 @@
-# TeXada Studio
+# TeXada Studio Local
 
-Generate formula repair candidates with MiniCPM, check syntax and simple table totals in a LaTeX editor, review diffs, and decide what to adopt.
+Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review MiniCPM candidates, and save or export the result on your own computer.
 
-![TeXada Studio · MiniCPM document review](assets/texada-studio-cover.png)
+The interface uses TeXada's deep navy and cyan palette, with source and PDF side by side. Documents, outline, image import, Agent review and logs open through the sidebar and drawers, alongside deterministic checks and explicit candidate review.
 
-[中文](README.md) · [Demo video](https://www.bilibili.com/video/BV16Kan6rEGv/) · [WeChat article](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill design and technical report](docs/skills-technical-report.md) · [Documentation](docs/index.md) · [Casebook](docs/casebook.md)
+[中文](README.md) · [Local guide](docs/local-studio.md) · [Local acceptance](docs/local-studio-acceptance.md) · [Samples](samples/README.md) · [Documentation](docs/index.md)
 
-## TeXada series
+This is a local, single-user development candidate, with no formal release for this revision yet. A local MiniCPM-V 4.7 1B Q4 model has completed fixed-image and two-page PDF transcription, candidate compilation, and a missing-brace repair. Chrome checks covered saving and refresh, candidate review, history recovery, multi-page previews, and export. These are local smoke checks, not OCR accuracy, mathematical correctness, or cross-platform evaluations; see the [acceptance record](docs/local-studio-acceptance.md).
 
-The TeXada series connects formula input with document review through two complementary tools:
+## What you can do
 
-| Tool | Use case | Repository |
-| --- | --- | --- |
-| TeXada Math Agent | Desktop natural language to formulas, formula screenshot OCR, and LaTeX completion; the MiniCPM-V 4.7-1B single-model profile is being adapted locally | [TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) |
-| TeXada Studio | MiniCPM-V 4.7-1B formula candidates; formula syntax and simple table totals in one `.tex` file, diff review, and Tectonic preview | [TeXada-Studio-with-agentskills](https://github.com/CacinieP/TeXada-Studio-with-agentskills) |
-
-Copy a formula's LaTeX from Math Agent into a Studio document to continue checking it. Both tools follow the design direction of candidate → deterministic checks → evidence and differences → human decision. See the [TeXada series guide](docs/texada-series.md) for the workflow, current scope, and iteration plan.
-
-As of 2026-10-13, the series materials and both tools' MiniCPM-V 4.7-1B adaptations are awaiting local review and publication. This iteration uses the ModelBest API; Q4 deployment requires separate acceptance.
-
-TeXada combines Monaco, deterministic checks, MiniCPM candidate generation, and Tectonic previews. Formula candidates appear as a diff; after review, users can adopt a candidate and export `.tex`, PDF, and an audit report.
-
-This is a reproducible experimental prototype under AGPL-3.0-only, with no formal release yet. Deployment uses one process and a shared token for trusted users.
-
-![Source, preview, and candidate review](docs/images/studio-overview.png)
-
-## Demo and technical materials
-
-| Material | Link |
+| Task | Workflow |
 | --- | --- |
-| Live demonstration | [Bilibili video](https://www.bilibili.com/video/BV16Kan6rEGv/): about 3:42, including the model wait, diff review, and manual adoption; [recording and evidence](docs/dynamic-demo.md) |
-| Project overview | [Project report](docs/project-report.md): use cases, workflow, and implementation scope |
-| Skill technical report | [Design and implementation](docs/skills-technical-report.md): responsibilities, state contracts, loading, extension, and validation |
-| Technical article | [Published on WeChat (Chinese)](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Repository text](docs/technical-article.md) |
-| Reproducible results | [Casebook](docs/casebook.md) · [Validation](docs/validation.md) · [Skill comparison](docs/skills-pilot-analysis.md) |
+| Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
+| Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; review the candidate before creating a document |
+| Edit and inspect | LaTeX highlighting and snippets, find/replace, section outline, command palette, formula syntax checks, and simple totals |
+| Review repairs | Bounded MiniCPM candidate generation, diffs, accept/reject decisions, and persistent task history |
+| Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
+| Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
 
-TeXada organizes instructions, checking scripts, and cases into Skill task packages that can be maintained separately. The Python host explicitly loads instructions and manages states, allowing at most two candidate requests per formula. The checker evaluates each candidate, and the user reviews it before deciding whether to adopt it; requests, candidates, and check results are saved. Currently, only the `doc-formula-verify` instructions enter the model's system message; other task packages use their own scripts or operating procedures.
+Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
 
-## 1. Run a sample without a model
+The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
 
-Requires Python 3.11+; the validated version is 3.13. Commands use a POSIX shell; Windows users can use WSL. The initial dependency installation needs network access.
+Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets need no model call; `Ctrl+Space` can request suggestions. The status bar shows cursor, selection, and word counts.
 
-```bash
-git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
-cd TeXada-Studio-with-agentskills
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r harness/requirements.txt
-PYTHONPATH=harness python -m docforensics run samples \
-  --state state/quickstart --fixture-repairs samples/fixture_repairs.json
-```
+## Start
 
-Expected output:
-
-```text
-exam-01: OK=3 NEEDS_HUMAN=0
-paper-01: OK=2 NEEDS_HUMAN=1
-report-01: OK=2 NEEDS_HUMAN=0
-report: state/quickstart/report.md
-```
-
-Open `state/quickstart/report.md` for candidates and items needing review. This mode reads preset repairs to exercise the workflow; it needs no GPU, model, or TeX installation. Rerun the same command to check resume behavior. See the [CLI manual](harness/README.md).
-
-## 2. Open Studio
-
-Install the Web dependencies in the same environment and start the server:
+Requires Python 3.11+; this iteration uses 3.13. From the project directory:
 
 ```bash
-python -m pip install -r webui/requirements.txt
-export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-printf 'http://127.0.0.1:8888/studio?token=%s&file=math-clean.tex\n' "$DEMO_TOKEN"
-python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888 --workers 1
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r webui/requirements.txt
+.venv/bin/python scripts/run-local-studio.py --check
+./scripts/start-local-studio.command
 ```
 
-Open the printed local URL; stop with `Ctrl-C`. Keep the token private. The application does not load `.env` automatically: run `set -a; . ./.env; set +a` when using a configuration file. Available settings are in [`.env.example`](.env.example).
+On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Its private entry URL is stored in an owner-only `session.json` in the user data directory; access credentials are not printed. Stop the launcher with `Ctrl+C`.
 
-Start with `math-clean.tex`, switch to `math-delimiters.tex` for a missing closing delimiter, then inspect the valid syntax but incorrect integral in `math-semantics.tex`. The library contains [13 Studio samples](samples/README.md).
+Initial installation of dependencies, model weights, fonts, and TeX resources may require network access. Studio compiles against cached TeX resources and does not silently download packages while processing documents. Prepare the resources needed by your documents before using compilation offline. See [first-time setup](docs/local-studio.md#首次准备与离线使用).
 
-| Feature | Dependencies |
+Run `.venv/bin/python scripts/prepare-local-tex.py` to check the fixed TeX sample offline. When needed, explicitly add `--download-resources` for initial preparation, then repeat the offline check.
+
+| Feature | Additional requirements |
 | --- | --- |
-| Editing, formula analysis, simple table checks | The Python dependencies above; Monaco 0.52.2 is bundled |
-| PDF compilation and first-page preview | [Tectonic](https://tectonic-typesetting.github.io/) and Poppler's `pdftoppm` on `PATH`; `TECTONIC` can specify the compiler path |
-| Chinese sample compilation | `Noto Sans CJK SC`; the new English math samples do not need this font |
-| Formula candidate generation | The MiniCPM model service in the next section |
+| Editing and deterministic checks | Python dependencies above; Monaco is bundled |
+| Local repairs and image transcription | A local MiniCPM-V 4.7 1B service; automatic startup also needs `llama-server`, GGUF, and projector files |
+| PDF import | Poppler's `pdfinfo` and `pdftoppm` |
+| PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
-Tectonic may download TeX packages on first compilation. See [troubleshooting](docs/troubleshooting.md) for setup issues and the [deployment guide](deploy/README.md) for persistent operation and upgrades.
-
-## 3. Connect a real model
-
-This iteration recommends the MiniCPM-V 4.7-1B API profile. Model sources are the [official 1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B) and [official GGUF repository](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf). The commands below use the ModelBest API; local Q4 deployment requires separate validation.
-
-After installing the dependencies in the preceding section, set your API key locally and start Studio:
+To reuse an existing local service:
 
 ```bash
-export TEXADA_OPENAI_API_KEY='YOUR_API_KEY'
-export VLM_BASE_URL='https://api.modelbest.cn/v1'
-export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-bash scripts/run-minicpm-v47-studio.sh
+.venv/bin/python scripts/run-local-studio.py \
+  --base-url http://127.0.0.1:18081/v1 \
+  --model MiniCPM-V-4.7-1B --no-auto-model
 ```
 
-The configuration above selects `https://api.modelbest.cn/v1`, and the launcher fixes `VLM_MODEL=MiniCPM-V-4.7-1B`. The adapter reads `VLM_API_KEY`; if it is unset, the launcher inherits `TEXADA_OPENAI_API_KEY`. Keep the key in your local environment. Studio sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode.
+Local mode accepts only HTTP endpoints on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and has no cloud fallback. The launcher reuses existing services and stops only model processes it started itself. See the [model guide](docs/local-studio.md#本机模型连接) for model sources and path options.
 
-To use the same API from the CLI:
+## First document
 
-```bash
-VLM_API_KEY="$TEXADA_OPENAI_API_KEY" PYTHONPATH=harness python -m docforensics run samples \
-  --state state/model-01 \
-  --vlm https://api.modelbest.cn/v1 --vlm-model MiniCPM-V-4.7-1B --skill-mode on
-```
+1. Open `math-clean.tex`, check the document, and compile a preview.
+2. Open `math-delimiters.tex`, generate a candidate, review the diff, and accept or reject it. Save after adopting a candidate.
+3. Refresh to check persistence, then export the current `.tex` or PDF.
+4. Select an authorized image or PDF, start recognition, review it against the original, and create a document from the candidate.
 
-To keep using a local Ollama-compatible service, check installed tags with `ollama list`, set `VLM_BASE_URL=http://127.0.0.1:11434`, `VLM_MODEL='AN_INSTALLED_MODEL_TAG'`, and `SKILL_MODE=on`, then start Studio as described above. The generic startup entry retains the local service; the launcher explicitly selects the API profile. See [`.env.example`](.env.example) for configuration variables.
+Use **Save** or `⌘/Ctrl+S` to persist edits. OCR and repair candidates do not automatically replace the source.
 
-Candidates and counts depend on the model. Reports go to the `--state` directory. The [4.7 adaptation guide](docs/minicpm-v47.md) covers the MiniCPM request contract and validation scope; the [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.
+## Scope
 
-See the [2026-10-15 local verification](docs/validation.md#本地重新验证2026-10-15) for current results and environment limitations (Chinese).
+The TeX scanner skips comments, common literal environments, and command definitions. It recognizes `$...$`, `$$...$$`, `\(...\)`, `\[...\]`, and common math environments. Complex alignments, unknown macros, and unsupported expressions remain for human review.
 
-## 4. Reproduce tests and evaluations
+Syntax acceptance, compilation, faithful transcription, and mathematical correctness are separate judgments. A false equation can compile successfully. Review OCR, repairs, and table findings against the original.
 
-```bash
-python -m pip install -r webui/requirements-test.txt
-python -m unittest discover -s webui -p 'test_*.py' -v
-python -m unittest discover -s harness/tests -p 'test_*.py' -v
-python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v
-python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
-node webui/test_studio.cjs
-node skills/latex-cleanup/tests/test_audit_math.cjs
-```
+The current unit of work is one `.tex` file. Multi-file projects and multi-user collaboration are outside this local version's scope. See the [roadmap](docs/roadmap.md).
 
-JavaScript tests use Node.js 22. These regression tests need no model. Studio sample compilation is listed below; latex-cleanup compilation tests have a [separate guide](skills/latex-cleanup/tests/CASES.md).
+## Samples and development
 
-| Goal | Command or guide | Output |
-| --- | --- | --- |
-| 27 deterministic checker cases | `python scripts/evaluate_cases.py --outdir state/evaluation-01` | `report.json`, `report.md` |
-| Three-group Skills execution plan | The dry-run command below | Configuration, per-case results, report, blank review sheet |
-| Same-model comparison with / without Skill | [Research protocol](samples/research/README.md) | A new run directory; semantic review is imported separately |
-| 12 Studio compilation inputs | `python scripts/compile_studio_cases.py --outdir state/studio-compile-01` | `report.json`, source copies, logs, and PDFs; [requirements and expectations](docs/evaluation-results/studio-latex/README.md) |
-| Existing experiments and compile checks | [Validation records](docs/validation.md) | Fixed inputs, environment, and original results |
+The [local guide](docs/local-studio.md#开发与复现) retains the model-free CLI example, test commands, and research protocols.
 
-```bash
-python scripts/evaluate_skills.py run \
-  --cases samples/research/smoke_cases.json \
-  --outdir work/research-dry-01 --mode dry-run
-```
+- [Casebook](docs/casebook.md), [historical validation](docs/validation.md), and [Skill comparison](docs/skills-pilot-analysis.md).
+- [Skill design](docs/skills-technical-report.md), [constrained planning](docs/studio-constrained-planner.md), [Skill selection](docs/studio-skill-selection.md), and [formula handoff](docs/studio-formula-handoff.md).
+- [TeXada series](docs/texada-series.md) and [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) for complementary formula input and document review.
+- Historical demonstration: [video](https://www.bilibili.com/video/BV16Kan6rEGv/), [recording evidence](docs/dynamic-demo.md), [WeChat article](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw), and [project report](docs/project-report.md). Each describes its own dated revision.
 
-Evaluation and compilation runners require a new output directory. Dry-run validates the plan only. Each guide explains how to interpret checker, fixture, and real-model results.
+The legacy `run-minicpm-v47-studio.sh` explicitly selects a cloud API workflow. See [compatibility notes](docs/local-studio.md#旧云-api-入口与实验功能); its results are separate from local inference acceptance.
 
-## Scope and data
+Original code, documentation, and synthetic fixtures use **AGPL-3.0-only**. Third-party notices remain in [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
 
-Studio accepts a single `.tex`, extracts same-line `$...$` formulas, and checks simple tables. The CLI accepts existing `layout.json` inputs and runs formula and table checks. Studio can recompute simple totals; the CLI's real-model provider repairs formulas only. PDF preview shows the first page. Project uploads, OCR, multiline formula extraction, and multi-user isolation are on the [roadmap](docs/roadmap.md).
-
-Syntax acceptance, successful compilation, and mathematical correctness are separate judgments. For example, `∫₀¹ x dx = 1` can pass the first two checks although the correct value is `1/2`. Review candidates against the intended meaning.
-
-Uploads are saved in `state/studio/documents/`; uploading the same name replaces an earlier upload. Task records are in `state/studio/jobs/`. Completed tasks can be queried by job ID; interrupted tasks must be started again. Deploy for trusted documents; see [SECURITY.md](SECURITY.md) for the TeX compilation trust boundary.
-
-## Development and license
-
-Code entry points: [`webui/`](webui/) for Studio, [`harness/`](harness/) for the CLI, [`skills/`](skills/) for instructions and checkers, [`samples/`](samples/) for runnable inputs, and [`scripts/`](scripts/) for evaluation and packaging. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
-
-Original code, documentation, and synthetic samples use **AGPL-3.0-only**; see [LICENSE](LICENSE). Third-party components and textbook samples retain their licenses, documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). Modified network deployments must provide access to corresponding source.
-
-Team LinguistsWantTech: 邓一纯 and 刘丰华; maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Technical and release materials are listed in the [documentation index](docs/index.md). Detailed guides are currently in Chinese.
+Team LinguistsWantTech: 邓一纯 and 刘丰华; maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Detailed technical guides are currently in Chinese.

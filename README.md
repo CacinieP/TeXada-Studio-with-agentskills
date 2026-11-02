@@ -1,166 +1,97 @@
-# TeXada Studio
+# TeXada Studio 本地版
 
-使用 MiniCPM 生成公式修复候选，在 LaTeX 编辑器里检查语法和简单表格合计，审阅 diff 后决定是否采用。
+在自己的电脑上编辑 LaTeX，识别图片或 PDF，检查公式语法和简单表格合计。MiniCPM 给出候选，你对照原文审阅，再保存、预览和导出。
 
-![TeXada Studio · MiniCPM 文档审阅](assets/texada-studio-cover.png)
+界面采用 TeXada 的深海蓝与青蓝品牌，以源码和 PDF 双栏为主体。文件、大纲、图片识别、Agent 审阅与日志通过侧栏和抽屉展开，结合确定性检查、修复候选和审阅记录。
 
-[English](README.en.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [Skill 设计与技术报告](docs/skills-technical-report.md) · [文档导航](docs/index.md) · [案例手册](docs/casebook.md)
+[English](README.en.md) · [本地使用指南](docs/local-studio.md) · [本地验收记录](docs/local-studio-acceptance.md) · [示例](samples/README.md) · [文档导航](docs/index.md)
 
-## TeXada 系列
+当前是本地单用户开发候选，尚无本次正式 Release。本机 MiniCPM-V 4.7 1B Q4 已完成固定图片与两页 PDF 转写、候选编译及缺失括号修复；Chrome 已验证保存刷新、候选审阅、历史恢复、多页预览和导出等主流程。结果是本机 smoke 验收，不是 OCR 准确率、数学正确率或跨平台评测；详见[验收记录](docs/local-studio-acceptance.md)。
 
-从公式输入到文档审阅，TeXada 系列提供两个互补工具：
+## 这版可以做什么
 
-| 工具 | 适合什么任务 | 仓库 |
-| --- | --- | --- |
-| TeXada Math Agent | 桌面端自然语言转公式、公式截图 OCR 和 LaTeX 补全；MiniCPM-V 4.7-1B 单模型链路正在本地适配 | [TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) |
-| TeXada Studio | MiniCPM-V 4.7-1B 生成公式候选；单个 `.tex` 的公式语法、简单表格合计、diff 审阅与 Tectonic 预览 | [TeXada-Studio-with-agentskills](https://github.com/CacinieP/TeXada-Studio-with-agentskills) |
-
-在 Math Agent 中得到公式 LaTeX 后，可手动复制到 Studio 文档继续检查。两个工具沿用“候选 → 确定性检查 → 证据与差异 → 人工决定”的设计方向。工作流、当前能力与迭代计划见 [TeXada 系列说明](docs/texada-series.md)。
-
-2026-10-13：系列材料与两个工具的 MiniCPM-V 4.7-1B 适配处于本地审阅阶段，尚未发布；本轮通过 ModelBest API 验证，Q4 部署需另行验收。
-
-TeXada 将 Monaco 编辑器、规则检查、MiniCPM 候选生成和 Tectonic 预览放在同一个工作台中。公式候选以 diff 展示，手动采用后可导出 `.tex`、PDF 和质检报告。
-
-当前为可复现的实验原型，源码采用 AGPL-3.0-only，尚无正式 Release。部署面向可信用户，使用单进程和共享 token。
-
-![Studio 源码、预览与候选审阅](docs/images/studio-overview.png)
-
-## 演示与技术材料
-
-| 内容 | 入口 |
+| 工作 | 操作 |
 | --- | --- |
-| 实机演示 | [B 站视频](https://www.bilibili.com/video/BV16Kan6rEGv/)：约3分42秒，保留模型等待、diff 审阅和人工采用；[录制说明与证据](docs/dynamic-demo.md) |
-| 项目介绍 | [项目报告](docs/project-report.md)：使用场景、工作流与实现范围 |
-| Skill 技术报告 | [设计与实现](docs/skills-technical-report.md)：职责划分、状态契约、加载方式、扩展与验证 |
-| 技术文章 | [微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw) · [仓库稿](docs/technical-article.md) |
-| 可复现结果 | [案例手册](docs/casebook.md) · [验证记录](docs/validation.md) · [Skill 对照实验](docs/skills-pilot-analysis.md) |
+| 管理文档 | 导入或新建 `.tex`，保存、重命名、删除；已保存的修改在刷新后保留 |
+| 识别资料 | 导入 PNG、JPEG、WebP 或 PDF，每次最多识别 5 页；审阅 LaTeX 候选后新建文档 |
+| 编辑与检查 | LaTeX 高亮与常用片段补全、查找替换、文档大纲、命令面板；检查公式语法及简单合计 |
+| 修复与审阅 | 有界 MiniCPM 候选生成，查看 diff，明确采用或拒绝，保留任务和审阅历史 |
+| 预览与交付 | 编译当前文档，逐页预览并导出 PDF；也可导出 `.tex` 和质检报告 |
+| 连接本机模型 | 保存本地服务地址与模型名称，显式检查连接；不会自动改用云模型 |
 
-TeXada 将指令、检查脚本和案例组织成可单独维护的 Skill 任务包。Python 宿主明确加载指令并管理状态，每个公式最多请求两次候选；检查器回判候选，使用者审阅后决定是否采用，请求、候选和检查结果都会保存。默认固定流程只有 `doc-formula-verify` 正文加载到模型的系统消息；其他任务包通过各自脚本或操作约定使用。
+保存会检查文件版本，发现其他窗口已修改时停止覆盖。编辑内容变化后，旧 PDF 导出会失效，需要重新编译。示例原文件保留在仓库中，保存时建立本地副本。
 
-Studio 提供默认关闭的[受限 Agent 规划实验](docs/studio-constrained-planner.md)。模型只能选择公式检查、表格检查、提议修复或请求人工；Python 校验节点、状态版本、动作 mask 和共享预算，保留 proposed/rejected/executed 事件。实验仍生成供人工采用的候选，不自动修改原文。另一个默认关闭的[多 Skill 选择开关](docs/studio-skill-selection.md)可独立开启：模型只在公式/表格能力元数据中选择，宿主验证适用后才加载正文，并记录版本与内容 hash。
+左侧活动栏可展开文档导航、搜索、图片/PDF 识别和 Agent。点击“检查”查看底部问题列表；从 Agent 中生成和审阅修复候选。底部“问题”“日志”和右侧 Agent 可随时收起，“导出”菜单提供当前 LaTeX 和已编译 PDF。
 
-默认关闭的[单公式 Math Agent 交接](docs/studio-formula-handoff.md)可将当前行内公式送到服务器配置的同一 MiniCPM 4.7 链路，返回受版本和 hash 绑定的候选。Studio 显式审阅后才调用远端 accept/reject；普通候选和交接候选均会拒绝覆盖已编辑的原文。
+## 开始使用
 
-## 1. 先跑无需模型的样本
-
-需要 Python 3.11+，已验证版本为 3.13。以下命令在 POSIX shell 中执行，Windows 可使用 WSL。首次安装依赖需要网络。
-
-```bash
-git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
-cd TeXada-Studio-with-agentskills
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r harness/requirements.txt
-PYTHONPATH=harness python -m docforensics run samples \
-  --state state/quickstart --fixture-repairs samples/fixture_repairs.json
-```
-
-预期输出：
-
-```text
-exam-01: OK=3 NEEDS_HUMAN=0
-paper-01: OK=2 NEEDS_HUMAN=1
-report-01: OK=2 NEEDS_HUMAN=0
-report: state/quickstart/report.md
-```
-
-打开 `state/quickstart/report.md` 查看候选和待人工项。此模式读取预设修复，验证处理流程；无需 GPU、模型或 TeX。重复同一命令可验证续跑，详见 [CLI 手册](harness/README.md)。
-
-## 2. 打开 Studio
-
-在同一虚拟环境中安装 Web 依赖并启动：
+需要 Python 3.11+，本轮使用 3.13。先在项目目录安装依赖：
 
 ```bash
-python -m pip install -r webui/requirements.txt
-export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-printf 'http://127.0.0.1:8888/studio?token=%s&file=math-clean.tex\n' "$DEMO_TOKEN"
-python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 8888 --workers 1
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r webui/requirements.txt
+.venv/bin/python scripts/run-local-studio.py --check
 ```
 
-打开打印的本地链接，按 `Ctrl-C` 停止。token 是访问凭据，请保存在本机；应用不会自动加载 `.env`，使用配置文件时先执行 `set -a; . ./.env; set +a`。配置项见 [`.env.example`](.env.example)。
+macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行：
 
-先看 `math-clean.tex`，再切换 `math-delimiters.tex` 检查缺失的闭合定界符，最后看 `math-semantics.tex` 中语法合法但积分值错误的反例。现有 [13 份 Studio 样本](samples/README.md)。
+```bash
+./scripts/start-local-studio.command
+```
 
-| 功能 | 所需依赖 |
+启动器打开本机浏览器，文档和模型处理都在本地。连接信息保存在用户数据目录；私密浏览器入口写入权限受限的 `session.json`，不会打印访问凭据。按启动终端中的 `Ctrl+C` 停止。
+
+首次安装 Python 依赖、模型、字体和 TeX 资源需要事先准备。Studio 编译使用已缓存的 TeX 资源，不会在文档处理过程中悄悄补下载；尚未准备缓存的电脑会显示缺失资源提示。完整步骤见[本地使用指南](docs/local-studio.md#首次准备与离线使用)。
+
+可用 `.venv/bin/python scripts/prepare-local-tex.py` 离线检查固定样本的 TeX 资源；需要时显式加 `--download-resources` 完成首次准备，再重新离线检查。
+
+| 想使用的功能 | 还需准备 |
 | --- | --- |
-| 编辑、公式分析、简单表格检查 | 上述 Python 依赖；Monaco 0.52.2 已随仓库提供 |
-| PDF 编译与第一页预览 | [Tectonic](https://tectonic-typesetting.github.io/) 和 Poppler 的 `pdftoppm`，放入 `PATH`；也可用 `TECTONIC` 指定编译器路径 |
-| 中文样本编译 | `Noto Sans CJK SC` 字体；新增英文数学样本无需该字体 |
-| 公式候选生成 | 下一节中的 MiniCPM 模型服务 |
+| 编辑、语法检查、简单表格检查 | 上述 Python 依赖；Monaco 资源已随源码提供 |
+| 本地候选与图片识别 | 本机 MiniCPM-V 4.7 1B 服务；自动启动还需 `llama-server`、GGUF 和 projector |
+| PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
+| PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
-Tectonic 首次编译可能下载 TeX 包。安装与预览问题见[排错说明](docs/troubleshooting.md)，持久运行和升级见[部署手册](deploy/README.md)。
-
-## 3. 接入真实模型
-
-本轮推荐 MiniCPM-V 4.7-1B API profile。模型来源为 [官方 1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B) 和 [官方 GGUF 仓库](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf)；以下命令使用 ModelBest API，Q4 本机部署需另行验证。
-
-完成前一节依赖安装后，在本机设置 API Key 并启动：
+有现成模型服务时，可明确指定地址启动：
 
 ```bash
-export TEXADA_OPENAI_API_KEY='YOUR_API_KEY'
-export VLM_BASE_URL='https://api.modelbest.cn/v1'
-export DEMO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-bash scripts/run-minicpm-v47-studio.sh
+.venv/bin/python scripts/run-local-studio.py \
+  --base-url http://127.0.0.1:18081/v1 \
+  --model MiniCPM-V-4.7-1B --no-auto-model
 ```
 
-上述配置选择 `https://api.modelbest.cn/v1`，启动脚本固定 `VLM_MODEL=MiniCPM-V-4.7-1B`。适配器读取 `VLM_API_KEY`；未提供时启动器从 `TEXADA_OPENAI_API_KEY` 继承。密钥仅放在本机环境变量中。程序发送公式文本，最多尝试两次候选；`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。
+本地模式仅接受 `http://localhost`、`127.0.0.1` 或 `[::1]`，无需 API Key。启动器可复用已有服务；自行启动模型时，退出只停止它自己启动的进程。模型下载与可选路径参数见[连接说明](docs/local-studio.md#本机模型连接)。
 
-CLI 使用同一 API 时：
+## 第一份文档
 
-```bash
-VLM_API_KEY="$TEXADA_OPENAI_API_KEY" PYTHONPATH=harness python -m docforensics run samples \
-  --state state/model-01 \
-  --vlm https://api.modelbest.cn/v1 --vlm-model MiniCPM-V-4.7-1B --skill-mode on
-```
+1. 打开 `math-clean.tex`，点击“检查文档”和“编译预览”。
+2. 打开 `math-delimiters.tex`，生成修复候选，查看 diff 后决定是否采用；采用后点击“保存”。
+3. 刷新页面，确认保存内容仍在，再导出当前版本的 `.tex` 或 PDF。
+4. 选择自己有权使用的图片或 PDF，点击“开始识别”；对照原件审阅识别结果，再新建文档。
 
-如需沿用本机 Ollama 兼容服务，先用 `ollama list` 确认已经安装的标签，再设置 `VLM_BASE_URL=http://127.0.0.1:11434`、`VLM_MODEL='已安装的完整模型标签'` 和 `SKILL_MODE=on`，按上一节启动 Studio。通用启动入口仍沿用本机服务；API profile 由脚本显式选择。可配置项见 [`.env.example`](.env.example)。
+“保存”或 `⌘/Ctrl+S` 才会把编辑内容写入本地文档。识别结果和修复候选都不会自动覆盖原文。
 
-真实候选和计数取决于模型。报告仍写入 `--state` 指定目录。MiniCPM 请求契约与验证边界见 [4.7 适配说明](docs/minicpm-v47.md)，Skill 加载记录、请求参数和续跑规则见 [CLI 手册](harness/README.md)。
+用顶栏“命令”或 `⌘/Ctrl+Shift+P` 查找操作；侧栏大纲可跳转到章节。查找与替换使用编辑器自带面板，外观菜单可以调整字号、自动换行和小地图，设置会在本机保留。LaTeX 常用命令提供片段建议，也可按 `Ctrl+Space` 主动唤出。状态栏显示光标行列、选区和文档字数。
 
-本地重新验证与环境限制见 [2026-10-15 验证记录](docs/validation.md#本地重新验证2026-10-15)。
+## 检查范围
 
-## 4. 测试与评估复现
+TeX 提取器会跳过注释、常见原样环境和命令定义，识别 `$...$`、`$$...$$`、`\(...\)`、`\[...\]` 与 `equation` 等环境。复杂对齐、未知宏和不支持的表达式保留人工检查，不会强行拆成可自动修改的公式。
 
-```bash
-python -m pip install -r webui/requirements-test.txt
-python -m unittest discover -s webui -p 'test_*.py' -v
-python -m unittest discover -s harness/tests -p 'test_*.py' -v
-python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v
-python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
-node webui/test_studio.cjs
-node skills/latex-cleanup/tests/test_audit_math.cjs
-```
+语法、编译、转写忠实度和数学结论是不同判断。`∫₀¹ x dx = 1` 可以通过语法与编译检查，正确值仍是 `1/2`。OCR、修复候选和表格提示需要结合原文复核。
 
-JavaScript 测试使用 Node.js 22。以上回归测试无需模型。Studio 样本编译见下表，latex-cleanup 的编译测试见[该模块说明](skills/latex-cleanup/tests/CASES.md)。
+当前工作单位是单个 `.tex`。多文件 TeX 工程与多人协作未纳入本地版范围；见[路线图](docs/roadmap.md)。
 
-| 要复现的内容 | 命令或入口 | 结果位置 |
-| --- | --- | --- |
-| 27 个确定性检查案例 | `python scripts/evaluate_cases.py --outdir state/evaluation-01` | `report.json`、`report.md` |
-| Skills 三组执行计划 | 下方 dry-run 命令 | 配置、逐项结果、报告、复核空表 |
-| 同模型有 / 无 Skill 对照 | [研究协议](samples/research/README.md) | 新运行目录；人工语义判定另行导入 |
-| 12份 Studio 编译输入 | `python scripts/compile_studio_cases.py --outdir state/studio-compile-01` | `report.json`、源码、日志和PDF；[依赖与预期](docs/evaluation-results/studio-latex/README.md) |
-| 已有实验与编译记录 | [验证记录](docs/validation.md) | 固定输入、环境和原始结果 |
+## 示例、验证与开发
 
-```bash
-python scripts/evaluate_skills.py run \
-  --cases samples/research/smoke_cases.json \
-  --outdir work/research-dry-01 --mode dry-run
-```
+无需模型的 CLI 样本、完整测试命令和研究协议见[本地指南](docs/local-studio.md#开发与复现)。主要入口：
 
-评估与编译运行器都要求新的输出目录。Dry-run 只验证执行计划；检查器案例、fixture 和真实模型结果按各自方法解释，详见对应入口。
+- [案例手册](docs/casebook.md)、[历史验证记录](docs/validation.md)、[Skill 对照实验](docs/skills-pilot-analysis.md)。
+- [Skill 设计与技术报告](docs/skills-technical-report.md)、[受限规划](docs/studio-constrained-planner.md)、[Skill 选择](docs/studio-skill-selection.md)、[单公式交接](docs/studio-formula-handoff.md)。
+- [TeXada 系列](docs/texada-series.md)与 [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent)：公式输入与文档审阅互补。
+- 旧版演示：[视频](https://www.bilibili.com/video/BV16Kan6rEGv/)、[录制证据](docs/dynamic-demo.md)、[公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[项目报告](docs/project-report.md)。这些材料记录各自日期的版本。
 
-## 支持范围与数据
+旧 `run-minicpm-v47-studio.sh` 是显式选择的云 API 入口，见[兼容说明](docs/local-studio.md#旧云-api-入口与实验功能)，不要将其结果当作本地推理验收。
 
-Studio 接收单个 `.tex`，目前按行提取 `$...$` 公式并检查简单表格；CLI 接收已有 `layout.json`，运行公式和表格检查。Studio 可按规则重算简单合计，CLI 真实模型模式只修复公式。PDF 预览显示第一页。完整项目上传、OCR、多行公式提取和多用户隔离在[路线图](docs/roadmap.md)中。
+原创代码、文档和合成样本采用 **AGPL-3.0-only**；第三方组件保留各自归属，见 [LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)，求助见 [SUPPORT.md](SUPPORT.md)。
 
-语法通过、编译通过和数学结论正确是不同判断。例如 `∫₀¹ x dx = 1` 可通过前两项，正确值仍是 `1/2`。候选需对照原意审阅。
-
-上传文件保存在 `state/studio/documents/`，同名上传会覆盖已有上传版本；任务记录在 `state/studio/jobs/`。已完成任务可按 job ID 查询，中断任务需重新发起。部署只接收可信文档；TeX 编译的信任边界见 [SECURITY.md](SECURITY.md)。
-
-## 开发与许可证
-
-代码入口：[`webui/`](webui/) 是 Studio，[`harness/`](harness/) 是 CLI，[`skills/`](skills/) 是指令与检查工具，[`samples/`](samples/) 是可运行输入，[`scripts/`](scripts/) 是评估和打包工具。参与方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，求助见 [SUPPORT.md](SUPPORT.md)。
-
-原创代码、文档和合成样本采用 **AGPL-3.0-only**，见 [LICENSE](LICENSE)。第三方组件及开放教材样本保留各自许可，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。网络部署的修改版本应提供对应源代码入口。
-
-团队 LinguistsWantTech：邓一纯、刘丰华；维护者 [@CacinieP](https://github.com/CacinieP)。引用见 [CITATION.cff](CITATION.cff)。技术材料和发布资料集中在[文档导航](docs/index.md)。
+团队 LinguistsWantTech：邓一纯、刘丰华；维护者 [@CacinieP](https://github.com/CacinieP)。引用信息见 [CITATION.cff](CITATION.cff)。

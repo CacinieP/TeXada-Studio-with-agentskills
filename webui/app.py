@@ -1,4 +1,4 @@
-"""TeXada Studio with Agent Skills 演示 Web UI 后端（FastAPI）。
+"""TeXada Studio 本地编辑器后端（FastAPI）。
 
 启动（仓库根目录，先设置 DEMO_TOKEN）:
   python -m uvicorn app:app --host 127.0.0.1 --port 8888 --app-dir webui
@@ -15,10 +15,16 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
+from local_runtime import LocalRuntime, LocalRuntimeError, make_local_provider
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
 if not TOKEN.strip():
@@ -29,7 +35,7 @@ VLM_MODEL = os.environ.get("VLM_MODEL", "MiniCPM-V-4.7-1B")
 VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://127.0.0.1:11434")
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
-app = FastAPI(title="TeXada Studio with Agent Skills demo")
+app = FastAPI(title="TeXada Studio Local")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 
@@ -77,6 +83,12 @@ class MonacoStaticFiles(StaticFiles):
 app.mount(MONACO_PREFIX, MonacoStaticFiles(
     directory=os.path.join(os.path.dirname(__file__), "static", "monaco", "0.52.2")
 ), name="monaco")
+
+# Public assets contain only application code and branding, never user documents.
+for _asset_name in ("brand", "editor"):
+    app.mount(f"/static/{_asset_name}", StaticFiles(
+        directory=os.path.join(os.path.dirname(__file__), "static", _asset_name)
+    ), name=_asset_name)
 
 
 def _run_pipeline(fresh: bool):
@@ -192,9 +204,15 @@ def nodeinfo(token: str = Query("")):
     _guard(token)
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
+    configured_model = VLM_MODEL
+    if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
+        try:
+            configured_model = _local_runtime().get_config()["model"]
+        except LocalRuntimeError:
+            pass
     return {"host": platform.node(), "platform": runtime_platform,
-            "python": platform.python_version(), "configured_model": VLM_MODEL,
-            "model": VLM_MODEL,
+            "python": platform.python_version(), "configured_model": configured_model,
+            "model": configured_model,
             # Empty legacy fields keep older clients compatible without probing hardware.
             "gpu": "", "mem": "", "models": ""}
 
@@ -267,9 +285,10 @@ from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
+from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
-STUDIO_STATE = os.path.join(REPO, "state", "studio")
+STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
 STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
@@ -277,91 +296,156 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 def _new_provider(*, skill_selection=False):
     # Selection must see metadata first; do not eagerly load the fixed formula body.
+    if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
+        config = _local_runtime().get_config()
+        return make_local_provider(config["base_url"], config["model"],
+                                   skill_mode="off" if skill_selection else SKILL_MODE)
     return OpenAICompatibleProvider(VLM_BASE_URL, VLM_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
-PROVIDER = _new_provider()
+def _local_runtime():
+    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL"), model=os.environ.get("VLM_MODEL"))
+
+
+try:
+    PROVIDER = _new_provider()
+except LocalRuntimeError:
+    # A corrupt saved connection must not prevent opening Settings to repair it.
+    PROVIDER = None
 _TABLE_LABELS = ("合计", "总计", "total")
 _TABLE_NUMBER = r"[+-]?(?:(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]*)?|\.[0-9]+)"
 _jobs = {}
+_compile_lock = threading.Lock()
+_job_lock = threading.RLock()
+
+
+def _documents():
+    return DocumentStore(STUDIO_DOCS, SAMPLE_DOCS)
+
+
+def _document_call(operation):
+    try:
+        return operation()
+    except DocumentError as error:
+        raise HTTPException(status_code=error.status, detail=str(error)) from None
+
+
+def _document_body(body):
+    body = body or {}
+    name = _document_call(lambda: document_name(body.get("name")))
+    content = _document_call(lambda: document_text(body.get("content")))
+    return name, content
+
+
+def _artifact_directory(name, tag):
+    _document_call(lambda: document_name(name))
+    if not isinstance(tag, str) or not _re.fullmatch(r"[\w-]{1,80}", tag):
+        raise HTTPException(status_code=400, detail="bad artifact tag")
+    return Path(STUDIO_STATE) / name.removesuffix(".tex") / tag
 
 
 def _studio_compile(content: str, name: str, tag: str):
-    d = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag)
-    os.makedirs(d, exist_ok=True)
-    texf = os.path.join(d, "main.tex")
-    with open(texf, "w") as f:
-        f.write(content)
-    try:
-        r = subprocess.run([TECTONIC, "-o", d, texf], capture_output=True, text=True, timeout=240)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "log": "compile timeout", "png": None}
-    except FileNotFoundError:
-        return {"ok": False, "log": "Tectonic not found; install it or set TECTONIC", "png": None}
-    ok = r.returncode == 0
-    png = None
-    if ok:
+    """Compile in an isolated build directory; page images are generated lazily."""
+    document_text(content)
+    directory = _artifact_directory(name, tag)
+    directory.mkdir(parents=True, exist_ok=True)
+    digest = text_hash(content)
+    result = {"ok": False, "compile_ok": False, "preview_ok": False,
+              "png": None, "pages": [], "pdf": None, "tag": tag,
+              "content_sha256": digest, "log": ""}
+    with _compile_lock:
+        texf = directory / "main.tex"
+        texf.write_text(content, encoding="utf-8")
+        # A local Studio never downloads TeX packages during an edit/preview.
+        command = [TECTONIC, "--untrusted", "--only-cached", "--keep-logs",
+                   "-o", str(directory), str(texf)]
         try:
-            subprocess.run(["pdftoppm", "-png", "-r", "100", "-singlefile",
-                            os.path.join(d, "main.pdf"), os.path.join(d, "preview")],
-                           check=True, capture_output=True, timeout=60)
+            run = subprocess.run(command, cwd=directory, capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            return {**result, "log": "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"}
+        except OSError:
+            return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
+        log = (run.stderr or run.stdout or "")[-2400:]
+        if run.returncode != 0 or not (directory / "main.pdf").is_file():
+            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。"}
+        base = f"/api/studio/preview/{quote(name)}/{tag}"
+        result.update(compile_ok=True, pdf=f"/api/studio/pdf/{quote(name)}/{tag}", log=log)
+        page_count = 1
+        try:
+            info = subprocess.run(["pdfinfo", str(directory / "main.pdf")],
+                                  capture_output=True, text=True, timeout=10)
+            match = _re.search(r"^Pages:\s+(\d+)", info.stdout, _re.MULTILINE)
+            if match:
+                page_count = int(match.group(1))
         except (OSError, subprocess.SubprocessError):
-            return {"ok": False, "log": "PDF generated but preview conversion failed; check pdftoppm", "png": None}
-        p = os.path.join(d, "preview.png")
-        png = f"/api/studio/preview/{name}/{tag}?v={int(time.time())}" if os.path.exists(p) else None
-    return {"ok": ok, "log": (r.stderr or r.stdout or "")[-600:], "png": png}
+            pass
+        result["page_count"] = page_count
+        result["pages"] = [f"{base}?page={page}" for page in range(1, min(page_count, 60) + 1)]
+        try:
+            _render_preview_page(directory, 1)
+        except HTTPException:
+            result.update(log="PDF 已生成；预览转换失败，请检查本机 pdftoppm。", pages=[])
+        else:
+            result.update(ok=True, preview_ok=True, png=result["pages"][0])
+        (directory / "manifest.json").write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        return result
+
+
+def _render_preview_page(directory, page):
+    png = directory / f"preview-{page}.png"
+    if not png.is_file():
+        try:
+            subprocess.run(["pdftoppm", "-f", str(page), "-l", str(page), "-png", "-r", "100",
+                            "-singlefile", str(directory / "main.pdf"), str(png.with_suffix(""))],
+                           check=True, capture_output=True, timeout=45)
+        except (OSError, subprocess.SubprocessError):
+            raise HTTPException(status_code=503, detail="PDF 已生成，但本机页面预览转换失败。") from None
+    if not png.is_file():
+        raise HTTPException(status_code=404, detail="页面不存在。")
+    return png
 
 
 @app.post("/api/studio/preview")
 def studio_preview_live(token: str = Query(""), body: dict = None):
     """编译当前编辑器内容并返回整页渲染（预览窗口用）。"""
     _guard(token)
-    body = body or {}
-    name, content = body.get("name", ""), body.get("content", "")
-    if not _re.fullmatch(r"[\w.-]+\.tex", name):
-        raise HTTPException(status_code=400, detail="bad name")
-    tag = "live-" + hashlib.sha1(content.encode()).hexdigest()[:12]
+    name, content = _document_body(body)
+    # Identical source can produce different output (for example, \\today).
+    # Each build owns immutable PDF/page URLs, including lazily rendered pages.
+    tag = "live-" + _uuid.uuid4().hex
     res = _studio_compile(content, name, tag)
-    return {"ok": res["ok"], "png": res["png"], "log": res["log"]}
+    return res
 
 
 @app.post("/api/studio/upload")
 def studio_upload(token: str = Query(""), body: dict = None):
     """导入 .tex 文档到被 Git 忽略的 state/studio/documents。"""
     _guard(token)
-    body = body or {}
-    name, content = body.get("name", ""), body.get("content", "")
-    if not _re.fullmatch(r"[\w\u4e00-\u9fff.-]+\.tex", name or ""):
-        raise HTTPException(status_code=400, detail="仅支持 .tex 文件名")
-    if name in (".", "..") or "/" in name:
-        raise HTTPException(status_code=400, detail="bad name")
-    os.makedirs(STUDIO_DOCS, exist_ok=True)
-    with open(os.path.join(STUDIO_DOCS, name), "w") as f:
-        f.write(content)
-    return {"ok": True, "name": name}
+    name, content = _document_body(body)
+    return _document_call(lambda: _documents().save(name, content, (body or {}).get("expected_sha256"), upload=True))
 
 
 @app.get("/api/studio/pdf/{name}/{tag}")
 def studio_pdf(name: str, tag: str, token: str = Query("")):
     _guard(token)
-    if not (_re.fullmatch(r"[\w.-]+", name) and _re.fullmatch(r"[\w-]+", tag)):
-        raise HTTPException(status_code=400, detail="bad path")
-    p = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag, "main.pdf")
+    p = str(_artifact_directory(name, tag) / "main.pdf")
     if not os.path.exists(p):
         raise HTTPException(status_code=404, detail="no pdf")
     return FileResponse(p, media_type="application/pdf", filename=name.replace(".tex", f"-{tag}.pdf"))
 
 
 @app.get("/api/studio/preview/{name}/{tag}")
-def studio_preview(name: str, tag: str, token: str = Query("")):
+def studio_preview(name: str, tag: str, token: str = Query(""), page: int = Query(1, ge=1, le=60)):
     _guard(token)
-    _safe = _re.fullmatch(r"[\w.-]+", name) and _re.fullmatch(r"[\w-]+", tag)
-    if not _safe:
-        raise HTTPException(status_code=400, detail="bad path")
-    p = os.path.join(STUDIO_STATE, name.replace(".tex", ""), tag, "preview.png")
-    if not os.path.exists(p):
+    directory = _artifact_directory(name, tag)
+    if not (directory / "main.pdf").is_file():
         raise HTTPException(status_code=404, detail="no preview")
-    return FileResponse(p)
+    manifest = directory / "manifest.json"
+    if manifest.is_file():
+        count = json.loads(manifest.read_text(encoding="utf-8")).get("page_count", 1)
+        if page > count:
+            raise HTTPException(status_code=404, detail="no page")
+    return FileResponse(_render_preview_page(directory, page), headers={"Cache-Control": "private, max-age=3600"})
 
 
 def _verify_formula(latex: str):
@@ -380,18 +464,20 @@ def _verify_formula(latex: str):
 
 
 def _formula_problems(content: str, emit=None):
-    problems, nid = [], 0
-    for i, line in enumerate(content.splitlines(), 1):
-        for m in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
-            nid += 1
-            vj = _verify_formula(m.group(1))
-            if emit:
-                emit("CHECK", node_id=f"f-{i:03d}-{nid}", line=i, original=m.group(1),
-                     checker="doc-formula-verify", check=vj)
-            if vj.get("status") != "OK":
-                problems.append({"id": f"f-{i:03d}-{nid}", "type": "formula", "line": i,
-                                 "latex": m.group(1), "status": vj["status"],
-                                 "reason": vj.get("reason", "")})
+    problems = []
+    parsed = analyze_math(content)
+    for node in parsed["nodes"]:
+        vj = (_verify_formula(node["latex"]) if node["checkable"] else
+              {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]})
+        if emit:
+            emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
+                 checker="doc-formula-verify", check=vj)
+        if vj.get("status") != "OK":
+            problems.append({**node, "type": "formula", "status": vj["status"], "reason": vj.get("reason", "")})
+    for index, diagnostic in enumerate(parsed["diagnostics"]):
+        problems.append({**diagnostic, "id": f"math-boundary-{index}", "type": "formula",
+                         "status": "NEEDS_HUMAN", "latex": "",
+                         "reason": "数学边界未闭合或无法可靠抽取，请先检查原文：" + diagnostic.get("reason", diagnostic.get("code", "unknown"))})
     return problems
 
 
@@ -449,11 +535,16 @@ def _table_problems(content: str):
                     problems.append({**item, "right": right, "status": "RETRY",
                                      "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
 
+    visible_lines = mask_opaque(content).splitlines()
     for i, line in enumerate(content.splitlines()):
+        # Keep raw text for numeric replacement; masked source only decides
+        # whether this line is executable TeX rather than a printed example.
+        if not visible_lines[i].strip():
+            continue
         stripped = line.strip()
         if stripped.startswith("%"):
             continue
-        if r"\begin{tabular}" in line:
+        if r"\begin{tabular}" in visible_lines[i]:
             if in_tab:
                 shape_reason = "嵌套表格不在自动合计检查范围，需人工核对"
                 continue
@@ -463,7 +554,7 @@ def _table_problems(content: str):
             continue
         if not in_tab:
             continue
-        if r"\end{tabular}" in line:
+        if r"\end{tabular}" in visible_lines[i]:
             if stripped != r"\end{tabular}":
                 shape_reason = "表格结束标记必须独占一行，需人工核对"
             audit_rows()
@@ -489,9 +580,10 @@ def _analyze(content: str):
 
 def _apply_fixes(content: str, log, *, provider=None, emit=None):
     provider = provider if provider is not None else PROVIDER
+    if provider is None:
+        provider = _new_provider()
     emit = emit or (lambda action, **fields: None)
-    lines = content.splitlines(keepends=True)
-    edits = []
+    edits, replacements = [], []
     fp = _formula_problems(content, emit)
     verifier_unavailable = False
     for p in fp:
@@ -504,7 +596,6 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
             log.append(f"[doc-formula-verify] {p['id']} 需要人工审阅，保留原文")
             emit("REPAIR_SKIPPED", node_id=p["id"], reason="needs_human")
             continue
-        li = p["line"] - 1
         latex = p["latex"]
         fixed, ok = None, False
         for attempt in (1, 2):
@@ -539,12 +630,13 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
             emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
                  candidate=cand, reason="checker_rejected", check=vj)
         if ok and fixed != latex:
-            old = f"${latex}$"
-            if old in lines[li]:
-                lines[li] = lines[li].replace(old, f"${fixed}$", 1)
+            start, end = p.get("body_start"), p.get("body_end")
+            if isinstance(start, int) and isinstance(end, int) and content[start:end] == latex:
+                replacements.append((start, end, fixed))
                 edits.append({"line": p["line"], "before": latex, "after": fixed, "skill": "doc-formula-verify"})
                 emit("CANDIDATE_EDIT", node_id=p["id"], line=p["line"], before=latex, after=fixed)
-    content = "".join(lines)
+    for start, end, replacement in sorted(replacements, reverse=True):
+        content = content[:start] + replacement + content[end:]
 
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
@@ -577,19 +669,15 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
 
 def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False, use_model_planner=True):
     """Install explicit checker/repair callbacks; the planner cannot supply edits."""
-    nodes, offset, nid = [], 0, 0
-    for line_no, line in enumerate(content.splitlines(keepends=True), 1):
-        for match in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
-            nid += 1
-            nodes.append({"id": f"f-{line_no:03d}-{nid}", "kind": "formula", "line": line_no,
-                          "latex": match.group(1), "start": offset + match.start(1), "end": offset + match.end(1)})
-        offset += len(line)
-    if r"\begin{tabular}" in content:
+    nodes = [{**node, "math_kind": node["kind"], "kind": "formula",
+              "start": node["body_start"], "end": node["body_end"]} for node in extract_math(content)]
+    if r"\begin{tabular}" in mask_opaque(content):
         nodes.append({"id": "table-document", "kind": "table", "line": 1, "document_text": content})
 
     def check(node):
         if node["kind"] == "formula":
-            result = _verify_formula(node["latex"])
+            result = (_verify_formula(node["latex"]) if node.get("checkable", True) else
+                      {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")})
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=result)
             return result
@@ -683,7 +771,7 @@ def _save_job(job_id, job):
     directory = _job_path(job_id)
     os.makedirs(directory, exist_ok=True)
     target = os.path.join(directory, "job.json")
-    temporary = target + ".tmp"
+    temporary = target + "." + _uuid.uuid4().hex + ".tmp"
     with open(temporary, "w", encoding="utf-8") as stream:
         json.dump(job, stream, ensure_ascii=False)
         stream.flush()
@@ -735,6 +823,8 @@ def _studio_job(name: str, content: str, job_id: str):
     input_sha256 = None
 
     def emit(action, **fields):
+        if job.get("cancel_requested") and action not in {"JOB_ERROR", "JOB_CANCELLED"}:
+            raise JobCancelled()
         event = {"schema_version": 2, "job_id": job_id, "seq": len(trace) + 1,
                  "ts": time.time(), "input_sha256": input_sha256, "action": action, **fields}
         directory = _job_path(job_id)
@@ -776,8 +866,8 @@ def _studio_job(name: str, content: str, job_id: str):
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
                          "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
-                         "model": VLM_MODEL if model_calls else None,
-                         "configured_model": VLM_MODEL, "model_calls": model_calls,
+                         "model": getattr(provider, "model", VLM_MODEL) if model_calls else None,
+                         "configured_model": getattr(provider, "model", VLM_MODEL), "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",
                          "skill_mode": "selected" if skill_selection else SKILL_MODE,
                          "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,
@@ -786,8 +876,13 @@ def _studio_job(name: str, content: str, job_id: str):
                          "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
                          "candidate_sha256": hashlib.sha256(fixed.encode()).hexdigest(),
                          "requires_review": True,
-                         "scope": "行内公式语法与简单表格合计；不验证数学语义，不读取图像"}
+                         "scope": "TeX 数学片段语法与简单表格合计；不验证数学结论或 OCR 忠实度"}
         job["done"] = True
+        _save_job(job_id, job)
+    except JobCancelled:
+        job.update(done=True, result=None, error="任务已取消；原文保持不变。")
+        log.append("[studio] 取消已在阶段边界生效，未采用任何候选。")
+        emit("JOB_CANCELLED")
         _save_job(job_id, job)
     except Exception as e:  # noqa: BLE001
         # Error text from dependencies may contain private paths or endpoints.
@@ -818,30 +913,95 @@ def studio(request: Request, token: str = Query("")):
 @app.get("/api/studio/files")
 def studio_files(token: str = Query("")):
     _guard(token)
-    files = {f for directory in (SAMPLE_DOCS, STUDIO_DOCS) if os.path.isdir(directory)
-             for f in os.listdir(directory) if f.endswith(".tex")}
-    return {"files": sorted(files)}
+    return _document_call(lambda: _documents().listing())
+
+
+def _runtime_call(operation):
+    try:
+        return operation()
+    except LocalRuntimeError as error:
+        raise HTTPException(status_code=error.status, detail=error.message) from None
+
+
+@app.get("/api/studio/config")
+def studio_config(token: str = Query(""), probe: bool = False):
+    _guard(token)
+    runtime = _local_runtime()
+    config = _runtime_call(runtime.probe if probe else runtime.get_config)
+    return {**config, "local_mode": os.environ.get("TEXADA_LOCAL_MODE", "1") == "1", "offline": True,
+            "tools": {"tectonic": bool(shutil.which(TECTONIC)), "pdftoppm": bool(shutil.which("pdftoppm")),
+                      "pdfinfo": bool(shutil.which("pdfinfo"))},
+            "max_document_bytes": 2 * 1024 * 1024, "max_import_pages": 5,
+            "math_scope": ["$...$", "$$...$$", "\\(...\\)", "\\[...\\]", "equation", "align"]}
+
+
+@app.post("/api/studio/settings")
+def studio_settings(token: str = Query(""), body: dict = None):
+    _guard(token)
+    result = _runtime_call(lambda: _local_runtime().update_settings(body))
+    # Settings are per-Studio; no user-global agent/model configuration is changed.
+    return {**result, "local_mode": True, "offline": True,
+            "tools": {"tectonic": bool(shutil.which(TECTONIC)), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+
+
+@app.post("/api/studio/probe")
+def studio_probe(token: str = Query(""), body: dict = None):
+    _guard(token)
+    return _runtime_call(lambda: _local_runtime().probe(body))
+
+
+@app.post("/api/studio/import")
+def studio_import(token: str = Query(""), body: dict = None):
+    _guard(token)
+    return _runtime_call(lambda: _local_runtime().import_document(body))
+
+
+@app.post("/api/studio/math")
+def studio_math(token: str = Query(""), body: dict = None):
+    _guard(token)
+    content = _document_call(lambda: document_text((body or {}).get("content")))
+    return analyze_math(content)
 
 
 @app.get("/api/studio/file")
 def studio_file(name: str = Query(""), token: str = Query("")):
     _guard(token)
-    if not _re.fullmatch(r"[\w.-]+\.tex", name):
-        raise HTTPException(status_code=400, detail="bad name")
-    path = os.path.join(STUDIO_DOCS, name)
-    if not os.path.isfile(path):
-        path = os.path.join(SAMPLE_DOCS, name)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="no file")
-    with open(path) as f:
-        return {"name": name, "content": f.read()}
+    return _document_call(lambda: _documents().read(name))
+
+
+@app.post("/api/studio/create")
+def studio_create(token: str = Query(""), body: dict = None):
+    _guard(token)
+    name, content = _document_body(body)
+    return _document_call(lambda: _documents().save(name, content, create=True))
+
+
+@app.post("/api/studio/save")
+def studio_save(token: str = Query(""), body: dict = None):
+    _guard(token)
+    name, content = _document_body(body)
+    return _document_call(lambda: _documents().save(name, content, (body or {}).get("expected_sha256")))
+
+
+@app.post("/api/studio/rename")
+def studio_rename(token: str = Query(""), body: dict = None):
+    _guard(token)
+    body = body or {}
+    return _document_call(lambda: _documents().rename(body.get("name"), body.get("new_name"), body.get("expected_sha256")))
+
+
+@app.post("/api/studio/delete")
+def studio_delete(token: str = Query(""), body: dict = None):
+    _guard(token)
+    body = body or {}
+    return _document_call(lambda: _documents().delete(body.get("name"), body.get("expected_sha256")))
 
 
 @app.post("/api/studio/analyze")
 def studio_analyze(token: str = Query(""), name: str = Query(""), body: dict = None):
     _guard(token)
     body = body or {}
-    content = body.get("content", "")
+    content = _document_call(lambda: document_text(body.get("content", "")))
     problems = _analyze(content)
     return {"problems": problems,
             "summary": {"formula": sum(1 for p in problems if p["type"] == "formula"),
@@ -853,14 +1013,7 @@ def studio_fix(token: str = Query(""), body: dict = None):
     _guard(token)
     body = body or {}
     name, content = body.get("name", ""), body.get("content", "")
-    if not isinstance(name, str) or not _re.fullmatch(r"[\w.-]+\.tex", name):
-        raise HTTPException(status_code=400, detail="bad name")
-    if not isinstance(content, str):
-        raise HTTPException(status_code=400, detail="content must be text")
-    try:
-        content.encode("utf-8")
-    except UnicodeEncodeError:
-        raise HTTPException(status_code=400, detail="content must be valid UTF-8 text") from None
+    name, content = _document_body(body)
     planner_mode = body.get("planner_mode", False)
     if type(planner_mode) is not bool:
         raise HTTPException(status_code=400, detail="planner_mode must be boolean")
@@ -868,7 +1021,8 @@ def studio_fix(token: str = Query(""), body: dict = None):
     if type(skill_selection) is not bool:
         raise HTTPException(status_code=400, detail="skill_selection must be boolean")
     job_id = _uuid.uuid4().hex
-    _jobs[job_id] = {"done": False, "log": [f"[studio] 任务 {job_id} 接收：{name}"],
+    _jobs[job_id] = {"done": False, "name": name, "created_at": time.time(),
+                     "log": [f"[studio] 任务 {job_id} 接收：{name}"],
                      "result": None, "planner_mode": planner_mode, "skill_selection": skill_selection}
     # Persist acceptance before returning an ID, even if shutdown precedes the worker.
     try:
@@ -888,7 +1042,81 @@ def studio_fixstatus(id: str = Query(""), token: str = Query("")):
     if not job:
         raise HTTPException(status_code=404, detail="no job")
     return {"done": job["done"], "log": job["log"][-30:], "result": job.get("result"),
-            "error": job.get("error"), "trace": job.get("trace", [])}
+            "error": job.get("error"), "trace": job.get("trace", []),
+            "review": job.get("review"), "cancel_requested": job.get("cancel_requested", False)}
+
+
+@app.get("/api/studio/jobs")
+def studio_jobs(token: str = Query("")):
+    _guard(token)
+    ids = set(_jobs)
+    directory = Path(STUDIO_STATE) / "jobs"
+    if directory.is_dir():
+        ids.update(p.name for p in directory.iterdir() if p.is_dir() and _re.fullmatch(r"[a-f0-9]{8,32}", p.name))
+    jobs = []
+    for job_id in ids:
+        job = _jobs.get(job_id) or _read_job(job_id)
+        if not job:
+            continue
+        jobs.append({"id": job_id, "name": job.get("name", "历史文档"),
+                     "created_at": job.get("created_at", 0), "done": job["done"],
+                     "error": job.get("error"), "review": job.get("review"),
+                     "has_candidate": isinstance(job.get("result"), dict),
+                     "original_sha256": (job.get("result") or {}).get("original_sha256")})
+    return {"jobs": sorted(jobs, key=lambda job: job["created_at"], reverse=True)[:100]}
+
+
+@app.post("/api/studio/jobs/{job_id}/decision")
+def studio_job_decision(job_id: str, token: str = Query(""), body: dict = None):
+    _guard(token)
+    body = body or {}
+    with _job_lock:
+        job = _jobs.get(job_id) or _read_job(job_id)
+        result = (job or {}).get("result")
+        if not job or not job["done"] or not isinstance(result, dict):
+            raise HTTPException(status_code=409, detail="没有已完成、可审阅的候选。")
+        decision = body.get("decision")
+        if decision not in {"accept", "reject"}:
+            raise HTTPException(status_code=400, detail="decision 必须为 accept 或 reject。")
+        name, content = _document_body(body)
+        if (name != job.get("name", name) or text_hash(content) != result["original_sha256"]
+                or body.get("candidate_sha256") != result["candidate_sha256"]):
+            raise HTTPException(status_code=409, detail="原文或候选已变化；请重新生成。")
+        if job.get("review") and job["review"]["decision"] != decision:
+            raise HTTPException(status_code=409, detail="此候选已有相反的审阅决定。")
+        if not job.get("review"):
+            job["review"] = {"decision": decision, "at": time.time(),
+                             "original_sha256": result["original_sha256"],
+                             "candidate_sha256": result["candidate_sha256"]}
+            events = _read_job_events(job_id)
+            event = {"schema_version": 2, "job_id": job_id, "seq": len(events) + 1,
+                     "ts": time.time(), "action": "USER_ACCEPTED" if decision == "accept" else "USER_REJECTED",
+                     **job["review"]}
+            with open(os.path.join(_job_path(job_id), "events.jsonl"), "a", encoding="utf-8") as stream:
+                stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            _save_job(job_id, job)
+            _jobs[job_id] = job
+        return {"job_id": job_id, **job["review"]}
+
+
+class JobCancelled(Exception):
+    pass
+
+
+@app.post("/api/studio/jobs/{job_id}/cancel")
+def studio_job_cancel(job_id: str, token: str = Query("")):
+    _guard(token)
+    _job_path(job_id)
+    with _job_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="没有运行中的任务。")
+        if not job["done"]:
+            job["cancel_requested"] = True
+            _save_job(job_id, job)
+        return {"job_id": job_id, "done": job["done"], "cancel_requested": job.get("cancel_requested", False)}
 
 
 # Default-off single-formula handoff to one server-configured Math Agent.

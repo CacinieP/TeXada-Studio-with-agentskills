@@ -3,6 +3,55 @@
 Project-authored code, documentation and synthetic fixtures are licensed under
 AGPL-3.0-only by CacinieP. The components below retain their own notices and terms.
 
+## TeXWizard interface reference
+
+An earlier Studio interface adapted the layout and visual styling of
+[`原型-GPT5.1.html`](https://github.com/CacinieP/TeXWizard/blob/main/%E5%8E%9F%E5%9E%8B-GPT5.1.html)
+from [CacinieP/TeXWizard](https://github.com/CacinieP/TeXWizard),
+source blob `aab7f51a3932e28e281c4068928b36021eb652a1`.
+The current interface uses TeXada's navy visual system. The historical reference
+provided interface styling; the document, inference, checking, review,
+persistence and preview behavior is implemented in this repository.
+
+The reference's MIT notice is preserved below. Modifications in this repository
+remain covered by this repository's AGPL-3.0-only terms.
+
+```text
+MIT License
+
+Copyright (c) 2026 CacinieP
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## TeXada Agent brand asset
+
+`webui/static/brand/` contains unchanged 32px and 128px icons plus the 1024px
+source from
+[CacinieP/TeXada-the-Math-Agent](https://github.com/CacinieP/TeXada-the-Math-Agent),
+`tauri-shell/src-tauri/icons/32x32.png`, `tauri-shell/src/app-icon.png` and
+`assets/TeXada-icon-source.png`, revision
+`a560c06ba9491f3dc356fc67e157080938a9cde1`. They are authored by the same
+maintainer and remain under AGPL-3.0-only.
+Studio's toolbar SVG symbols and LaTeX language support are authored in this
+repository; they do not fetch a remote icon library or model.
+
 ## Monaco Editor 0.52.2
 
 - Upstream: https://github.com/microsoft/monaco-editor/tree/v0.52.2
