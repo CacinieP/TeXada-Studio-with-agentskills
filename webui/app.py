@@ -410,7 +410,9 @@ def studio_preview_live(token: str = Query(""), body: dict = None):
     """编译当前编辑器内容并返回整页渲染（预览窗口用）。"""
     _guard(token)
     name, content = _document_body(body)
-    tag = "live-" + hashlib.sha1(content.encode()).hexdigest()[:12]
+    # Identical source can produce different output (for example, \\today).
+    # Each build owns immutable PDF/page URLs, including lazily rendered pages.
+    tag = "live-" + _uuid.uuid4().hex
     res = _studio_compile(content, name, tag)
     return res
 

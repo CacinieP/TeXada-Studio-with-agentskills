@@ -360,6 +360,45 @@ class LocalProductTest(unittest.TestCase):
         self.assertEqual(downloaded.content, b"%PDF-1.7\nfixture")
         self.assertIn("application/pdf", downloaded.headers["content-type"])
 
+    def test_recompiling_unchanged_source_keeps_each_pdf_and_preview_immutable(self):
+        generation = 0
+
+        def run(command, **kwargs):
+            nonlocal generation
+            if command[0] == studio.TECTONIC:
+                generation += 1
+                (Path(kwargs["cwd"]) / "main.pdf").write_bytes(
+                    b"%PDF-1.7\n" + f"generation-{generation}".encode())
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if command[0] == "pdfinfo":
+                return SimpleNamespace(returncode=0, stdout="Pages: 2\n", stderr="")
+            if command[0] == "pdftoppm":
+                pdf = Path(command[-2]).read_bytes()
+                Path(command[-1] + ".png").write_bytes(b"\x89PNG\r\n" + pdf)
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            self.fail("Unexpected external command")
+
+        body = {"name": "notes.tex", "content": r"\today"}
+        with patch.object(studio.subprocess, "run", side_effect=run):
+            first = self.post("preview", body).json()
+            first_image = self.client.get(first["pages"][0].split("?")[0], params=self.auth)
+            second = self.post("preview", body).json()
+            self.assertEqual(first["content_sha256"], second["content_sha256"])
+            self.assertNotEqual(first["tag"], second["tag"])
+            self.assertNotEqual(first["pdf"], second["pdf"])
+            self.assertNotEqual(first["pages"], second["pages"])
+            self.assertIn("max-age=3600", first_image.headers["cache-control"])
+
+            # Even a page first requested after recompilation belongs to its PDF.
+            for result, expected in ((first, b"generation-1"), (second, b"generation-2")):
+                pdf = self.client.get(result["pdf"], params=self.auth)
+                self.assertEqual(pdf.content, b"%PDF-1.7\n" + expected)
+                for page in (1, 2):
+                    image = self.client.get(result["pages"][page - 1].split("?")[0],
+                                            params={**self.auth, "page": page})
+                    self.assertEqual(image.status_code, 200)
+                    self.assertEqual(image.content, b"\x89PNG\r\n%PDF-1.7\n" + expected)
+
     def test_local_settings_survive_new_runtime_and_config_does_not_probe(self):
         with patch.object(studio.LocalRuntime, "probe", side_effect=AssertionError("implicit model call")):
             first = self.get("config")
