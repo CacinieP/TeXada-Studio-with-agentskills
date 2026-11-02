@@ -1,7 +1,5 @@
 # 从候选到确认：用 Agent Skills 组织 LaTeX 修复
 
-作者：LinguistsWantTech 团队；邓一纯、刘丰华。
-
 投稿方向：第三届 NVIDIA DGX Spark Hackathon · Agent Skills
 
 [项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)

@@ -1,6 +1,6 @@
 # TeXada Agent Skills 技术报告
 
-作者：LinguistsWantTech；邓一纯、刘丰华。更新：2026-09-29。
+更新：2026-09-29。
 
 [架构](architecture.md) · [案例与命令](casebook.md) · [验证记录](validation.md)
 
