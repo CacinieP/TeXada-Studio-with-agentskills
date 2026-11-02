@@ -478,6 +478,105 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   run('ocrFile=null');context.oversizeImage={name:'too-large.png',type:'image/png',size:13*1024*1024};
   run('chooseOcrFile(oversizeImage)');assert.equal(run('ocrFile'),null,'OCR file size must match 12 MiB server limit');
 
+  // OCR has its own request lifecycle; it must never freeze the source editor
+  // or let a second/obsolete response replace an edited review candidate.
+  context.FileReader=class {
+    readAsDataURL(){this.result='data:image/png;base64,AA==';this.onload();}
+  };
+  context.ocrA={name:'A.png',type:'image/png',size:100};
+  context.ocrB={name:'B.png',type:'image/png',size:100};
+  const ocrRequests=[];
+  context.ocrWire=(url,options)=>new Promise((resolve,reject)=>{
+    assert.match(url,/\/import\?/);ocrRequests.push({body:JSON.parse(options.body),resolve,reject});
+  });
+  const flushOcr=async()=>{await Promise.resolve();await Promise.resolve();};
+  const recognized=(name,content)=>({name,content,requires_review:true});
+  run("j=ocrWire;busy=false;ocrReviewActive=false;closeDialog('ocrDialog');openImportPanel();chooseOcrFile(ocrA);");
+  get('ocrPages').value='1';
+  const ocrPendingA=get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests.length,1);assert.equal(ocrRequests[0].body.name,'A.png');
+  assert.equal(run('ocrRunning'),true);assert.equal(run('busy'),false);
+  context.testEditor.setValue('source edit during OCR');
+  run('chooseOcrFile(ocrB);lockDocumentMutation(false);');
+  assert.equal(get('btnOcr').disabled,true,'choosing B or a document unlock cannot release the OCR lock');
+  await get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests.length,1,'calling the disabled handler directly cannot start OCR B');
+  get('ocrName').value='manual-review.tex';get('ocrCandidate').value='manual review edits';
+  ocrRequests[0].resolve(recognized('A.tex','obsolete A'));await ocrPendingA;
+  assert.equal(get('ocrName').value,'manual-review.tex');assert.equal(get('ocrCandidate').value,'manual review edits');
+  assert.equal(get('ocrDialog').open,false,'an obsolete result cannot reopen review');
+  assert.equal(context.testEditor.getValue(),'source edit during OCR','OCR leaves source edits intact');
+  assert.equal(run('ocrRunning'),false);assert.equal(get('btnOcr').disabled,false);
+  assert.equal(run('ocrFile.name'),'B.png','finally restores availability for the current selected file');
+
+  const ocrPendingB=get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests.length,2);assert.equal(ocrRequests[1].body.name,'B.png');
+  ocrRequests[1].resolve(recognized('B.tex','candidate B'));await ocrPendingB;
+  assert.equal(get('ocrDialog').open,true);assert.equal(get('btnOcr').disabled,true);
+  get('ocrName').value='corrected-B.tex';get('ocrCandidate').value='corrected B';
+  get('ocrCandidate').listeners.get('input')({});
+  run('chooseOcrFile(ocrA)');await get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests.length,2,'an active review blocks another request even through direct invocation');
+  assert.equal(get('ocrCandidate').value,'corrected B');assert.equal(get('ocrName').value,'corrected-B.tex');
+  let reviewCancelled=false;
+  get('ocrDialog').listeners.get('cancel')({preventDefault(){reviewCancelled=true;}});
+  assert.equal(reviewCancelled,true);assert.equal(run('ocrReviewActive'),false);assert.equal(get('btnOcr').disabled,false);
+
+  // Closing and reopening import keeps the old request locked until it settles,
+  // while its late success/error has no permission to alter the new session.
+  const ocrCancelled=get('btnOcr').onclick();await flushOcr();
+  get('btnImportClose').onclick();run('openImportPanel();chooseOcrFile(ocrB)');
+  await get('btnOcr').onclick();assert.equal(ocrRequests.length,3);assert.equal(get('btnOcr').disabled,true);
+  const reopenedHint=get('ocrHint').textContent;
+  ocrRequests[2].resolve(recognized('late-A.tex','late A after close'));await ocrCancelled;
+  assert.equal(get('ocrDialog').open,false);assert.equal(get('ocrCandidate').value,'corrected B');
+  assert.equal(get('ocrHint').textContent,reopenedHint,'late result cannot replace the current session hint');
+  assert.equal(get('btnOcr').disabled,false);
+  const ocrEscaped=get('btnOcr').onclick();await flushOcr();
+  let importCancelled=false;
+  get('importDialog').listeners.get('cancel')({preventDefault(){importCancelled=true;}});
+  run('openImportPanel()');const cancelledHint=get('ocrHint').textContent;
+  ocrRequests[3].reject(new Error('obsolete failure'));await ocrEscaped;
+  assert.equal(importCancelled,true);assert.equal(get('ocrDialog').open,false);
+  assert.equal(get('ocrHint').textContent,cancelledHint,'an obsolete error cannot replace session feedback');
+  assert.equal(get('btnOcr').disabled,false);
+
+  // A current request also checks review edits before writing its result.
+  const ocrEdited=get('btnOcr').onclick();await flushOcr();
+  get('ocrCandidate').value='review modified while awaiting result';get('ocrCandidate').listeners.get('input')({});
+  ocrRequests[4].resolve(recognized('ignored.tex','must not replace review'));await ocrEdited;
+  assert.equal(get('ocrCandidate').value,'review modified while awaiting result');
+  assert.equal(get('ocrName').value,'corrected-B.tex');assert.equal(get('ocrDialog').open,false);
+  assert.equal(get('btnOcr').disabled,false);
+
+  const ocrFailed=get('btnOcr').onclick();await flushOcr();
+  ocrRequests[5].reject(new Error('model unavailable'));await ocrFailed;
+  assert.equal(run('ocrRunning'),false);assert.equal(get('btnOcr').disabled,false,'a current failure can be retried');
+  assert.match(get('ocrHint').textContent,/识别未完成/);
+  const ocrRetried=get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests[6].body.name,'B.png');
+  ocrRequests[6].resolve(recognized('retry.tex','retry candidate'));await ocrRetried;
+  assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(get('ocrName').value,'retry.tex');
+  assert.equal(get('ocrDialog').open,true);assert.equal(run('busy'),false);
+  run('savingDocument=true');await get('btnOcrCreate').onclick();
+  assert.equal(get('ocrDialog').open,true,'waiting for source save cannot close an uncreated review');
+  assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(ocrRequests.length,7);
+  run('savingDocument=false');
+  get('btnOcrCancel').onclick();get('btnImportClose').onclick();
+
+  // Cancellation during local file reading must not later send the old file.
+  let finishOcrRead;
+  context.FileReader=class {
+    readAsDataURL(){finishOcrRead=()=>{this.result='data:image/png;base64,AA==';this.onload();};}
+  };
+  run('openImportPanel();chooseOcrFile(ocrA)');const ocrReading=get('btnOcr').onclick();
+  get('btnImportClose').onclick();run('openImportPanel();chooseOcrFile(ocrB)');
+  await get('btnOcr').onclick();assert.equal(get('btnOcr').disabled,true);
+  finishOcrRead();await ocrReading;
+  assert.equal(ocrRequests.length,7,'cancelled file reading cannot send an obsolete model request');
+  assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(get('ocrDialog').open,false);
+  assert.equal(get('btnOcr').disabled,false);get('btnImportClose').onclick();
+
   // TeX outlines exclude comments and literal regions without shifting line positions.
   context.outlineSource=String.raw`% \section{Commented}
 \section[Short]{A \textbf{nested {title}}}
@@ -783,5 +882,5 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.match(html, /<link rel="stylesheet" href="\/static\/editor\/studio\.css">/);
   assert.match(stylesheet, /\.hide\s*\{\s*display:\s*none\s*!important;/);
   assert.match(stylesheet, /#previewPane\.collapsed\s*\{[^}]*padding:\s*0\s*!important;/);
-  console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
+  console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

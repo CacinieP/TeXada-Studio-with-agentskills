@@ -641,7 +641,7 @@ function documentSnapshotMatches(source) {
 function lockDocumentMutation(locked) {
   busy=locked; if (editor) editor.updateOptions({readOnly:locked});
   for (const id of ["btnSave","btnNew","btnRename","btnDelete","btnUpload","btnFix","btnAnalyze","btnCompile","btnOcrCreate"]) $(id).disabled=locked;
-  $("btnOcr").disabled=locked || !ocrFile; updateSaveState();
+  syncOcrControls(); updateSaveState();
 }
 async function mutateDocument(operation,successMessage) {
   if (busy || savingDocument) return;
@@ -758,12 +758,31 @@ $("btnTestModel").onclick = async () => {
   finally { $("btnTestModel").disabled=false; }
 };
 
-let ocrFile = null;
+let ocrFile = null, ocrRunning = false, ocrRequestId = 0, ocrEpoch = 0;
+let ocrReviewActive = false, ocrReviewRevision = 0;
+function syncOcrControls() {
+  $("btnOcr").disabled=busy || ocrRunning || ocrReviewActive || !ocrFile;
+  $("btnOcr").setAttribute('aria-busy',String(ocrRunning));
+  $("btnOcrCreate").disabled=busy || ocrRunning;
+  setToolLabel("btnOcr",ocrRunning ? "识别中…" : "识别");
+}
+function cancelOcrReview() {
+  ++ocrEpoch;ocrReviewActive=false;closeDialog("ocrDialog");syncOcrControls();
+  $("ocrHint").textContent=ocrRunning ? "本次结果已取消。当前请求结束后可重新识别。" : "已取消候选。可选择原件后重新识别。";
+}
+function closeImportPanel() {
+  ++ocrEpoch;ocrReviewActive=false;closeDialog("ocrDialog");closeDialog("importDialog");syncOcrControls();
+  $("ocrHint").textContent=ocrRunning ? "已关闭本次识别。当前请求结束后可重新识别。" : "仅向配置的本地模型发送。识别结果经你确认后新建文档。";
+}
+for(const id of ["ocrCandidate","ocrName"])$(id).addEventListener("input",()=>{++ocrReviewRevision;});
+$("importDialog").addEventListener("cancel",event=>{event.preventDefault();closeImportPanel();});
+$("ocrDialog").addEventListener("cancel",event=>{event.preventDefault();cancelOcrReview();});
 function chooseOcrFile(file) {
   if (!file) return;
   if (!(file.type === "application/pdf" || ["image/png","image/jpeg","image/webp"].includes(file.type))) return toast("请选择 PDF、PNG、JPEG 或 WebP 文件。",true);
   if (file.size > 12*1024*1024) return toast("请选择 12 MB 以内的文件。",true);
-  ocrFile=file; $("ocrFileLabel").textContent=file.name; $("btnOcr").disabled=false;
+  ++ocrEpoch;ocrFile=file;$("ocrFileLabel").textContent=file.name;syncOcrControls();
+  $("ocrHint").textContent=ocrReviewActive ? "请先完成或取消当前候选审阅，再识别新的原件。" : ocrRunning ? "已选择新原件。当前请求结束后可开始识别，新结果不会覆盖已有候选。" : "原件已就绪。点击识别后审阅候选。";
 }
 $("dropZone").onclick = () => $("ocrInput").click();
 $("dropZone").addEventListener("keydown",e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("ocrInput").click(); } });
@@ -773,23 +792,33 @@ $("dropZone").addEventListener("dragleave",() => $("dropZone").classList.remove(
 $("dropZone").addEventListener("drop",e => { e.preventDefault(); $("dropZone").classList.remove("dragover"); chooseOcrFile(e.dataTransfer.files[0]); });
 function fileBase64(file) { return new Promise((resolve,reject) => { const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result).split(",",2)[1]); reader.onerror=()=>reject(new Error("读取文件失败。")); reader.readAsDataURL(file); }); }
 $("btnOcr").onclick = async () => {
-  if (!ocrFile || busy) return;
-  const file=ocrFile; $("btnOcr").disabled=true; $("btnOcr").textContent="识别中…";
+  if (!ocrFile || busy || ocrRunning || ocrReviewActive || $("ocrDialog").open) return;
+  const file=ocrFile,epoch=ocrEpoch,requestId=++ocrRequestId,maxPages=Number($("ocrPages").value);
+  const review={revision:ocrReviewRevision,name:$("ocrName").value,content:$("ocrCandidate").value};
+  const current=()=>requestId===ocrRequestId && epoch===ocrEpoch;
+  ocrRunning=true;syncOcrControls();
   $("ocrHint").textContent="正在本地识别，请等待模型返回。原始文档保持不变。";
   try {
-    const d=await post("import",{name:file.name,mime_type:file.type,data_base64:await fileBase64(file),max_pages:Number($("ocrPages").value)});
+    const data=await fileBase64(file);
+    if(!current())return;
+    const d=await post("import",{name:file.name,mime_type:file.type,data_base64:data,max_pages:maxPages});
+    if(!current())return;
     if (typeof d.content !== "string" || d.requires_review !== true) throw new Error("识别服务没有返回可审阅的候选。");
+    if(ocrReviewActive || $("ocrDialog").open || review.revision!==ocrReviewRevision || review.name!==$("ocrName").value || review.content!==$("ocrCandidate").value){
+      $("ocrHint").textContent="候选已有编辑，本次识别结果未覆盖审阅内容。";return;
+    }
     $("ocrName").value=(d.name || file.name.replace(/\.[^.]+$/,"") + ".tex").replace(/\.[^.]+$/,".tex");
-    $("ocrCandidate").value=d.content; openDialog("ocrDialog");
+    $("ocrCandidate").value=d.content;ocrReviewActive=true;openDialog("ocrDialog");
     $("ocrHint").textContent="识别完成。请对照原件审阅候选，再创建文档。";
-  } catch(error) { warn(error); $("ocrHint").textContent="识别未完成，请检查本地模型与文件后重试。"; }
-  finally { $("btnOcr").disabled=!ocrFile; setToolLabel("btnOcr","识别"); }
+  } catch(error) { if(current()){warn(error);$("ocrHint").textContent="识别未完成，请检查本地模型与文件后重试。";} }
+  finally { if(requestId===ocrRequestId){ocrRunning=false;syncOcrControls();} }
 };
-$("btnOcrCancel").onclick = () => closeDialog("ocrDialog");
+$("btnOcrCancel").onclick = cancelOcrReview;
 $("btnOcrCreate").onclick = async () => {
-  if (busy || !discardAllowed()) return;
+  if(savingDocument)return toast("正在保存当前文档，请稍后新建识别文档。");
+  if (busy || ocrRunning || !discardAllowed()) return;
   const name=$("ocrName").value.trim(),content=$("ocrCandidate").value;
-  try { await mutateDocument(async()=>{await post("create",{name,content});return name;},"识别候选已保存为新文档，请对照原件检查。"); closeDialog("ocrDialog");closeDialog("importDialog");editor?.focus(); } catch(error) { warn(error); }
+  try { await mutateDocument(async()=>{await post("create",{name,content});return name;},"识别候选已保存为新文档，请对照原件检查。");closeImportPanel();editor?.focus(); } catch(error) { warn(error); }
 };
 
 for (const id of ["plannerMode","skillSelection"]) {
@@ -1084,7 +1113,7 @@ function togglePreviewPane(){
   else{previewExpandedWidth=panel.style.width||'50%';panel.classList.add('collapsed');panel.style.width='0';panel.style.overflow='hidden';}
   $('btnTogglePreview').setAttribute('aria-pressed',String(closed));layoutWorkspace();
 }
-function openImportPanel(){closeWorkspaceMenu(false);openDialog('importDialog');}
+function openImportPanel(){closeWorkspaceMenu(false);syncOcrControls();openDialog('importDialog');}
 function initializeWorkspace(){
   // Old light/card UI widths, collapsed flags and zero log heights do not govern this layout.
   $('sidebar').style.width='';$('rightpanel').style.width='320px';$('bottom').style.height='';$('previewPane').style.width='50%';
@@ -1098,7 +1127,7 @@ $('activitySearch').onclick=()=>{
   if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
   runEditorAction('actions.find');
 };
-$('activityOcr').onclick=openImportPanel;$('btnImportClose').onclick=()=>closeDialog('importDialog');
+$('activityOcr').onclick=openImportPanel;$('btnImportClose').onclick=closeImportPanel;
 $('activityAgent').onclick=()=>toggleAgentDrawer(!agentDrawerOpen,$('activityAgent'));
 $('btnAgent').onclick=()=>toggleAgentDrawer(!agentDrawerOpen,$('btnAgent'));
 $('activitySettings').onclick=()=>{syncEditorPreferences();openDialog('editorSettingsDialog');};
