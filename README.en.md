@@ -2,7 +2,7 @@
 
 Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review MiniCPM candidates, and save or export the result on your own computer.
 
-The interface combines the light cards and dark editor workspace from [TeXWizard](https://github.com/CacinieP/TeXWizard), the TeXada Agent formula icon and blue palette, and TeXada's deterministic checks and explicit candidate review.
+The interface uses TeXada's deep navy and cyan palette, with source and PDF side by side. Documents, outline, image import, Agent review and logs open through the sidebar and drawers, alongside deterministic checks and explicit candidate review.
 
 [中文](README.md) · [Local guide](docs/local-studio.md) · [Local acceptance](docs/local-studio-acceptance.md) · [Samples](samples/README.md) · [Documentation](docs/index.md)
 
@@ -20,6 +20,8 @@ This is a local, single-user development candidate, with no formal release for t
 | Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
 
 Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
+
+The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
 
 Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets need no model call; `Ctrl+Space` can request suggestions. The status bar shows cursor, selection, and word counts.
 

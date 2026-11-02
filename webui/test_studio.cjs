@@ -7,29 +7,132 @@ const hash = text => createHash('sha256').update(text, 'utf8').digest('hex');
 
 // Exercise the page's own handlers offline; no browser or remote API calls.
 const html = fs.readFileSync(process.argv[2] || path.join(__dirname, 'studio.html'), 'utf8');
+const stylesheet = fs.readFileSync(path.join(__dirname, 'static', 'editor', 'studio.css'), 'utf8');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 const elements = new Map();
-const documentListeners = new Map();
-const windowListeners = new Map();
+function eventTarget() {
+  const registrations = new Map(), listeners = new Map();
+  return {listeners, addEventListener(type,callback) {
+    const callbacks=registrations.get(type) || [];
+    if(!callbacks.includes(callback))callbacks.push(callback);
+    registrations.set(type,callbacks);
+    listeners.set(type,event=>{for(const listener of [...(registrations.get(type)||[])])listener(event);});
+  }, removeEventListener(type,callback) {
+    if(!callback){registrations.delete(type);listeners.delete(type);return;}
+    const remaining=(registrations.get(type)||[]).filter(listener=>listener!==callback);
+    if(remaining.length)registrations.set(type,remaining);else{registrations.delete(type);listeners.delete(type);}
+  }};
+}
+const documentEvents=eventTarget(),windowEvents=eventTarget();
+const documentListeners = documentEvents.listeners;
+const windowListeners = windowEvents.listeners;
 function classes(value = '') {
   const values = new Set(value.split(/\s+/).filter(Boolean));
   return {
-    add: x => values.add(x), remove: x => values.delete(x), contains: x => values.has(x),
+    add: (...items) => items.forEach(x=>values.add(x)), remove: (...items) => items.forEach(x=>values.delete(x)), contains: x => values.has(x),
     toggle(x, force = !values.has(x)) { force ? values.add(x) : values.delete(x); return force; },
   };
 }
-for (const tag of html.matchAll(/<[^>]+\bid="([^"]+)"[^>]*>/g)) {
-  const attrs = Object.fromEntries([...tag[0].matchAll(/([\w-]+)="([^"]*)"/g)].map(m => [m[1], m[2]]));
-  const listeners = new Map();
-  const style = Object.fromEntries((attrs.style || '').split(';').filter(Boolean).map(pair => pair.split(':')));
-  elements.set(attrs.id, {
-    classList: classes(attrs.class), style, listeners, disabled: /\bdisabled\b/.test(tag[0]),
-    textContent: '', innerHTML: '', offsetWidth: 1000,
-    setAttribute: (key, value) => { attrs[key] = value; },
-    getAttribute: key => attrs[key],
-    addEventListener: (key, fn) => listeners.set(key, fn),
-    getBoundingClientRect: () => ({ left: 0 }),
+// A small structural DOM, shared by all behavior checks. Focus and containment
+// follow the actual page hierarchy, including closed details and dialogs.
+const domNodes=[],nodeStack=[],voidTags=new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+function matchesSelector(node,selector) {
+  return selector.split(',').some(part=>{
+    let value=part.trim();
+    const negatives=[...value.matchAll(/:not\(([^)]+)\)/g)].map(match=>match[1]);
+    value=value.replace(/:not\([^)]+\)/g,'');
+    if(negatives.some(negative=>matchesSelector(node,negative)))return false;
+    if(value.includes(':disabled')&&!node.disabled)return false;
+    if(value.includes(':enabled')&&node.disabled)return false;
+    value=value.replace(/:(?:disabled|enabled)/g,'');
+    const tag=value.match(/^[A-Za-z][\w-]*/)?.[0];
+    if(tag&&node.tagName!==tag.toUpperCase())return false;
+    for(const match of value.matchAll(/#([\w-]+)/g))if(node.id!==match[1])return false;
+    for(const match of value.matchAll(/\.([\w-]+)/g))if(!node.classList.contains(match[1]))return false;
+    for(const match of value.matchAll(/\[([\w-]+)(?:\s*=\s*["']?([^\]"']*)["']?)?\]/g)) {
+      if(!node.hasAttribute(match[1]))return false;
+      if(match[2]!==undefined&&node.getAttribute(match[1])!==match[2])return false;
+    }
+    return true;
   });
+}
+function visible(node) {
+  for(let current=node;current;current=current.parentElement) {
+    if(current.hidden||current.classList.contains('hide')||current.classList.contains('closed')||current.style.display==='none')return false;
+    if(current.classList.contains('collapsed')&&current.id!=='bottom')return false;
+    if(current.tagName==='DIALOG'&&!current.open)return false;
+    if(current.tagName==='DETAILS'&&!current.open) {
+      const summary=current.children.find(child=>child.tagName==='SUMMARY');
+      if(!summary?.contains(node))return false;
+    }
+  }
+  return true;
+}
+// Resolve simple selectors from the shipped CSS at a viewport width. This is
+// sufficient to detect a mobile min-height overriding the collapsed pane; the
+// real-browser checks remain responsible for full layout and raster rendering.
+function cssAt(node,width) {
+  const values=new Map();let order=0;
+  function collect(css) {
+    let cursor=0;
+    while(cursor<css.length) {
+      const opening=css.indexOf('{',cursor);if(opening<0)break;
+      const header=css.slice(cursor,opening).trim();let closing=opening+1,depth=1;
+      while(closing<css.length&&depth){if(css[closing]==='{')depth++;if(css[closing]==='}')depth--;closing++;}
+      const body=css.slice(opening+1,closing-1);cursor=closing;
+      if(header.startsWith('@media')) {
+        const max=header.match(/max-width\s*:\s*(\d+)px/)?.[1],min=header.match(/min-width\s*:\s*(\d+)px/)?.[1];
+        if((max||min)&&(!max||width<=Number(max))&&(!min||width>=Number(min)))collect(body);
+        continue;
+      }
+      if(header.startsWith('@'))continue;
+      for(const selector of header.split(',')) {
+        const simple=selector.trim(),structure=simple.replace(/\[[^\]]+\]/g,'');
+        if(!/^[#.]/.test(simple)||/[\s>+~:]/.test(structure)||!matchesSelector(node,simple))continue;
+        const specificity=100*(simple.match(/#/g)||[]).length+10*((simple.match(/\./g)||[]).length+(simple.match(/\[/g)||[]).length);
+        for(const declaration of body.split(';')) {
+          const colon=declaration.indexOf(':');if(colon<0)continue;
+          const property=declaration.slice(0,colon).trim(),raw=declaration.slice(colon+1).trim();
+          const important=/!important\s*$/.test(raw),value=raw.replace(/\s*!important\s*$/,'').trim(),previous=values.get(property);
+          const next={value,important,specificity,order:order++};
+          if(!previous||(important&&!previous.important)||(important===previous.important&&(specificity>previous.specificity||(specificity===previous.specificity&&next.order>previous.order))))values.set(property,next);
+        }
+      }
+    }
+  }
+  collect(stylesheet.replace(/\/\*[\s\S]*?\*\//g,''));
+  return Object.fromEntries([...values].map(([property,entry])=>[property,entry.value]));
+}
+const markup=html.slice(0,html.indexOf('<script'));
+for(const tag of markup.matchAll(/<\/?([A-Za-z][\w:-]*)\b[^>]*>/g)) {
+  const name=tag[1].toLowerCase();
+  if(tag[0].startsWith('</')){const at=nodeStack.map(node=>node.tagName.toLowerCase()).lastIndexOf(name);if(at>=0)nodeStack.length=at;continue;}
+  const attrs=Object.fromEntries([...tag[0].matchAll(/([\w-]+)="([^"]*)"/g)].map(match=>[match[1],match[2]]));
+  for(const boolean of ['disabled','hidden','open','checked'])if(new RegExp('\\s'+boolean+'(?=\\s|>|/)').test(tag[0]))attrs[boolean]='';
+  const events=eventTarget(),style=Object.fromEntries((attrs.style||'').split(';').filter(Boolean).map(pair=>pair.split(':').map(value=>value.trim())));
+  const node={id:attrs.id||'',tagName:name.toUpperCase(),attrs,children:[],parentElement:nodeStack.at(-1)||null,
+    classList:classes(attrs.class),style,listeners:events.listeners,dataset:Object.fromEntries(Object.entries(attrs).filter(([key])=>key.startsWith('data-')).map(([key,value])=>[key.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()),value])),
+    disabled:Object.hasOwn(attrs,'disabled'),hidden:Object.hasOwn(attrs,'hidden'),open:Object.hasOwn(attrs,'open'),checked:Object.hasOwn(attrs,'checked'),
+    textContent:'',innerHTML:'',value:attrs.value||'',offsetWidth:1000,isConnected:true,
+    setAttribute(key,value){attrs[key]=String(value);if(['disabled','hidden','open','checked'].includes(key))this[key]=true;},
+    getAttribute(key){if(key.startsWith('data-')){const field=key.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase());if(Object.hasOwn(this.dataset,field))return this.dataset[field];}return Object.hasOwn(attrs,key)?attrs[key]:null;},
+    hasAttribute(key){return ['disabled','hidden','open','checked'].includes(key)?this[key]:this.getAttribute(key)!==null;},
+    removeAttribute(key){delete attrs[key];if(['disabled','hidden','open','checked'].includes(key))this[key]=false;},
+    addEventListener:events.addEventListener,removeEventListener:events.removeEventListener,
+    contains(child){for(let current=child;current;current=current.parentElement)if(current===this)return true;return false;},
+    matches(selector){return matchesSelector(this,selector);},
+    closest(selector){for(let current=this;current;current=current.parentElement)if(matchesSelector(current,selector))return current;return null;},
+    querySelectorAll(selector){return domNodes.filter(child=>child!==this&&this.contains(child)&&matchesSelector(child,selector));},
+    querySelector(selector){return this.querySelectorAll(selector)[0]||null;},
+    focus(){if(!this.disabled&&visible(this)){context.document.activeElement=this;this.focused=true;}},
+    click(){if(this.disabled)return;const event={target:this,currentTarget:this,preventDefault(){},stopPropagation(){}};const result=this.onclick?.(event);this.listeners.get('click')?.(event);return result;},
+    showModal(){this.open=true;},close(){this.open=false;},scrollIntoView(){},
+    getClientRects(){return visible(this)?[{width:100,height:30}]:[];},
+    getBoundingClientRect:()=>({left:0,top:0,right:1000,bottom:1000,width:1000,height:1000})
+  };
+  Object.defineProperty(node,'offsetParent',{get:()=>visible(node)?node.parentElement:null});
+  node.parentElement?.children.push(node);domNodes.push(node);if(node.id)elements.set(node.id,node);
+  if(!voidTags.has(name)&&!tag[0].endsWith('/>'))nodeStack.push(node);
 }
 const get = id => elements.get(id);
 function model(value) {
@@ -45,7 +148,7 @@ function editor(value = '') {
     setValue(value) { this.model.setValue(value); this.position=null; },
     getPosition() { return this.position || {lineNumber:1,column:(this.cursor || 0)+1}; },
     getSelection() { const p=this.getPosition(); return this.selection || {getStartPosition:()=>p,getEndPosition:()=>p}; },
-    options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true; },
+    options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true;context.document.activeElement=this===context.testEditor?get('editor'):get('diff'); },
     getAction(id) { return {run:async()=>{this.lastAction=id;}}; },
     dispose() { this.disposed = true; },
   };
@@ -62,17 +165,24 @@ const monaco = { editor: {
 const amdRequire = () => {};
 let loaderConfig;
 amdRequire.config = config => { loaderConfig = config; };
+const legacyPreferences=new Map([
+  ['texada.rightpanelCollapsed','true'],['texada.rightpanelWidth','0px'],['texada.logHeight','0px'],
+]);
 const context = vm.createContext({
   URLSearchParams, URL, Blob, TextEncoder, crypto:webcrypto, require: amdRequire, monaco,
   location: { search: '' },
-  window: { addEventListener: (key, fn) => windowListeners.set(key, fn) },
+  window: { innerWidth:1440,innerHeight:900,addEventListener:windowEvents.addEventListener,
+    matchMedia(query){const max=Number(query.match(/max-width:\s*(\d+)px/)?.[1]||Infinity);return {matches:this.innerWidth<=max,media:query,addEventListener(){},removeEventListener(){}};} },
   document: {
     getElementById: get,
-    addEventListener: (key, fn) => documentListeners.set(key, fn),
-    removeEventListener: key => documentListeners.delete(key),
+    documentElement:domNodes.find(node=>node.tagName==='HTML'),body:domNodes.find(node=>node.tagName==='BODY'),
+    querySelectorAll:selector=>domNodes.filter(node=>matchesSelector(node,selector)),
+    querySelector:selector=>domNodes.find(node=>matchesSelector(node,selector))||null,
+    addEventListener:documentEvents.addEventListener,removeEventListener:documentEvents.removeEventListener,
   },
   ResizeObserver: class { observe() {} },
-  fetch: async () => ({ ok: true, json: async () => ({ files: [], host: 'offline', mem: '' }) }),
+  fetch: async () => ({ ok: true, json: async () => ({ files: [], host:'PRIVATE-HOST-SENTINEL',platform:'PRIVATE-PLATFORM-SENTINEL',mem:'' }) }),
+  localStorage:{getItem:key=>legacyPreferences.get(key)??null,setItem:(key,value)=>legacyPreferences.set(key,String(value))},
   setTimeout: fn => fn(), clearTimeout() {}, alert: message => { throw new Error(message); },
 });
 const run = source => vm.runInContext(source, context);
@@ -80,10 +190,29 @@ new vm.Script(script);
 run(script);
 const pageLoadFiles = run('loadFiles');
 const pageCompilePreview = run('compilePreview');
+const pageAnalyze = run('analyze');
+const pageRestoreJob = run('restoreJob');
+const pageFixHandler = get('btnFix').onclick;
 windowListeners.get('load')();
 
 const testWatchdog = setTimeout(() => { console.error("Studio behavior test did not complete"); process.exitCode = 1; }, 10000);
 (async () => {
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(get('rightpanel').classList.contains('closed'),true,'Agent drawer starts closed');
+  assert.equal(get('btnAgent').getAttribute('aria-expanded'),'false');
+  assert.equal(get('activityAgent').getAttribute('aria-expanded'),'false');
+  assert.equal(get('bottom').classList.contains('collapsed'),true,'problems and log start folded');
+  assert.equal(get('btnProblems').getAttribute('aria-expanded'),'false');
+  assert.equal(get('btnLog').getAttribute('aria-expanded'),'false');
+  assert.equal(get('workflowPanel').open,false,'advanced Agent controls remain optional');
+  assert.equal(get('exportMenu').classList.contains('hide'),true);
+  assert.equal(get('btnPdf').disabled,true,'uncompiled PDF remains visible but unavailable');
+  assert.equal(get('btnPdf').classList.contains('hide'),false);
+  assert.equal(get('sidebar').classList.contains('collapsed'),false,'desktop document navigation is visible');
+  assert.equal(get('rightpanel').style.width,'320px','legacy zero-width preference cannot hide an opened drawer');
+  assert.notEqual(get('bottom').style.height,'0px','legacy zero log height is not imported');
+  for(const node of domNodes)assert.doesNotMatch(node.textContent+node.innerHTML,/PRIVATE-(?:HOST|PLATFORM)-SENTINEL/,'device details never enter workspace chrome');
+
   run("showCenter('diff'); gotoLine(3);");
   assert.equal(run('diffShown'), false, 'uninitialized diff must not become active');
   assert.equal(get('duo').classList.contains('hide'), false);
@@ -94,6 +223,8 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.result = { fixed_content: 'fixed', original_sha256:hash('original'), candidate_sha256:hash('fixed'), requires_review:true,
     problems_after: [], compile_before: { ok: true }, compile_after: { ok: true } };
   await run("applyResult(result)");
+  assert.equal(get('rightpanel').classList.contains('closed'),false,'new candidates automatically reveal their review controls');
+  assert.equal(get('btnAgent').getAttribute('aria-expanded'),'true');
   run("showCenter('diff'); gotoLine(7);");
   assert.equal(run('diffShown'), true, 'successful repair must enable diff');
   assert.equal(run('currentContent()'), 'fixed');
@@ -261,17 +392,18 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.testEditor.setValue('compiled source');run("curName='saved.tex'; showCenter('edit');");
   context.previewWire=async()=>({compile_ok:true,preview_ok:false,ok:false,tag:'live-a',pdf:'/api/studio/pdf/saved.tex/live-a',pages:[],log:'raster unavailable'});
   run('j=previewWire');await pageCompilePreview('compiled source');
-  assert.equal(get('btnPdf').classList.contains('hide'),false);
+  assert.equal(get('btnPdf').disabled,false);
   let pdfFetches=0;
   context.fetch=async()=>{pdfFetches++;return {ok:true,blob:async()=>new Blob(['PDF'])};};
   await get('btnPdf').onclick();assert.equal(pdfFetches,1);
   context.testEditor.setValue('edited after compilation');
   await get('btnPdf').onclick();assert.equal(pdfFetches,1,'stale PDF must not be fetched');
   run('invalidatePreview()');assert.equal(run('lastPreviewTag'),null);
-  assert.equal(get('btnPdf').classList.contains('hide'),true);
+  assert.equal(get('btnPdf').disabled,true);
+  assert.equal(get('btnPdf').classList.contains('hide'),false,'invalid PDF stays discoverable in export menu');
 
   // Even a response whose PDF bytes arrive later must keep its source binding.
-  context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};");
+  context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};setPdfAvailable(true);");
   let finishPdf,notifyPdf;const sawPdf=new Promise(resolve=>{notifyPdf=resolve;});let raceDownloads=0;
   context.captureRaceDownload=()=>{raceDownloads++;};run('download=captureRaceDownload');
   context.fetch=async()=>({ok:true,blob:()=>new Promise(resolve=>{finishPdf=()=>resolve(new Blob(['A PDF']));notifyPdf();})});
@@ -382,7 +514,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(context.testEditor.getValue(),beforePreferences);
   get('btnEditorReset').onclick();assert.equal(context.testEditor.options.wordWrap,'on');
   assert.equal(context.testEditor.options.minimap.enabled,false);
-  assert.equal(context.testEditor.options.fontSize,14);
+  assert.equal(context.testEditor.options.fontSize,15);
 
   // Statistics count Unicode characters and reflect cursor and selection positions.
   context.testEditor.setValue('你好 x\nabc');
@@ -394,7 +526,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.testEditor.selection=null;
 
   // A real command list filters, navigates, executes Monaco actions and restores focus.
-  let restoredFocus=0;context.document.activeElement={isConnected:true,focus:()=>{restoredFocus++;}};
+  let restoredFocus=0;context.document.activeElement={isConnected:true,focus(){restoredFocus++;context.document.activeElement=this;}};
   context.imeShortcut={isComposing:true,metaKey:true,shiftKey:true,key:'P',preventDefault:()=>{throw new Error('IME shortcut intercepted');}};
   run('handleGlobalEditorKey(imeShortcut)');assert.equal(run('commandPaletteOpen'),false);
   context.commandShortcut={metaKey:true,shiftKey:true,key:'P',preventDefault(){},stopPropagation(){}};
@@ -405,9 +537,10 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(run('filteredCommands.length'),1);
   await run('executeCommand()');assert.equal(context.testEditor.lastAction,'editor.action.startFindReplaceAction');
   assert.equal(run('commandPaletteOpen'),false);assert.equal(restoredFocus,1);
+  const focusBeforeReopening=context.document.activeElement;
   run('openCommandPalette()');context.escapeCommand={key:'Escape',preventDefault(){},stopPropagation(){}};
   run('handleGlobalEditorKey(escapeCommand)');assert.equal(run('commandPaletteOpen'),false);
-  assert.equal(restoredFocus,2);
+  assert.equal(context.document.activeElement,focusBeforeReopening,'Escape restores focus after an editor action has moved it');
   get('btnFind').onclick();assert.equal(context.testEditor.lastAction,'actions.find');
   assert.equal(get('tab-edit').getAttribute('role'),'tab');
   assert.equal(get('tab-edit').getAttribute('aria-selected'),'true');
@@ -440,19 +573,215 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('previewPane').style.overflow, 'hidden');
   get('sepBtnE').onclick();
   assert.equal(get('previewPane').classList.contains('collapsed'), false);
-  assert.equal(get('previewPane').style.width, '43%');
+  assert.equal(get('previewPane').style.width, '50%');
   get('sepBtnE').onclick();
   get('sepE').listeners.get('mousedown')({ preventDefault() {} });
   documentListeners.get('mousemove')({ clientX: 600 });
   documentListeners.get('mouseup')();
   assert.equal(get('previewPane').classList.contains('collapsed'), false);
-  assert.equal(get('previewPane').style.overflow, 'auto');
+  assert.notEqual(get('previewPane').style.overflow, 'hidden');
   assert.equal(get('previewPane').style.width, '40%');
+
+  // Activity controls operate the actual navigator, editor actions and dialogs.
+  function pressKey(key,extra={}) {
+    const event={key,target:context.document.activeElement,defaultPrevented:false,
+      preventDefault(){this.defaultPrevented=true;},stopPropagation(){},...extra};
+    documentListeners.get('keydown')?.(event);return event;
+  }
+  context.window.innerWidth=1440;
+  run("toggleAgentDrawer(false,null,false);toggleNavigator(true,null,false);toggleBottomPanel('log',false);showCenter('edit');");
+  get('activityDocuments').click();
+  assert.equal(get('sidebar').classList.contains('collapsed'),true);
+  assert.equal(get('activityDocuments').getAttribute('aria-expanded'),'false');
+  get('activityDocuments').click();
+  assert.equal(get('sidebar').classList.contains('collapsed'),false);
+  assert.equal(get('activityDocuments').getAttribute('aria-expanded'),'true');
+  get('activityAgent').click();
+  assert.equal(get('rightpanel').classList.contains('closed'),false);
+  assert.equal(get('btnAgent').getAttribute('aria-expanded'),'true');
+  assert.equal(get('rightpanel').style.width,'320px','legacy collapsed widths cannot survive an explicit open');
+  get('btnAgent').click();
+  assert.equal(get('rightpanel').classList.contains('closed'),true);
+  get('activitySearch').click();
+  assert.equal(context.testEditor.lastAction,'actions.find');
+  get('activityOcr').click();
+  assert.equal(get('importDialog').open,true,'OCR activity opens the usable import dialog');
+  get('btnImportClose').click();assert.equal(get('importDialog').open,false);
+  get('activitySettings').click();assert.equal(get('editorSettingsDialog').open,true);
+  get('btnEditorDone').click();assert.equal(get('editorSettingsDialog').open,false);
+
+  // Background checks update counts; only an explicit check expands problems.
+  context.testEditor.setValue('check source');run("curName='check.tex';savedContent='check source';");
+  context.analysisWire=async()=>({problems:[{type:'formula',line:3,status:'RETRY',latex:'x+'}],summary:{formula:1,table:0}});
+  run('j=analysisWire;');
+  await pageAnalyze({reveal:false});
+  assert.equal(String(get('probCount').textContent),'1');
+  assert.equal(get('bottom').classList.contains('collapsed'),true,'startup checks do not seize editor space');
+  context.originalPageAnalyze=pageAnalyze;run('analyze=originalPageAnalyze');
+  await get('btnAnalyze').click();
+  assert.equal(get('bottom').classList.contains('collapsed'),false);
+  assert.equal(get('problemsPane').classList.contains('hide'),false);
+  assert.equal(get('btnProblems').getAttribute('aria-expanded'),'true');
+  get('btnLog').click();
+  assert.equal(get('logPane').classList.contains('hide'),false);
+  assert.equal(get('problemsPane').classList.contains('hide'),true);
+  assert.equal(get('btnLog').getAttribute('aria-expanded'),'true');
+  assert.notEqual(get('bottom').style.height,'0px','opening logs discards obsolete zero-height preference');
+  get('btnLog').click();assert.equal(get('bottom').classList.contains('collapsed'),true);
+
+  // Failed and recovered runs leave readable activity after the toast disappears.
+  context.failedFixWire=async url=>url.includes('/fixstatus?')
+    ? {done:true,error:'fixture repair failed',log:['persistent failed-fix details']}
+    : url.includes('/fix?')?{job:'f'.repeat(32)}:{jobs:[]};
+  run('j=failedFixWire;');
+  await pageFixHandler();
+  assert.equal(run('busy'),false);
+  assert.equal(get('bottom').classList.contains('collapsed'),false);
+  assert.equal(get('logPane').classList.contains('hide'),false);
+  assert.match(get('joblog').innerHTML,/persistent failed-fix details/);
+  assert.match(get('joblog').innerHTML,/fixture repair failed/);
+  context.failedHistoryWire=async()=>({done:true,error:'fixture historical failure',log:['persistent historical failure details']});
+  run("j=failedHistoryWire;toggleBottomPanel('log',false);");
+  await pageRestoreJob('e'.repeat(32),'check.tex');
+  assert.equal(get('bottom').classList.contains('collapsed'),false);
+  assert.equal(get('logPane').classList.contains('hide'),false);
+  assert.match(get('joblog').innerHTML,/persistent historical failure details/);
+
+  // Floating Agent review traps keyboard focus and restores the invoking control.
+  context.window.innerWidth=900;
+  get('btnAgent').focus();get('btnAgent').click();
+  assert.equal(get('rightpanel').getAttribute('role'),'dialog');
+  assert.equal(get('rightpanel').getAttribute('aria-modal'),'true');
+  assert.equal(get('inspectorBackdrop').classList.contains('hide'),false);
+  assert.equal(context.document.activeElement,get('btnInspectorClose'));
+  const agentFocusable=run("workspaceFocusable($('rightpanel'))");
+  assert.equal(agentFocusable[0],get('btnInspectorClose'));
+  assert.equal(agentFocusable.at(-1),get('btnRefreshJobs'));
+  agentFocusable.at(-1).focus();assert.equal(pressKey('Tab').defaultPrevented,true);
+  assert.equal(context.document.activeElement,agentFocusable[0]);
+  assert.equal(pressKey('Tab',{shiftKey:true}).defaultPrevented,true);
+  assert.equal(context.document.activeElement,agentFocusable.at(-1));
+  pressKey('Escape');
+  assert.equal(get('rightpanel').classList.contains('closed'),true);
+  assert.equal(get('inspectorBackdrop').classList.contains('hide'),true);
+  assert.equal(context.document.activeElement,get('btnAgent'));
+  get('activityAgent').focus();get('activityAgent').click();get('inspectorBackdrop').click();
+  assert.equal(context.document.activeElement,get('activityAgent'),'backdrop returns to the actual activity trigger');
+
+  // A mobile navigator can be dismissed without leaving a modal overlay over search.
+  context.window.innerWidth=640;
+  run('toggleNavigator(false,null,false)');
+  get('activityDocuments').focus();get('activityDocuments').click();
+  assert.equal(get('sidebar').getAttribute('role'),'dialog');
+  assert.equal(get('navigatorBackdrop').classList.contains('hide'),false);
+  const navFocusable=run("workspaceFocusable($('sidebar'))");
+  navFocusable.at(-1).focus();pressKey('Tab');assert.equal(context.document.activeElement,navFocusable[0]);
+  pressKey('Escape');
+  assert.equal(get('sidebar').classList.contains('collapsed'),true);
+  assert.equal(context.document.activeElement,get('activityDocuments'));
+  get('activityDocuments').click();get('navigatorBackdrop').click();
+  assert.equal(get('sidebar').classList.contains('collapsed'),true);
+  assert.equal(context.document.activeElement,get('activityDocuments'));
+  get('activityDocuments').click();get('activitySearch').click();
+  assert.equal(get('navigatorBackdrop').classList.contains('hide'),true,'search never leaves a modal navigator above the Monaco find widget');
+  assert.equal(get('sidebar').classList.contains('collapsed'),true);
+  assert.equal(context.testEditor.lastAction,'actions.find');
+  assert.equal(context.document.activeElement,get('editor'));
+
+  // Mobile preview collapse removes its 340px baseline from the actual cascade.
+  if(get('previewPane').classList.contains('collapsed'))get('btnTogglePreview').click();
+  assert.equal(get('btnTogglePreview').getAttribute('aria-pressed'),'true');
+  assert.equal(cssAt(get('previewPane'),640)['min-height'],'340px');
+  get('btnTogglePreview').click();
+  assert.equal(get('previewPane').classList.contains('collapsed'),true);
+  const collapsedMobile=cssAt(get('previewPane'),640);
+  assert.equal(collapsedMobile.display,'none','collapsed mobile preview cannot leave a blank layout item');
+  assert.equal(collapsedMobile['min-height'],'0');
+  assert.equal(collapsedMobile.height,'0');
+  assert.equal(get('btnTogglePreview').getAttribute('aria-pressed'),'false');
+  get('btnTogglePreview').click();
+  assert.equal(get('previewPane').classList.contains('collapsed'),false);
+  assert.equal(get('btnTogglePreview').getAttribute('aria-pressed'),'true');
+
+  // Problem links dismiss floating review/navigation and focus the requested source line.
+  get('activityAgent').click();
+  context.testEditor.focused=false;
+  const problemHandler=get('problems').innerHTML.match(/onclick="([^"]+)"/)?.[1];
+  assert.ok(problemHandler,'rendered problem exposes a working line action');run(problemHandler);
+  assert.equal(get('inspectorBackdrop').classList.contains('hide'),true);
+  assert.equal(get('navigatorBackdrop').classList.contains('hide'),true);
+  assert.equal(context.testEditor.position.lineNumber,3);
+  assert.equal(context.testEditor.focused,true);
+  assert.equal(context.document.activeElement,get('editor'));
+
+  // Export menus dismiss on action, Escape and outside clicks; disabled PDF is inert.
+  context.window.innerWidth=1440;
+  context.testEditor.setValue('source for menu export');
+  run("showCenter('edit');curName='menu.tex';invalidatePreview();toggleBottomPanel('log',false);");
+  let menuDownload=null,menuFetches=0;
+  context.captureMenuDownload=(name,blob)=>{menuDownload={name,blob};};run('download=captureMenuDownload');
+  context.fetch=async()=>{menuFetches++;throw new Error('disabled PDF initiated a request');};
+  get('btnExportMenu').focus();get('btnExportMenu').click();
+  assert.equal(get('exportMenu').classList.contains('hide'),false);
+  assert.equal(get('btnExportMenu').getAttribute('aria-expanded'),'true');
+  assert.equal(context.document.activeElement,get('btnExport'));
+  assert.equal(get('btnPdf').disabled,true);get('btnPdf').click();
+  assert.equal(menuFetches,0);assert.equal(menuDownload,null);
+  pressKey('ArrowDown');assert.equal(context.document.activeElement,get('btnExport'),'menu navigation skips disabled PDF');
+  pressKey('Escape');
+  assert.equal(get('exportMenu').classList.contains('hide'),true);
+  assert.equal(context.document.activeElement,get('btnExportMenu'));
+  get('btnExportMenu').click();get('btnCompile').focus();
+  documentListeners.get('click')({target:get('btnCompile')});
+  assert.equal(get('exportMenu').classList.contains('hide'),true);
+  assert.equal(context.document.activeElement,get('btnCompile'),'outside dismissal preserves the newly clicked focus');
+  get('btnExportMenu').focus();get('btnExportMenu').click();await get('btnExport').click();
+  assert.equal(get('exportMenu').classList.contains('hide'),true);
+  assert.equal(context.document.activeElement,get('btnExportMenu'));
+  assert.equal(menuDownload.name,'menu.tex');assert.equal(await menuDownload.blob.text(),'source for menu export');
+
+  // Command capability is independent of closed drawers, details and proxy menus.
+  run("toggleAgentDrawer(false,null,false);closeWorkspaceMenu(false);");
+  assert.equal(visible(get('btnFix')),false);
+  assert.equal(run("commandEnabled(EDITOR_COMMANDS.find(command=>command.id==='document.fix'))"),true);
+  assert.equal(visible(get('btnEditorSettings')),false);
+  run('openCommandPalette()');get('commandInput').value='编辑器设置';get('commandInput').listeners.get('input')();
+  await run('executeCommand()');assert.equal(get('editorSettingsDialog').open,true);
+  get('btnEditorDone').click();
+  run("setPdfAvailable(false);openCommandPalette()");get('commandInput').value='导出 PDF';get('commandInput').listeners.get('input')();
+  assert.equal(run('filteredCommands.length'),1);
+  assert.equal(run('commandEnabled(filteredCommands[0])'),false);
+  await run('executeCommand()');assert.equal(menuFetches,0,'command palette respects unavailable PDF capability');
+  run('closeCommandPalette()');
+
+  // Visible model state has three outcomes, and draft probing never changes active status.
+  context.activeConfig={base_url:'http://127.0.0.1:8080/v1',model:'MiniCPM-V-4.7-1B',local_mode:true,tools:{tectonic:true,pdftoppm:true}};
+  for(const [available,state,label] of [[null,'unchecked','未检查'],[true,'connected','已连接'],[false,'disconnected','未连接']]) {
+    context.connectionState=available;run('displayConfig({...activeConfig,model_available:connectionState})');
+    assert.equal(get('modelIndicator').dataset.state,state);
+    assert.match(get('modelConnectionStatus').textContent,new RegExp(label));
+    assert.equal(visible(get('modelConnectionStatus')),true,'connection status is readable without assistive-only text');
+    const background=cssAt(get('modelIndicator'),1440).background;
+    if(state==='connected')assert.equal(background,'var(--success)');
+    else if(state==='disconnected')assert.equal(background,'var(--warning)');
+    else assert.notEqual(background,'var(--success)','unchecked connection never presents a success color');
+  }
+  run('displayConfig({...activeConfig,model_available:true})');
+  const activeLabel=get('sb-model').textContent;
+  get('modelBaseUrl').value='http://127.0.0.1:9000/v1';get('modelName').value='unrelated-draft-model';
+  context.unrelatedProbeWire=async()=>({model_available:false,message:'draft service unavailable'});run('j=unrelatedProbeWire');
+  await get('btnTestModel').onclick();
+  assert.equal(get('sb-model').textContent,activeLabel);
+  assert.equal(get('modelIndicator').dataset.state,'connected','a failed draft probe does not downgrade a different active model');
+  assert.match(get('modelConnectionStatus').textContent,/已连接/);
+  assert.equal(run('studioConfig.model'),'MiniCPM-V-4.7-1B');
+  for(const node of domNodes)assert.doesNotMatch(node.textContent+node.innerHTML,/PRIVATE-(?:HOST|PLATFORM)-SENTINEL/);
 
   assert.match(html, /<script src="\/static\/monaco\/0\.52\.2\/min\/vs\/loader\.js"><\/script>/);
   assert.equal(loaderConfig.paths.vs, '/static/monaco/0.52.2/min/vs');
   assert.doesNotMatch(script, /MonacoEnvironment|getWorkerUrl|cdn\.jsdelivr/);
-  assert.match(html, /\.hide\s*\{\s*display:none\s*!important;/);
-  assert.match(html, /#previewPane\.collapsed\s*\{[^}]*padding:0\s*!important;/);
-  console.log('PASS: same-origin pinned Monaco configuration; JS syntax; unavailable/available diff navigation; problem navigation; file-switch disposal/reset; new-file diff; stale/reverted source guard; unicode handoff; async edit guards; idempotent adopt/reject; preview collapse/reopen/drag; snapshot-save race; escaped filenames; PDF/source binding; late compile guard; persisted review; deferred PDF and document mutation guards; outline literal-region exclusion; editor preferences and Unicode status; command filtering/navigation/actions/focus; IME guard; brand assets; model/version statistics and outline cache; critical CSS rules.');
+  assert.match(html, /<link rel="stylesheet" href="\/static\/editor\/studio\.css">/);
+  assert.match(stylesheet, /\.hide\s*\{\s*display:\s*none\s*!important;/);
+  assert.match(stylesheet, /#previewPane\.collapsed\s*\{[^}]*padding:\s*0\s*!important;/);
+  console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

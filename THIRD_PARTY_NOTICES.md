@@ -5,12 +5,13 @@ AGPL-3.0-only by CacinieP. The components below retain their own notices and ter
 
 ## TeXWizard interface reference
 
-The local Studio interface adapts the layout and visual styling of
+An earlier Studio interface adapted the layout and visual styling of
 [`原型-GPT5.1.html`](https://github.com/CacinieP/TeXWizard/blob/main/%E5%8E%9F%E5%9E%8B-GPT5.1.html)
 from [CacinieP/TeXWizard](https://github.com/CacinieP/TeXWizard),
 source blob `aab7f51a3932e28e281c4068928b36021eb652a1`.
-The reference provides interface styling; the document, inference, checking,
-review, persistence and preview behavior is implemented in this repository.
+The current interface uses TeXada's navy visual system. The historical reference
+provided interface styling; the document, inference, checking, review,
+persistence and preview behavior is implemented in this repository.
 
 The reference's MIT notice is preserved below. Modifications in this repository
 remain covered by this repository's AGPL-3.0-only terms.

@@ -1,5 +1,7 @@
 # TeXada Studio 编辑器升级验收
 
+后续按用户确认的 TeXada 视觉重构工作区，当前实现与 34 项 Chrome 检查见[视觉实现与验收](texada-visual-implementation.md)。下文保留前一轮编辑能力验收。
+
 日期：2026-11-02。范围：当前 Apple Silicon Mac 的本地版本，分支 `feat/texada-studio-complete`。本轮延续已交付的本地模型与文档工作流，完善品牌、编辑操作和长文档交互。
 
 ## 已完成
