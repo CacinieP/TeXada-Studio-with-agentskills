@@ -122,7 +122,7 @@ class LatexSampleCatalogTest(unittest.TestCase):
                 self.assertEqual(dict(Counter(p["type"] for p in problems)), expected["problem_types"])
                 self.assertNotIn("NEEDS_ENV", {check["status"] for check in checks})
 
-    def test_absent_candidates_preserve_text_and_respect_request_budget(self):
+    def test_absent_model_candidates_use_safe_rules_and_respect_request_budget(self):
         for case in self.cases:
             with self.subTest(case=case["case_id"]):
                 provider = Mock()
@@ -134,17 +134,24 @@ class LatexSampleCatalogTest(unittest.TestCase):
                     candidate, edits = studio._apply_fixes(
                         source, [], provider=provider, emit=lambda action, **fields: events.append({"action": action, **fields})
                     )
-                expected = case["repair_expectation"]
-                self.assertEqual(provider.repair_formula.call_count, expected["model_provider_calls_without_candidates"])
-                self.assertEqual(len(edits), expected["edits_without_candidates"])
-                self.assertTrue(expected["preserve_original_without_candidates"])
-                self.assertEqual(candidate, source)
+                # The catalog retains its original model-only baseline. Current
+                # syntax rules can repair these explicit examples without it.
+                deterministic = case["reference_edits"] if case["case_id"] in {"S06", "S07", "S08"} else []
+                expected_calls = 0 if deterministic else case["repair_expectation"]["model_provider_calls_without_candidates"]
+                self.assertEqual(provider.repair_formula.call_count, expected_calls)
+                self.assertEqual(len(edits), len(deterministic))
+                expected_text = source
+                for reference in deterministic:
+                    expected_text = expected_text.replace("$" + reference["original"] + "$", "$" + reference["candidate"] + "$")
+                self.assertEqual(candidate, expected_text)
                 retry_inputs = [check["latex"] for check in case["expected_analysis"]["formula_checks"] if check["status"] == "RETRY"]
                 self.assertEqual(
                     Counter(call.args[0]["data"]["latex"] for call in provider.repair_formula.call_args_list),
-                    Counter({latex: 2 * retry_inputs.count(latex) for latex in retry_inputs}),
+                    Counter() if deterministic else Counter({latex: 2 * retry_inputs.count(latex) for latex in retry_inputs}),
                 )
-                self.assertFalse(any(event["action"] == "CANDIDATE_ACCEPTED" for event in events))
+                accepted = [event for event in events if event["action"] == "CANDIDATE_ACCEPTED"]
+                self.assertEqual(len(accepted), len(deterministic))
+                self.assertTrue(all(event["provider"] == "deterministic-formula" for event in accepted))
                 self.assertEqual(sum(event["provider_trace"]["model_calls"] for event in events if event["action"] == "PROVIDER_RESULT"), 0)
 
     def test_author_candidates_only_change_declared_formula_spans(self):
@@ -154,6 +161,9 @@ class LatexSampleCatalogTest(unittest.TestCase):
                 continue
             with self.subTest(case=case["case_id"]):
                 source = self.source(case)
+                # A historical author reference is not automatic authority to
+                # relocate an integral limit's missing brace (S09).
+                allowed_references = references if case["case_id"] in {"S06", "S07", "S08"} else []
                 by_original = {item["original"]: item["candidate"] for item in references}
                 self.assertEqual(len(by_original), len(references))
                 provider = Mock()
@@ -163,7 +173,7 @@ class LatexSampleCatalogTest(unittest.TestCase):
                     candidate, edits = studio._apply_fixes(source, [], provider=provider)
                 # An independent whole-document oracle preserves every character
                 # outside the author's explicitly declared formula spans.
-                spans = sorted((source.index(f"${old}$"), f"${old}$", f"${new}$") for old, new in by_original.items())
+                spans = sorted((source.index(f"${old}$"), f"${old}$", f"${new}$") for old, new in ((item["original"], item["candidate"]) for item in allowed_references))
                 pieces, cursor = [], 0
                 for start, old, new in spans:
                     pieces.extend((source[cursor:start], new))
@@ -175,7 +185,7 @@ class LatexSampleCatalogTest(unittest.TestCase):
                     [(old[1:-1], new[1:-1]) for _, old, new in spans],
                 )
                 self.assertTrue(all(edit["skill"] == "doc-formula-verify" for edit in edits))
-                self.assertEqual(provider.repair_formula.call_count, len(references))
+                self.assertEqual(provider.repair_formula.call_count, 0 if allowed_references else 2)
 
 
 if __name__ == "__main__":

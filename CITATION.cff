@@ -10,9 +10,11 @@ authors:
 repository-code: "https://github.com/CacinieP/TeXada-Studio-with-agentskills"
 url: "https://github.com/CacinieP/TeXada-Studio-with-agentskills"
 license: AGPL-3.0-only
-abstract: "Experimental LaTeX quality-checking and repair workflow with local text-model candidates, deterministic checks, and human review."
+abstract: "Local browser-based LaTeX workspace with image/PDF transcription, deterministic syntax repairs, bounded model candidates, compilation previews, and explicit human review."
 keywords:
   - latex
   - document-quality
   - human-in-the-loop
   - agent-skills
+  - local-web-ui
+  - ocr

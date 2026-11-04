@@ -237,6 +237,7 @@ class MiniCPMProfileTest(unittest.TestCase):
                 self.assertNotIn("test-only-key", result.stderr)
 
 class VerificationFailureTest(unittest.TestCase):
+    @patch.object(studio, "repair_blocker", lambda original: None)
     def test_invalid_cloud_response_cannot_reach_checker_or_change_document(self):
         content = 'Original $a_$ text.\r\n'
         key = "test-only-api-key"
@@ -300,6 +301,7 @@ class VerificationFailureTest(unittest.TestCase):
         with patch.object(studio.subprocess, 'run', return_value=result):
             self.assertEqual(studio._verify_formula('x')['reason'], 'missing antlr')
 
+    @patch.object(studio, "repair_blocker", lambda original: None)
     def test_candidate_environment_failure_stops_retries(self):
         content = 'Original $a_$ text.\n'
         log = []
@@ -320,6 +322,7 @@ class VerificationFailureTest(unittest.TestCase):
         self.assertEqual(fixed, content)
         self.assertEqual(edits, [])
 
+    @patch.object(studio, "repair_blocker", lambda original: None)
     def test_candidate_environment_failure_also_stops_later_formula_repairs(self):
         content = 'Original $a_$ and $b_$ text.\n'
         problems = [dict(id=f'f-{i}', line=1, latex=value, status='RETRY')

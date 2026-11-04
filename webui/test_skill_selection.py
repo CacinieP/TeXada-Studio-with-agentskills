@@ -41,6 +41,18 @@ class SelectingFixture(ScriptedProvider):
 
 
 class SkillSelectionTest(unittest.TestCase):
+    def setUp(self):
+        # These fixtures isolate orchestration, budgets and evidence. Real
+        # source-preservation behavior is covered by test_formula_repair_quality.
+        for name, replacement in (
+            ("repair_blocker", lambda original: None),
+            ("deterministic_candidate", lambda original: None),
+            ("assess_candidate", lambda original, candidate: {"allowed": True, "reason": "fixture_scope", "method": "fixture"}),
+        ):
+            guard = patch.object(studio, name, replacement)
+            guard.start()
+            self.addCleanup(guard.stop)
+
     def test_catalog_reads_metadata_without_loading_bodies(self):
         with patch("docforensics.skill_selection._read_skill", side_effect=AssertionError("body read is forbidden")):
             catalog = load_catalog()

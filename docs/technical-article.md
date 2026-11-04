@@ -2,6 +2,8 @@
 
 投稿方向：第三届 NVIDIA DGX Spark Hackathon · Agent Skills
 
+本文保留投稿与所引演示版本的技术说明；模型请求次数、当时的公式提取范围和“重试尚无反馈”等描述均是历史记录。当前本地启动、图片/PDF 转写和保存流程见[本地使用指南](local-studio.md)；确定性优先、候选保真与重试反馈的后续实现见[公式修复质量记录](formula-repair-quality.md)，外部 Agent 的操作入口见[AgentSkills 使用指南](agent-skills.md)。历史结果不替代当前版本验证。
+
 [项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)
 
 微信公众号：[阅读已发布文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)。
@@ -91,7 +93,7 @@ CLI 续跑时检查输入与执行上下文哈希。公式、已有裁剪文件�
 
 仓库提供[13份 Studio 样本](../samples/README.md)。先打开正常讲义 `math-clean.tex` 确认编辑和预览，再用 `math-delimiters.tex` 观察问题定位、候选 diff 和人工采用；切换到 `report-01.tex`，还可以查看不调用模型的合计重算。每份样本对应的操作与预期现象都列在[案例手册](casebook.md)中。
 
-样本也能用来核对编译行为。[编译复现命令](evaluation-results/studio-latex/README.md)会分别运行原稿和作者提供的参考修订，保存源码副本、日志与 PDF，便于比较修改前后的具体差异。要复现模型生成候选的过程，可按 [README](../README.md#3-接入真实模型) 配置本机模型，再对照[实机演示](dynamic-demo.md)操作。
+样本也能用来核对编译行为。[编译复现命令](evaluation-results/studio-latex/README.md)会分别运行原稿和作者提供的参考修订，保存源码副本、日志与 PDF，便于比较修改前后的具体差异。要复现模型生成候选的过程，可按 [本机模型连接](local-studio.md#本机模型连接) 配置本机模型，再对照[历史实机演示](dynamic-demo.md)理解当时流程。当前相同样本可能先由确定性规则生成候选，实际请求数以新任务记录为准。
 
 修改一条 Skill 指令后，可以检查请求记录中的 Skill 摘要；修改检查器后，可以运行对应案例。CLI 还会在输入或执行上下文变化时重新检查。这样，读者既能试用修复流程，也能沿着指令、代码和记录继续开发。
 

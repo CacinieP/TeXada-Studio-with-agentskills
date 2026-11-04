@@ -192,6 +192,10 @@ class ConstrainedPlanner:
                 # Reserve before entering the callback; a failed HTTP attempt consumes budget.
                 self.model_calls += 1
             result = self.repair(copy.deepcopy(node), min(120.0, self.remaining_seconds()))
+            if node["kind"] == "formula" and type(result.get("model_calls")) is int and result["model_calls"] == 0:
+                # Trusted callbacks can complete a deterministic syntax repair without inference.
+                # Exceptions or missing/invalid accounting retain the conservative reservation.
+                self.model_calls -= 1
             node["check"] = result.get("check", {})
             if self._discard_late_result(node, action):
                 return False
@@ -200,6 +204,8 @@ class ConstrainedPlanner:
                 node["state"] = "candidate"
             elif result.get("check", {}).get("status") == "NEEDS_ENV":
                 node["state"] = "needs_env"
+            elif result.get("stop") is True:
+                node.update(state="needs_human", human_reason=result.get("check", {}).get("reason", "repair_rejected"))
             elif node["attempts"] >= 2:
                 node["state"] = "needs_human"
         else:

@@ -33,10 +33,18 @@ jobs:
         run: python -m unittest discover -s webui -p 'test_*.py'
       - name: Script regression
         run: python -m unittest discover -s scripts -p 'test_*.py'
+      - name: LaTeX cleanup regression
+        run: python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py'
+      - name: JavaScript behavior regression
+        run: |
+          node webui/test_studio.cjs
+          node webui/test_latex.cjs
+          node skills/latex-cleanup/tests/test_audit_math.cjs
       - name: Python and launcher syntax
         run: |
           python -m compileall -q harness webui scripts skills
           sh -n scripts/run-minicpm-v47-studio.sh
+          sh -n scripts/start-local-studio.command
       - name: Inline JavaScript syntax
         run: |
           python - <<'PY'

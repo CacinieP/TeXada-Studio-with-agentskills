@@ -339,28 +339,27 @@ class LocalProductTest(unittest.TestCase):
 
     def test_math_http_and_repair_skip_raw_contexts_and_preserve_display_wrappers(self):
         content = ("% $ignored+$\n" + r"\verb|$verbatim+$|" + "\n"
-                   + r"\begin{align}x&=1\\y&=2\end{align}" + "\n\\[\nx+\n\\]\n")
+                   + r"\begin{align}x&=1\\y&=2\end{align}" + "\n\\[\n\\frac{a}{b\n\\]\n")
         response = self.post("math", {"content": content})
         self.assertEqual(response.status_code, 200)
         nodes = response.json()["nodes"]
         self.assertEqual([node["kind"] for node in nodes], ["align", "display"])
         self.assertEqual([node["checkable"] for node in nodes], [False, True])
         provider = Mock()
-        provider.repair_formula.return_value = "\nx+1\n"
+        provider.repair_formula.side_effect = AssertionError("deterministic syntax repair must not call a model")
         provider.last_trace = {"model_calls": 1}
 
         def verify(latex):
-            return {"status": "RETRY" if latex.strip() == "x+" else "OK"}
+            return {"status": "RETRY" if latex.strip() == r"\frac{a}{b" else "OK"}
 
         with patch.object(studio, "_verify_formula", side_effect=verify) as checker:
             analyzed = self.post("analyze", {"content": content})
             self.assertEqual(analyzed.status_code, 200)
             fixed, edits = studio._apply_fixes(content, [], provider=provider)
-        self.assertEqual(fixed, content.replace("\\[\nx+\n\\]", "\\[\nx+1\n\\]"))
+        self.assertEqual(fixed, content.replace("\\[\n\\frac{a}{b\n\\]", "\\[\n\\frac{a}{b\n}\\]"))
         self.assertEqual(len(edits), 1)
-        provider.repair_formula.assert_called_once()
-        self.assertEqual(provider.repair_formula.call_args.args[0]["data"]["latex"], "\nx+\n")
-        self.assertEqual([call.args[0] for call in checker.call_args_list], ["\nx+\n", "\nx+\n", "\nx+1\n"])
+        provider.repair_formula.assert_not_called()
+        self.assertEqual([call.args[0] for call in checker.call_args_list], ["\n\\frac{a}{b\n", "\n\\frac{a}{b\n", "\n\\frac{a}{b\n}"])
 
     def test_printed_table_examples_and_macro_definitions_are_never_repaired(self):
         table = "\\begin{tabular}{lr}\nItem & Value \\\\\nA & 2 \\\\\nTotal & 99 \\\\\n\\end{tabular}\n"
