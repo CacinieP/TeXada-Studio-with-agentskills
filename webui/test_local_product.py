@@ -377,7 +377,7 @@ class LocalProductTest(unittest.TestCase):
 
     def test_successful_pdf_remains_downloadable_when_preview_converter_is_missing(self):
         def run(command, **kwargs):
-            if command[0] == studio.TECTONIC:
+            if command[0] == studio._tectonic_command():
                 self.assertIn("--only-cached", command)
                 self.assertIn("--untrusted", command)
                 (Path(kwargs["cwd"]) / "main.pdf").write_bytes(b"%PDF-1.7\nfixture")
@@ -408,7 +408,7 @@ class LocalProductTest(unittest.TestCase):
 
         def run(command, **kwargs):
             nonlocal generation
-            if command[0] == studio.TECTONIC:
+            if command[0] == studio._tectonic_command():
                 generation += 1
                 (Path(kwargs["cwd"]) / "main.pdf").write_bytes(
                     b"%PDF-1.7\n" + f"generation-{generation}".encode())

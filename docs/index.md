@@ -7,7 +7,7 @@
 | 了解 TeXada 系列 | [系列说明](texada-series.md) · [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) | MiniCPM 驱动的两个工具、手动 LaTeX 交接和迭代计划 |
 | 启用本机 MiniCPM | [本机连接](local-studio.md#本机模型连接) · [4.7 适配说明](minicpm-v47.md) | 本地权重/端点；旧 ModelBest profile 的显式兼容与验收范围 |
 | 看完整操作 | [B站视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [连续实录与证据](dynamic-demo.md) | 源码编辑、候选审阅、完整等待与导出 |
-| 本地运行与排错 | [README](../README.md) · [English](../README.en.md) · [排错](troubleshooting.md) | 安装、启动、[配置](../README.md#配置)（模型服务、可选工具、TeX 资源）和常见故障 |
+| 本地运行与排错 | [README](../README.md) · [English](../README.en.md) · [排错](troubleshooting.md) · [桌面窗口](../desktop/README.md) | 安装、启动、[配置](../README.md#配置)（模型服务、可选工具、TeX 资源）、macOS 桌面壳和常见故障 |
 | 选择样本 | [样本目录](../samples/README.md) · [案例手册](casebook.md) | `.tex`、结构化输入、逐例预期 |
 | 使用 CLI | [Harness 手册](../harness/README.md) | 输入结构、参数、报告和续跑 |
 | 复现检查器行为 | [27 个检查案例](../samples/evaluation/README.md) | 运行命令、预期状态与结果解释 |

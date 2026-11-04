@@ -47,6 +47,36 @@ class AppTest(unittest.TestCase):
     def test_repo_resolves_from_source(self):
         self.assertEqual(Path(studio.REPO), ROOT)
 
+    def test_tools_install_requires_token(self):
+        response = self.client.post("/api/studio/tools/install")
+        self.assertEqual(response.status_code, 401)
+
+    def test_tools_install_installs_tectonic_and_activates_it_in_session(self):
+        original = os.environ.get("TECTONIC")
+        try:
+            fake = {"ok": True, "path": "/tmp/fake-tectonic", "version": "0.17.0", "sha256": "0" * 64}
+            with patch.object(studio.tool_fetch, "install_tectonic", return_value=fake):
+                response = self.client.post("/api/studio/tools/install", params=self.auth)
+            self.assertEqual(response.status_code, 200, response.text)
+            result = response.json()
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["version"], "0.17.0")
+            self.assertIn("tectonic", result["tools"])
+            self.assertEqual(os.environ.get("TECTONIC"), "/tmp/fake-tectonic",
+                             "安装后当前会话立即可用编译器")
+        finally:
+            if original is None:
+                os.environ.pop("TECTONIC", None)
+            else:
+                os.environ["TECTONIC"] = original
+
+    def test_tools_install_maps_fetch_error_to_400(self):
+        with patch.object(studio.tool_fetch, "install_tectonic",
+                          side_effect=studio.tool_fetch.ToolFetchError("无适配平台")):
+            response = self.client.post("/api/studio/tools/install", params=self.auth)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("无适配平台", response.text)
+
     def test_default_model_is_minicpm_and_explicit_environment_override_still_works(self):
         for extra, model, base in (({}, "MiniCPM-V-4.7-1B", "http://127.0.0.1:11434"),
                                    ({"VLM_MODEL": "other-model", "VLM_BASE_URL": "http://localhost:9000/v1"},

@@ -42,6 +42,8 @@ python3.13 -m venv .venv
 
 On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
 
+macOS can also generate a desktop window app (own window plus Dock entry, reusing a running session or starting its own backend): `.venv/bin/python desktop/build_app.py` — see the [desktop window guide](desktop/README.md) (Chinese).
+
 ## Configuration
 
 ### Local model service
@@ -71,7 +73,7 @@ Image/PDF transcription requires an endpoint that actually supports `image_url` 
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
-On macOS, `brew install tectonic poppler` installs the optional tools; for other platforms see the [troubleshooting guide](docs/troubleshooting.md).
+Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. Poppler still needs a system package manager (macOS: `brew install poppler`); for other platforms see the [troubleshooting guide](docs/troubleshooting.md).
 
 Studio compiles only against cached TeX resources and never downloads packages while processing documents. First-time preparation:
 

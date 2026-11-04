@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
 from local_runtime import LocalRuntime, LocalRuntimeError, make_local_provider
+import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
 if not TOKEN.strip():
@@ -34,7 +35,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
 VLM_MODEL = os.environ.get("VLM_MODEL", "MiniCPM-V-4.7-1B")
 VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://127.0.0.1:11434")
-TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
+
+
+def _tectonic_command():
+    """编译器命令;每次读取环境,使会话内安装的 Tectonic 立即生效。"""
+    return os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
 app = FastAPI(title="TeXada Studio Local")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
@@ -152,7 +157,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
     with open(texf, "w") as f:
         f.write(tex)
     try:
-        r = subprocess.run([TECTONIC, "-o", d, texf],
+        r = subprocess.run([_tectonic_command(), "-o", d, texf],
                            capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         return None
@@ -359,7 +364,7 @@ def _studio_compile(content: str, name: str, tag: str):
         texf = directory / "main.tex"
         texf.write_text(content, encoding="utf-8")
         # A local Studio never downloads TeX packages during an edit/preview.
-        command = [TECTONIC, "--untrusted", "--only-cached", "--keep-logs",
+        command = [_tectonic_command(), "--untrusted", "--only-cached", "--keep-logs",
                    "-o", str(directory), str(texf)]
         try:
             run = subprocess.run(command, cwd=directory, capture_output=True, text=True, timeout=120)
@@ -1084,7 +1089,7 @@ def studio_config(token: str = Query(""), probe: bool = False):
     runtime = _local_runtime()
     config = _runtime_call(runtime.probe if probe else runtime.get_config)
     return {**config, "local_mode": os.environ.get("TEXADA_LOCAL_MODE", "1") == "1", "offline": True,
-            "tools": {"tectonic": bool(shutil.which(TECTONIC)), "pdftoppm": bool(shutil.which("pdftoppm")),
+            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm")),
                       "pdfinfo": bool(shutil.which("pdfinfo"))},
             "max_document_bytes": 2 * 1024 * 1024, "max_import_pages": 5,
             "math_scope": ["$...$", "$$...$$", "\\(...\\)", "\\[...\\]", "equation", "align"]}
@@ -1096,7 +1101,23 @@ def studio_settings(token: str = Query(""), body: dict = None):
     result = _runtime_call(lambda: _local_runtime().update_settings(body))
     # Settings are per-Studio; no user-global agent/model configuration is changed.
     return {**result, "local_mode": True, "offline": True,
-            "tools": {"tectonic": bool(shutil.which(TECTONIC)), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+
+
+@app.post("/api/studio/tools/install")
+def studio_tools_install(token: str = Query("")):
+    _guard(token)
+    # 仅安装用户显式请求的工具;启动与文档处理过程不做任何下载。
+    try:
+        result = tool_fetch.install_tectonic()
+    except tool_fetch.ToolFetchError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except OSError as error:
+        raise HTTPException(status_code=502, detail=f"下载失败：{error}")
+    os.environ["TECTONIC"] = result["path"]
+    return {**result, "tools": {"tectonic": bool(shutil.which(_tectonic_command())),
+                                "pdftoppm": bool(shutil.which("pdftoppm")),
+                                "pdfinfo": bool(shutil.which("pdfinfo"))}}
 
 
 @app.post("/api/studio/probe")

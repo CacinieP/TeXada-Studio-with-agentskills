@@ -441,6 +441,18 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(context.testEditor.getValue(),'NEW DURING CREATE');assert.equal(run('curName'),'rename-a.tex');
   assert.equal(run('isDirty()'),true);assert.equal(run('busy'),false);
 
+  // One-click Tectonic install posts to the tools endpoint and reports the outcome.
+  context.toolsWire=url=>{assert.match(url,/api\/studio\/tools\/install/);return Promise.resolve({ok:true,version:'0.17.0',path:'/Users/example/.texada/bin/tectonic',tools:{tectonic:true,pdftoppm:false}});};
+  run('j=toolsWire');
+  await run('installLocalTools()');
+  assert.match(get('installToolsHint').textContent,/已安装 Tectonic 0\.17\.0/,'success is reported next to the button');
+  assert.equal(get('btnInstallTools').disabled,true,'button stays disabled after a successful install');
+  context.toolsWire=()=>Promise.reject(new Error('SHA256 校验失败'));
+  run('j=toolsWire');
+  await run('installLocalTools()');
+  assert.equal(get('btnInstallTools').disabled,false,'a failed install re-enables the button');
+  assert.match(get('installToolsHint').textContent,/安装失败/,'failure reason is shown inline');
+
   // The template picker lists the shipped skeletons and creates from them verbatim.
   context.testEditor.setValue('template base');run("savedContent='template base';documentOrigin='local';");
   get('btnNewFromTemplate').onclick();

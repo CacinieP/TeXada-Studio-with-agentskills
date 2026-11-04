@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add an optional macOS desktop shell: a locally generated `TeXada Studio.app` opens the private entry in its own WKWebView window, reuses a running session or starts (and cleanly reclaims) its own backend, with orphan detection so a force-killed window never leaves a stray server behind.
+- Add one-click Tectonic bootstrap: a settings-dialog button and `scripts/install_local_tools.py` download the pinned official release (`tectonic@0.17.0`), verify its SHA256, install to `~/.texada/bin`, and make it available to a running session without restart; the launcher prepends that directory to PATH.
 - Expand the local Monaco snippet pack from 25 to 82 entries, adding amsthm theorem-class environments, matrices and determinants, cross-references, accents, adaptive delimiters and common Greek letters and math symbols.
 - Add five offline document templates (blank article, lecture notes, exam paper, Beamer, English article) with a picker reachable from the sidebar and the command palette; blank new documents now come from the same template module.
 - Highlight TeX's modular building blocks with dedicated token classes: sectioning commands (bold blue), preamble and definition directives including `\input`/`\include` file splits (violet), and cross-references with their keys (`\label`/`\ref`/`\cite`, teal) join the existing keyword/comment/math coloring in the shipped theme.
