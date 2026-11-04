@@ -14,14 +14,15 @@ function fakeMonaco(registered = []) {
     }}; },
     setMonarchTokensProvider(id,value) { calls.push(["tokens",id]); definitions.set("tokens",value); return disposable("tokens"); },
     setLanguageConfiguration(id,value) { calls.push(["configuration",id]); definitions.set("configuration",value); return disposable("configuration"); },
-    registerCompletionItemProvider(id,value) { calls.push(["completion",id]); definitions.set("completion",value); return disposable("completion"); }
+    registerCompletionItemProvider(id,value) { calls.push(["completion",id]); definitions.set("completion",value); return disposable("completion"); },
+    registerFoldingRangeProvider(id,value) { calls.push(["folding",id]); definitions.set("folding",value); return disposable("folding"); }
   }};
 }
 
 const monaco = fakeMonaco();
 const first = latex.install(monaco);
 assert.equal(latex.install(monaco),first,"installation is idempotent per editor instance");
-assert.deepEqual(monaco.calls.map(call => call[0]),["register","tokens","configuration","completion"]);
+assert.deepEqual(monaco.calls.map(call => call[0]),["register","tokens","configuration","completion","folding"]);
 assert.equal(monaco.calls[0][1].id,"latex");
 assert.ok(monaco.calls[0][1].extensions.includes(".tex"));
 assert.equal(first.snippetCount,latex.snippets.length);
@@ -43,7 +44,7 @@ assert.equal(config.folding.markers.start.test("% region formula"),true);
 assert.equal(config.folding.markers.end.test("% endregion"),true);
 assert.deepEqual("\\operatorname x_1 12.5".match(new RegExp(config.wordPattern,"g")),["\\operatorname","x_1","12.5"]);
 
-function model(text) { const lines=text.split("\n"); return {getLineContent:number => lines[number-1]}; }
+function model(text) { const lines=text.split("\n"); return {getLineContent:number => lines[number-1], getLineCount:() => lines.length}; }
 const provider = monaco.definitions.get("completion");
 function complete(text,lineNumber,column) {
   return provider.provideCompletionItems(model(text),{lineNumber,column}).suggestions;
@@ -71,6 +72,20 @@ assert.equal(complete("% \\frac",1,9).length,0,"comments do not open local snipp
 assert.ok(named(complete("\\% \\fr",1,8),"\\frac"),"escaped percent is not a comment");
 assert.equal(complete("\\\\% \\fr",1,9).length,0,"a percent after a literal double slash starts a comment");
 assert.equal(complete("\\doesnotexist",1,14).length,0);
+
+// Folding pairs environments and closes sections at the next heading.
+const folding = monaco.definitions.get("folding");
+const folds = text => folding.provideFoldingRanges(model(text),{}).map(range => `${range.start}-${range.end}`);
+assert.deepEqual(folds("\\section{A}\ntext\n\\subsection{B}\n\\begin{align}\nx\n\\end{align}\n\\section{C}"),["4-6","3-6","1-6"],
+  "environments fold to their \\end and sections to the next heading");
+assert.deepEqual(folds("\\begin{verbatim}\n\\section{fake}\n\\end{verbatim}"),["1-3"],
+  "verbatim content does not open sections");
+assert.deepEqual(folds("% \\begin{itemize}\n\\begin{itemize}\na\n\\end{itemize}"),["2-4"],
+  "commented structure does not fold");
+assert.deepEqual(folds("\\begin{itemize}\nx"),["1-2"],"an unterminated environment folds to the end of the document");
+assert.deepEqual(folds("\\begin{a}\n\\begin{b}\n\\end{a}"),["1-3"],"a mismatched inner environment is discarded, not folded");
+assert.deepEqual(folds("\\section*{A}\ntext\n\\section{B}"),["1-2"],"starred and unstarred sections share a level");
+assert.deepEqual(folds("plain text only"),[]);
 suggestion = named(complete("\\alp",1,5),"\\alpha");
 assert.equal(suggestion.insertText,"\\alpha$0","symbol snippets stay plain insertions");
 suggestion = named(complete("\\the",1,5),"\\begin{theorem}");
@@ -183,6 +198,6 @@ assert.ok(highlighted.tokens.some(token => token.value === "\\subsubsection" && 
 assert.ok(highlighted.tokens.some(token => token.value === "\\citep" && token.token === "keyword.reference"),"longest reference alias wins over its prefix");
 
 first.dispose(); first.dispose();
-assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["completion","configuration","tokens","register"]);
+assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["folding","completion","configuration","tokens","register"]);
 assert.notEqual(latex.install(monaco),first,"disposal permits a fresh installation");
 console.log(`LaTeX language configuration, tokenizer, ${latex.snippets.length} local snippets, completion ranges and idempotence passed.`);

@@ -259,6 +259,62 @@
     };
   }
 
+  function foldingProvider() {
+    const sectionLevels = {part:1, chapter:2, section:3, subsection:4, subsubsection:5, paragraph:6, subparagraph:7};
+    const rawEnvironments = /^(?:verbatim\*?|Verbatim\*?|lstlisting\*?|minted\*?|comment)$/;
+    function visibleLine(line) {
+      for (let index = 0; index < line.length; index++) {
+        if (line[index] === "%" && !escaped(line,index)) return line.slice(0,index);
+      }
+      return line;
+    }
+    return {
+      provideFoldingRanges(model) {
+        const ranges = [], environments = [], sections = [];
+        let rawEnvironment = null;
+        const lineCount = model.getLineCount();
+        const closeSections = (lineNumber,level) => {
+          while (sections.length && sections[sections.length-1].level >= level) {
+            const section = sections.pop();
+            if (lineNumber > section.lineNumber) ranges.push({start:section.lineNumber, end:lineNumber});
+          }
+        };
+        for (let lineNumber = 1; lineNumber <= lineCount; lineNumber++) {
+          const text = visibleLine(model.getLineContent(lineNumber));
+          for (const match of text.matchAll(/\\(begin|end)\s*\{([^}]+)\}|\\(subparagraph|subsubsection|subsection|section|paragraph|chapter|part)\*?(?![A-Za-z@])/g)) {
+            if (match[1]) {
+              const environment = match[2];
+              if (rawEnvironment) {
+                if (match[1] === "end" && environment === rawEnvironment) rawEnvironment = null;
+                else continue;
+              }
+              if (match[1] === "begin") {
+                environments.push({environment, lineNumber});
+                if (rawEnvironments.test(environment)) rawEnvironment = environment;
+              } else {
+                const at = environments.map(item => item.environment).lastIndexOf(environment);
+                if (at >= 0) {
+                  const opener = environments.splice(at)[0];
+                  if (lineNumber > opener.lineNumber) ranges.push({start:opener.lineNumber, end:lineNumber});
+                }
+              }
+            } else if (!rawEnvironment) {
+              const level = sectionLevels[match[3]];
+              closeSections(lineNumber - 1, level);
+              sections.push({level, lineNumber});
+            }
+          }
+        }
+        closeSections(lineCount, 0);
+        while (environments.length) {
+          const opener = environments.pop();
+          if (lineCount > opener.lineNumber) ranges.push({start:opener.lineNumber, end:lineCount});
+        }
+        return ranges;
+      }
+    };
+  }
+
   function install(monaco) {
     if (!monaco || !monaco.languages || typeof monaco.languages.register !== "function"
         || typeof monaco.languages.setMonarchTokensProvider !== "function"
@@ -276,6 +332,9 @@
       disposables.push(languages.setMonarchTokensProvider("latex",monarch));
       disposables.push(languages.setLanguageConfiguration("latex",configuration));
       disposables.push(languages.registerCompletionItemProvider("latex",completionProvider(monaco)));
+      if (typeof languages.registerFoldingRangeProvider === "function") {
+        disposables.push(languages.registerFoldingRangeProvider("latex",foldingProvider()));
+      }
     } catch (error) {
       disposables.reverse().forEach(item => { if (item && typeof item.dispose === "function") item.dispose(); });
       throw error;
