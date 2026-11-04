@@ -202,6 +202,7 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "dist")
     parser.add_argument("--skip-poppler", action="store_true", help="不捆绑 Poppler(PDF 导入/预览仍需系统安装)")
     args = parser.parse_args(argv)
+    args.output = args.output.expanduser().resolve()  # py2app 子进程以 desktop/ 为 cwd,必须绝对路径
     require(sys.platform == "darwin", "自包含包仅支持 macOS")
     venv_python = REPO_ROOT / ".venv" / "bin" / "python"
     require(venv_python.exists(), "未找到 .venv;请先准备虚拟环境与依赖")
