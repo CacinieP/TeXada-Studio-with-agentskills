@@ -31,6 +31,32 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+      # ---- 签名与公证:配置了仓库 secrets 时产出公证 DMG;否则回退未签名 zip ----
+      - name: Detect signing secrets
+        id: detect
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [ -n "$MACOS_CERTIFICATE" ]; then echo "has_signing=true" >> "$GITHUB_OUTPUT";
+          else echo "has_signing=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Import signing certificate into a temporary keychain
+        if: steps.detect.outputs.has_signing == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          CERTFILE="$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
+          KEYCHAIN_PWD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security set-keychain-settings -lut 21600 build.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
+          security list-keychains -d user -s build.keychain-db
+          rm -f "$CERTFILE"
+
       - name: Prepare build dependencies
         run: |
           python3 -m venv .venv
@@ -61,32 +87,6 @@ jobs:
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
             "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
           test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
-
-      # ---- 签名与公证:配置了仓库 secrets 时产出公证 DMG;否则回退未签名 zip ----
-      - name: Detect signing secrets
-        id: detect
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          if [ -n "$MACOS_CERTIFICATE" ]; then echo "has_signing=true" >> "$GITHUB_OUTPUT";
-          else echo "has_signing=false" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Import signing certificate into a temporary keychain
-        if: steps.detect.outputs.has_signing == 'true'
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-        run: |
-          CERTFILE="$RUNNER_TEMP/certificate.p12"
-          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
-          KEYCHAIN_PWD="$(uuidgen)"
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security set-keychain-settings -lut 21600 build.keychain-db
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
-          security list-keychains -d user -s build.keychain-db
-          rm -f "$CERTFILE"
 
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'
