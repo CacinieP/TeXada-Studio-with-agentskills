@@ -61,15 +61,112 @@ jobs:
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
             "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
           test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
-      - name: Package and checksum
+
+      # ---- 签名与公证:配置了仓库 secrets 时产出公证 DMG;否则回退未签名 zip ----
+      - name: Detect signing secrets
+        id: detect
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [ -n "$MACOS_CERTIFICATE" ]; then echo "has_signing=true" >> "$GITHUB_OUTPUT";
+          else echo "has_signing=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Import signing certificate into a temporary keychain
+        if: steps.detect.outputs.has_signing == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          CERTFILE="$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
+          KEYCHAIN_PWD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
+          security list-keychains -d user -s build.keychain-db "$(security list-keychains -d user | tr -d '"')"
+          rm -f "$CERTFILE"
+
+      - name: Sign the app with Developer ID Application
+        if: steps.detect.outputs.has_signing == 'true'
+        run: |
+          IDENTITY="$(security find-identity -v -p codesigning build.keychain-db | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
+          if [ -z "$IDENTITY" ]; then
+            echo "证书链中没有 Developer ID Application 身份;无法做分发签名。" >&2
+            exit 1
+          fi
+          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "dist-app/TeXada Studio.app"
+          codesign --verify --deep --strict --verbose=2 "dist-app/TeXada Studio.app"
+
+      - name: Store notarytool credentials
+        if: steps.detect.outputs.has_signing == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+            xcrun notarytool store-credentials NOTARY_PROFILE \
+              --key "$RUNNER_TEMP/notary.p8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID"
+            rm -f "$RUNNER_TEMP/notary.p8"
+          elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            xcrun notarytool store-credentials NOTARY_PROFILE \
+              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          else
+            echo "缺少公证凭据(ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_P8 或 APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID)。" >&2
+            exit 1
+          fi
+
+      - name: Notarize and staple the app
+        if: steps.detect.outputs.has_signing == 'true'
+        run: |
+          ditto -c -k --keepParent "dist-app/TeXada Studio.app" "$RUNNER_TEMP/app-for-notary.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/app-for-notary.zip" --keychain-profile NOTARY_PROFILE --wait
+          xcrun stapler staple "dist-app/TeXada Studio.app"
+          xcrun stapler validate "dist-app/TeXada Studio.app"
+
+      - name: Create, sign and notarize the DMG
+        if: steps.detect.outputs.has_signing == 'true'
+        run: |
+          STAGE="$RUNNER_TEMP/dmg-stage"
+          mkdir -p "$STAGE"
+          cp -R "dist-app/TeXada Studio.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "TeXada Studio" -srcfolder "$STAGE" -ov -format UDZO \
+            "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          codesign --force --timestamp --sign "$IDENTITY" "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          xcrun notarytool submit "dist-app/TeXada-Studio-macOS-arm64.dmg" --keychain-profile NOTARY_PROFILE --wait
+          xcrun stapler staple "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          xcrun stapler validate "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          spctl -a -t open -vv "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          cd dist-app
+          shasum -a 256 "TeXada-Studio-macOS-arm64.dmg" | tee checksum.txt
+      - name: Upload notarized DMG
+        if: steps.detect.outputs.has_signing == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeXada-Studio-macOS-arm64-notarized
+          path: |
+            dist-app/TeXada-Studio-macOS-arm64.dmg
+            dist-app/checksum.txt
+          if-no-files-found: error
+
+      - name: Package unsigned fallback (no signing secrets configured)
+        if: steps.detect.outputs.has_signing != 'true'
         run: |
           cd dist-app
           ditto -c -k --keepParent "TeXada Studio.app" "TeXada-Studio-macOS-arm64.zip"
           shasum -a 256 "TeXada-Studio-macOS-arm64.zip" | tee checksum.txt
-      - name: Upload artifact
+      - name: Upload unsigned zip
+        if: steps.detect.outputs.has_signing != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: TeXada-Studio-macOS-arm64
+          name: TeXada-Studio-macOS-arm64-unsigned
           path: |
             dist-app/TeXada-Studio-macOS-arm64.zip
             dist-app/checksum.txt

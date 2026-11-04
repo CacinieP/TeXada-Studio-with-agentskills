@@ -26,7 +26,22 @@ brew install poppler
 .venv/bin/python desktop/build_bundle.py           # 产物 dist/TeXada Studio.app(约 280 MiB)
 ```
 
-也可以不在本机构建:[`.github/workflows/bundle-build.yml`](../.github/workflows/bundle-build.yml) 会在 GitHub Actions 的 macOS arm64 runner 上完成同一流程(安装固定版 Tectonic → brew 装 Poppler → 准备 TeX 缓存 → 构建 → **隔离冒烟**〔剥离 PATH/HOME 下直测三个二进制并用捆绑缓存编译出 PDF〕→ ditto 打包并上传 artifact `TeXada-Studio-macOS-arm64`,附 SHA256)。触发方式:改动相关路径的 PR、`v*` 标签,或在 Actions 页手动 `workflow_dispatch`。
+也可以不在本机构建:[`.github/workflows/bundle-build.yml`](../.github/workflows/bundle-build.yml) 会在 GitHub Actions 的 macOS arm64 runner 上完成同一流程(安装固定版 Tectonic → brew 装 Poppler → 准备 TeX 缓存 → 构建 → **隔离冒烟**〔剥离 PATH/HOME 下直测三个二进制并用捆绑缓存编译出 PDF〕→ 打包上传,附 SHA256)。触发方式:改动相关路径的 PR、`v*` 标签,或在 Actions 页手动 `workflow_dispatch`。
+
+### 公证 DMG(可选,配置仓库 secrets 后自动启用)
+
+未配置凭据时产出未签名 zip(`…-unsigned`,使用需右键打开)。配置以下 secrets 后,同一工作流会改为产出**签名 + 公证 + 装订(staple)的 DMG**(`…-notarized`,双击即装):
+
+| Secret | 内容 | 获取方式 |
+| --- | --- | --- |
+| `MACOS_CERTIFICATE` | **Developer ID Application** 证书 `.p12` 的 base64 | developer.apple.com → Certificates 创建;钥匙串导出(含私钥)后 `base64 -i 证书.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_PWD` | 导出 `.p12` 时设置的密码 | 自定 |
+| `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` | App Store Connect API 密钥(公证推荐) | appstoreconnect.apple.com → 用户与访问 → 密钥;`.p8` 原文存 `ASC_KEY_P8` |
+| (备选)`APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Apple ID + 专用密码公证 | appleid.apple.com 生成 App 专用密码 |
+
+设置(在本机仓库目录):`gh secret set MACOS_CERTIFICATE < 证书.p12.base64` 等;随后 `gh workflow run "Desktop bundle"` 或打 `v*` 标签即可产出公证 DMG。流程:导入临时钥匙串 → `codesign --deep --options runtime --timestamp` 签名应用 → 公证并 staple 应用 → 制作含 `/Applications` 符号链接的 UDZO DMG → 签名 DMG → 公证 + staple + `spctl` 验证。
+
+> 注意:Apple Development 证书(本机开发用)不能用于分发签名;需要付费 Apple Developer Program 账号创建 **Developer ID Application** 证书。
 
 包内嵌:Python 运行时与全部服务端依赖、Tectonic、TeX 资源缓存、Poppler(pdfinfo/pdftoppm 及其动态库,重签名后自包含)、webui/harness/skills 源码与示例。**许可合规**见 [licenses-audit.md](licenses-audit.md)(副本随包分发)。
 
