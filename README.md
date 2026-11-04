@@ -47,6 +47,8 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 启动器打开本机浏览器，文档和模型处理都在本地。编辑器资源已随源码提供，无需前端构建。首次安装依赖、模型与 TeX 资源需要联网准备，完整步骤见[首次准备与离线使用](docs/local-studio.md#首次准备与离线使用)。
 
+macOS 还可以生成桌面窗口应用（独立窗口 + Dock 入口，复用已有会话或自启后端）：`.venv/bin/python desktop/build_app.py`，详见[桌面窗口说明](desktop/README.md)。
+
 ## 配置
 
 ### 本机模型服务
@@ -76,7 +78,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 | PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
 | PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
-macOS 可用 `brew install tectonic poppler` 安装可选工具；其他平台见[排错说明](docs/troubleshooting.md)。
+Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。Poppler 仍需系统包管理器（macOS：`brew install poppler`）；其他平台见[排错说明](docs/troubleshooting.md)。
 
 Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中悄悄下载。首次准备：
 

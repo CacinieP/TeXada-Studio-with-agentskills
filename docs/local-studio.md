@@ -57,7 +57,14 @@ Monaco 编辑器及其字体、工作线程资源已随源码提供。安装依�
 
 ### 准备 PDF 编译资源
 
-PDF 预览需要 Tectonic 和 Poppler。先把 `tectonic`、`pdftoppm`、`pdfinfo` 放入 `PATH`；也可以用 `TECTONIC` 环境变量明确指定本机编译器。
+PDF 预览需要 Tectonic 和 Poppler。Poppler（`pdftoppm`、`pdfinfo`）用系统包管理器安装（macOS：`brew install poppler`）；Tectonic 可一键自举：在 Studio 设置面板点「下载 Tectonic」，或运行
+
+```bash
+.venv/bin/python scripts/install_local_tools.py          # 下载到 ~/.texada/bin 并校验 SHA256
+.venv/bin/python scripts/install_local_tools.py --status # 查看安装状态
+```
+
+下载固定为官方 Release（`tectonic@0.17.0`），按平台选择资产、校验 SHA256 后原子安装；本地启动器会把 `~/.texada/bin` 自动加入 `PATH`，已在运行的会话安装后无需重启。也可以自行把 `tectonic` 放入 `PATH`，或用 `TECTONIC` 环境变量明确指定本机编译器。
 
 先离线检查中文、公式、表格与两页 PDF 所需资源：
 
@@ -87,6 +94,13 @@ macOS 可双击 `scripts/start-local-studio.command`，或运行：
 启动器使用项目 `.venv`，打开本机浏览器，默认监听 `127.0.0.1:8888`。访问凭据不会打印；私密入口只写入用户数据目录的 `session.json`。不要把该文件或带访问参数的地址放进截图、报告、仓库或公开分享。
 
 按启动终端中的 `Ctrl+C` 停止。启动器只停止自己启动的模型，不会关闭已经存在的 Ollama 或 llama-server 服务。
+
+macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口，复用已有会话或自启后端，详见 [desktop/README](../desktop/README.md)）：
+
+```bash
+.venv/bin/pip install -r desktop/requirements.txt
+.venv/bin/python desktop/build_app.py    # 生成 dist/TeXada Studio.app
+```
 
 需要自行打开浏览器、调整端口或选择数据目录时：
 

@@ -35,7 +35,7 @@
 <dialog id="importDialog"><div class="dialog-heading"><h2>图片 / PDF 识别</h2><button id="btnImportClose" class="icon-button" aria-label="关闭识别面板" title="关闭识别面板"></button></div><p class="hint">打开 LaTeX，或从图片和 PDF 生成可编辑候选。</p>
  <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖入图片和PDF"><div class="drop-symbol">▧</div><div id="ocrFileLabel">拖入 PDF / 图片，或点击选择</div></div><input id="ocrInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
  <div class="row"><label for="ocrPages" class="hint">最多页数</label><select id="ocrPages" class="light-button" aria-label="最多识别页数"><option value="1">1 页</option><option value="3">3 页</option><option value="5">5 页</option></select><button class="light-button" id="btnOcr" disabled>开始识别</button></div><p class="local-note" id="ocrHint">仅向配置的本地模型发送。识别结果经你确认后新建文档。</p></dialog>
-<dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="MiniCPM-V-4.7-1B"></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
+<dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="MiniCPM-V-4.7-1B"></div><div class="field"><label for="btnInstallTools">本地工具</label><button class="light-button" id="btnInstallTools">下载 Tectonic 0.17.0（官方 Release）</button><p class="hint" id="installToolsHint">仅在点击时从 Tectonic 官方 Release 下载并校验 SHA256；Poppler 仍需系统包管理器安装（macOS：brew install poppler）。</p></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
 <dialog id="ocrDialog"><h2>审阅识别结果</h2><p class="hint">对照原件检查公式和正文。识别结果不会自动覆盖现有文档。</p><div class="field"><label for="ocrName">新文档名称</label><input id="ocrName" value="识别文档.tex"></div><div class="field"><label for="ocrCandidate">LaTeX 候选</label><textarea id="ocrCandidate"></textarea></div><div class="actions"><button class="light-button" id="btnOcrCancel">取消</button><button class="act star" id="btnOcrCreate">新建文档</button></div></dialog>
 <dialog id="historyDialog"><h2>运行记录</h2><div id="historyJobs"></div><div class="actions"><button class="light-button" id="btnHistoryClose">关闭</button></div></dialog>
 <dialog id="editorSettingsDialog"><div class="dialog-heading"><h2>编辑器设置</h2><button class="light-button icon-only" id="btnEditorSettingsClose" aria-label="关闭编辑器设置" title="关闭"></button></div><p class="hint">只调整本机编辑体验，修改立即生效。</p><div class="preference-row"><label for="prefFontSize">字体大小</label><div class="row"><button class="light-button icon-only" id="btnZoomOut" aria-label="缩小字号" title="缩小字号">A−</button><input id="prefFontSize" type="number" min="10" max="28" step="1" value="15" aria-label="编辑器字号"><span class="hint">px</span><button class="light-button icon-only" id="btnZoomIn" aria-label="增大字号" title="增大字号">A+</button></div></div><label class="preference-row" for="prefWordWrap"><span>自动换行<small>长行在编辑区域内折行，不改变源文件。</small></span><input id="prefWordWrap" type="checkbox" checked></label><label class="preference-row" for="prefMinimap"><span>代码小地图<small>在右侧展示全文缩略导航。</small></span><input id="prefMinimap" type="checkbox"></label><div class="actions"><button class="light-button" id="btnEditorReset">恢复默认</button><button class="act star" id="btnEditorDone">完成</button></div></dialog>
@@ -765,6 +765,21 @@ $("btnTestModel").onclick = async () => {
   } catch(error) { if(sameModelConfiguration(draft,studioConfig))displayModelConnection(false);warn(error); }
   finally { $("btnTestModel").disabled=false; }
 };
+async function installLocalTools(){
+  const button=$("btnInstallTools"),hint=$("installToolsHint");
+  button.disabled=true;
+  hint.textContent="正在从 Tectonic 官方 Release 下载（约 21 MB），完成后自动校验 SHA256…";
+  try {
+    const d=await post("tools/install",{});
+    hint.textContent=`已安装 Tectonic ${d.version} → ${d.path}；本次会话即可编译 PDF。`;
+    toast("Tectonic 安装完成。");
+    loadConfig().catch(()=>{});
+  } catch(error) {
+    hint.textContent="安装失败："+(error&&error.message||String(error))+"。可重试或用 brew 安装。";
+    button.disabled=false;
+  }
+}
+$("btnInstallTools").onclick=installLocalTools;
 
 let ocrFile = null, ocrRunning = false, ocrRequestId = 0, ocrEpoch = 0;
 let ocrReviewActive = false, ocrReviewRevision = 0;
@@ -1031,6 +1046,7 @@ const EDITOR_COMMANDS=[
   {id:'file.pdf',label:'导出 PDF',detail:'下载与当前内容绑定的 PDF',icon:'download',keywords:'export pdf',button:'btnPdf'},
   {id:'editor.settings',label:'编辑器设置',detail:'字号、自动换行与代码小地图',icon:'settings',keywords:'font wrap minimap settings',button:'btnEditorSettings'},
   {id:'model.settings',label:'本地模型设置',detail:'配置本机模型服务',icon:'model',keywords:'model local settings',button:'btnSettings'},
+  {id:'tools.install',label:'下载 Tectonic',detail:'从官方 Release 安装本地 PDF 编译器',icon:'download',keywords:'tectonic install tools compile pdf',button:'btnInstallTools'},
   {id:'document.import',label:'识别图片 / PDF',detail:'从原件创建可审阅的 LaTeX 候选',icon:'scan',keywords:'ocr image pdf import',run:openImportPanel},
   {id:'history.open',label:'查看运行记录',detail:'恢复尚未审阅的修复候选',icon:'history',keywords:'history runs',button:'btnHistory'},
   {id:'appearance.theme',label:'切换编辑器对比度',detail:'保持深海蓝，调整背景对比度',icon:'theme',keywords:'theme dark light',button:'btnTheme'},

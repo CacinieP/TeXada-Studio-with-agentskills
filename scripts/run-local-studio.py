@@ -78,6 +78,8 @@ def report_dependencies(status):
     absent_tools = [name for name, ready in status["tools"].items() if not ready]
     if absent_tools:
         print("可选工具尚未就绪：" + "、".join(absent_tools) + "；相应 PDF 编译/导入功能将提示安装。", flush=True)
+        if "tectonic" in absent_tools:
+            print("提示:可在 Studio 设置中点「下载 Tectonic」,或运行 scripts/install_local_tools.py。", flush=True)
     else:
         print("本地 PDF 编译与页面转换工具已就绪。", flush=True)
     return status["python"] and not missing
@@ -245,9 +247,42 @@ def existing_session_url(state, port):
         return None
 
 
+LOCAL_TOOL_BIN = Path.home() / ".texada" / "bin"
+
+
+def prepend_local_bin(path_value):
+    """把 ~/.texada/bin(install_local_tools.py 的安装位置)放到 PATH 最前。"""
+    entries = [entry for entry in (path_value or "").split(os.pathsep) if entry]
+    local = str(LOCAL_TOOL_BIN)
+    if local in entries:
+        return path_value
+    return os.pathsep.join([local, *entries])
+
+
+def watch_parent_exit(server):
+    """TEXADA_EXIT_WHEN_ORPHANED=1 时,父进程消失(桌面窗口被强杀)就优雅退出。"""
+    if os.environ.get("TEXADA_EXIT_WHEN_ORPHANED") != "1":
+        return None
+    parent = os.getppid()
+    def watch():
+        while True:
+            time.sleep(2)
+            try:
+                if os.getppid() != parent:
+                    server.should_exit = True
+                    return
+            except OSError:
+                return
+    import threading
+    thread = threading.Thread(target=watch, daemon=True, name="parent-watch")
+    thread.start()
+    return thread
+
+
 def run(args):
     if not 1 <= args.port <= 65535 or not 1 <= args.model_port <= 65535 or args.port == args.model_port:
         raise RuntimeError("Studio 与模型端口必须是 1–65535 内不同的端口。")
+    os.environ["PATH"] = prepend_local_bin(os.environ.get("PATH", ""))
     status = dependency_status()
     ready = report_dependencies(status)
     state = (args.state_dir or default_state_dir()).expanduser().resolve()
@@ -282,6 +317,7 @@ def run(args):
     signal.signal(signal.SIGTERM, interrupted)
     session_path = state / "session.json"
     environment = clean_environment(dict(os.environ))
+    environment["PATH"] = prepend_local_bin(environment.get("PATH"))
     environment.update(TEXADA_LOCAL_MODE="1", TEXADA_STUDIO_STATE_DIR=str(state),
                        VLM_MODEL=config["model"], VLM_BASE_URL=config["base_url"],
                        SKILL_MODE="on", DEMO_TOKEN=secrets.token_urlsafe(32))
@@ -317,6 +353,7 @@ def run(args):
         print("私密入口已保存在用户数据目录的 session.json。按 Ctrl+C 退出。", flush=True)
         server = uvicorn.Server(uvicorn.Config("app:app", host="127.0.0.1", port=args.port,
                                                workers=1, access_log=False, log_level="warning"))
+        watch_parent_exit(server)
         # Delay browser launch until the listener is ready, without blocking startup.
         if not args.no_browser:
             import threading
