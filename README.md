@@ -1,14 +1,16 @@
 # TeXada Studio 本地版
 
-在自己的电脑上编辑 LaTeX，识别图片或 PDF，检查公式语法和简单表格合计。本地规则或 MiniCPM 给出候选，你对照原文审阅，再保存、预览和导出。
+在自己的电脑上编辑 LaTeX、识别图片或 PDF、检查公式和简单表格。查看修复差异，审阅后保存，再编译和导出。
 
-界面采用 TeXada 的深海蓝与青蓝品牌，以源码和 PDF 双栏为主体。文件、大纲、图片识别、Agent 审阅与日志通过侧栏和抽屉展开，结合确定性检查、修复候选和审阅记录。
+这是在浏览器中打开的本地工作台。源码、文档与运行记录保存在本机；图片识别和模型候选使用你配置的本机模型服务。
 
-编辑器采用本地 Web UI：FastAPI 提供本机服务，浏览器使用 Monaco 编辑源码，文档保存在所选本地数据目录。外部 Agent 的操作入口与运行时 Skill 范围见 [AgentSkills 使用指南](docs/agent-skills.md)。
+[English](README.en.md) · [开始使用](#开始使用) · [完整指南](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [文档导航](docs/index.md)
 
-[English](README.en.md) · [本地使用指南](docs/local-studio.md) · [本地验收记录](docs/local-studio-acceptance.md) · [示例](samples/README.md) · [文档导航](docs/index.md)
+![TeXada Studio：本地 LaTeX 源码与中文 PDF 双栏工作区](assets/studio-workspace.png)
 
-当前是本地单用户开发候选，尚无本次正式 Release。本机 MiniCPM-V 4.7 1B Q4 已完成固定图片与两页 PDF 转写、候选编译及缺失括号修复；Chrome 已验证保存刷新、候选审阅、历史恢复、多页预览和导出等主流程。结果是本机 smoke 验收，不是 OCR 准确率、数学正确率或跨平台评测；详见[验收记录](docs/local-studio-acceptance.md)。
+当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
+
+当前面向本地单用户，仍是开发候选，尚无本次正式 Release。已验证范围见[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
 
 ## 这版可以做什么
 
@@ -27,9 +29,11 @@
 
 ## 开始使用
 
-需要 Python 3.11+，本轮使用 3.13。先在项目目录安装依赖：
+需要 **Python 3.11+**。下面以已安装的 `python3.13` 为例，也可替换为其他满足要求的版本：
 
 ```bash
+git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
+cd TeXada-Studio-with-agentskills
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r webui/requirements.txt
 .venv/bin/python scripts/run-local-studio.py --check
@@ -46,6 +50,8 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 首次安装 Python 依赖、模型、字体和 TeX 资源需要事先准备。Studio 编译使用已缓存的 TeX 资源，不会在文档处理过程中悄悄补下载；尚未准备缓存的电脑会显示缺失资源提示。完整步骤见[本地使用指南](docs/local-studio.md#首次准备与离线使用)。
 
 可用 `.venv/bin/python scripts/prepare-local-tex.py` 离线检查固定样本的 TeX 资源；需要时显式加 `--download-resources` 完成首次准备，再重新离线检查。
+
+Monaco 编辑器资源已随源码提供，无需前端构建。源码包与校验方法见[源码打包](docs/source-package.md)；源码 ZIP 需要自行准备 Python 和所需的可选工具。
 
 | 想使用的功能 | 还需准备 |
 | --- | --- |
@@ -66,7 +72,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 ## 第一份文档
 
-1. 打开 `math-clean.tex`，点击“检查文档”和“编译预览”。
+1. 打开 `welcome.tex` 或 `math-clean.tex`，点击“检查”；编译依赖就绪后点击“编译”。
 2. 打开 `math-delimiters.tex`，生成修复候选，查看 diff 后决定是否采用；采用后点击“保存”。
 3. 刷新页面，确认保存内容仍在，再导出当前版本的 `.tex` 或 PDF。
 4. 选择自己有权使用的图片或 PDF，点击“开始识别”；对照原件审阅识别结果，再新建文档。
@@ -88,6 +94,9 @@ TeX 提取器会跳过注释、常见原样环境和命令定义，识别 `$...$
 ## 示例、验证与开发
 
 无需模型的 CLI 样本、完整测试命令和研究协议见[本地指南](docs/local-studio.md#开发与复现)。主要入口：
+
+- [Studio 操作 Skill](skills/texada-studio/SKILL.md)、[AgentSkills 使用指南](docs/agent-skills.md)：工作区操作、公式/表格、OCR 输入与审阅边界。
+- [当前验证](docs/current-validation.md)、[源码打包](docs/source-package.md)、[架构](docs/architecture.md)、[CLI Harness](harness/README.md)。
 
 - [案例手册](docs/casebook.md)、[历史验证记录](docs/validation.md)、[Skill 对照实验](docs/skills-pilot-analysis.md)。
 - [Skill 设计与技术报告](docs/skills-technical-report.md)、[受限规划](docs/studio-constrained-planner.md)、[Skill 选择](docs/studio-skill-selection.md)、[单公式交接](docs/studio-formula-handoff.md)。

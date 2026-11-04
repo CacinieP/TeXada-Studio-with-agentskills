@@ -54,7 +54,7 @@ python scripts/compile_studio_cases.py \
 
 | 检查 | 实际结果 | 复现入口 |
 | --- | --- | --- |
-| CLI fixture首跑 | 7个`OK`、1个`NEEDS_HUMAN`，模型HTTP请求0次 | [快速开始](../README.md#1-先跑无需模型的样本) |
+| CLI fixture首跑 | 7个`OK`、1个`NEEDS_HUMAN`，模型HTTP请求0次 | [CLI 样本入口](../harness/README.md#跑通一个样本) |
 | 相同输入续跑 | 8个`SKIP` | [Harness手册](../harness/README.md) |
 | 确定性检查器 | 27/27符合预期 | [检查案例](../samples/evaluation/README.md) |
 | 三组评测流程 | dry-run和fixture运行完成，模型HTTP请求0次 | [研究协议](../samples/research/README.md) |

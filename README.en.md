@@ -1,14 +1,16 @@
 # TeXada Studio Local
 
-The editor is a local Web UI: FastAPI serves the application, Monaco runs in the browser, and documents are stored in the selected local data directory. See the [current AgentSkills guide](docs/agent-skills.md) for workspace operations and the runtime Skill boundaries.
+Edit LaTeX, transcribe images or PDFs, check formulas and simple totals, review repair diffs, then save, compile and export on your own computer.
 
-Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review local-rule or MiniCPM candidates, and save or export the result on your own computer.
+Studio is a local workspace opened in your browser. Documents and run records stay on your machine; image transcription and model candidates use the local model service you configure.
 
-The interface uses TeXada's deep navy and cyan palette, with source and PDF side by side. Documents, outline, image import, Agent review and logs open through the sidebar and drawers, alongside deterministic checks and explicit candidate review.
+[中文](README.md) · [Start](#start) · [Local guide](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [Documentation](docs/index.md)
 
-[中文](README.md) · [Local guide](docs/local-studio.md) · [Local acceptance](docs/local-studio-acceptance.md) · [Samples](samples/README.md) · [Documentation](docs/index.md)
+![TeXada Studio: local LaTeX source and a compiled Chinese PDF](assets/studio-workspace.png)
 
-This is a local, single-user development candidate, with no formal release for this revision yet. A local MiniCPM-V 4.7 1B Q4 model has completed fixed-image and two-page PDF transcription, candidate compilation, and a missing-brace repair. Chrome checks covered saving and refresh, candidate review, history recovery, multi-page previews, and export. These are local smoke checks, not OCR accuracy, mathematical correctness, or cross-platform evaluations; see the [acceptance record](docs/local-studio-acceptance.md).
+Current UI, using the repository's synthetic `welcome.tex` sample; November 4, 2026.
+
+This remains a local, single-user development candidate, with no formal release for this revision. See the [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
 
 ## What you can do
 
@@ -31,9 +33,11 @@ Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the 
 
 ## Start
 
-Requires Python 3.11+; this iteration uses 3.13. From the project directory:
+Requires **Python 3.11+**. The example uses an installed `python3.13`; substitute another supported version if needed:
 
 ```bash
+git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
+cd TeXada-Studio-with-agentskills
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r webui/requirements.txt
 .venv/bin/python scripts/run-local-studio.py --check
@@ -46,10 +50,12 @@ Initial installation of dependencies, model weights, fonts, and TeX resources ma
 
 Run `.venv/bin/python scripts/prepare-local-tex.py` to check the fixed TeX sample offline. When needed, explicitly add `--download-resources` for initial preparation, then repeat the offline check.
 
+Monaco assets are bundled with the source; no frontend build is required. See [source packaging](docs/source-package.md) for archive contents and checksums. A source ZIP still requires Python and the optional tools listed below.
+
 | Feature | Additional requirements |
 | --- | --- |
 | Editing and deterministic checks | Python dependencies above; Monaco is bundled |
-| Local repairs and image transcription | A local MiniCPM-V 4.7 1B service; automatic startup also needs `llama-server`, GGUF, and projector files |
+| Model candidates and image transcription | A local MiniCPM-V 4.7 1B service; automatic startup also needs `llama-server`, GGUF and projector. Deterministic repairs need no model |
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
@@ -65,7 +71,7 @@ Local mode accepts only HTTP endpoints on `localhost`, `127.0.0.1`, or `[::1]`. 
 
 ## First document
 
-1. Open `math-clean.tex`, check the document, and compile a preview.
+1. Open `welcome.tex` or `math-clean.tex` and choose **Check**. Once compiler dependencies are ready, choose **Compile**.
 2. Open `math-delimiters.tex`, generate a candidate, review the diff, and accept or reject it. Save after adopting a candidate.
 3. Refresh to check persistence, then export the current `.tex` or PDF.
 4. Select an authorized image or PDF, start recognition, review it against the original, and create a document from the candidate.
@@ -83,6 +89,9 @@ The current unit of work is one `.tex` file. Multi-file projects and multi-user 
 ## Samples and development
 
 The [local guide](docs/local-studio.md#开发与复现) retains the model-free CLI example, test commands, and research protocols.
+
+- [Studio operation Skill](skills/texada-studio/SKILL.md) and [AgentSkills guide](docs/agent-skills.md): workspace operations, formula/table/OCR inputs and review boundaries.
+- [Current validation](docs/current-validation.md), [source packaging](docs/source-package.md), [architecture](docs/architecture.md), and [CLI Harness](harness/README.md).
 
 - [Casebook](docs/casebook.md), [historical validation](docs/validation.md), and [Skill comparison](docs/skills-pilot-analysis.md).
 - [Skill design](docs/skills-technical-report.md), [constrained planning](docs/studio-constrained-planner.md), [Skill selection](docs/studio-skill-selection.md), and [formula handoff](docs/studio-formula-handoff.md).

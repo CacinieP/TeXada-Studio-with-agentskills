@@ -21,6 +21,7 @@ PR 写清具体问题、修改后的行为和实际运行的验证命令。UI �
 | 检查器契约 | [27 个案例](samples/evaluation/README.md)，保留新报告 |
 | 评估运行器 | `python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v` |
 | latex-cleanup | [该模块测试说明](skills/latex-cleanup/tests/CASES.md) |
+| 源码分发 | `python -m unittest discover -s scripts -p 'test_package.py' -v`；提交后按[源码包说明](docs/source-package.md)生成与校验 |
 | 文档 | 核对命令、相对链接和中英文一致性 |
 
 依赖安装和完整测试列表见[本地指南](docs/local-studio.md#回归测试)。[Studio regression](.github/workflows/regression.yml) 会在 PR 和 main 推送时运行 Python 回归、JavaScript 行为测试与语法检查；PR 中仍需记录本地验证结果和未覆盖的环境。

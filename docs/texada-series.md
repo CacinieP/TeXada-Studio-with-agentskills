@@ -1,14 +1,18 @@
 # TeXada 系列：从公式输入到文档审阅
 
-记录日期：2026-10-13。本文及配套系列材料为本地审阅稿，待审阅后发布。
+记录日期：2026-10-13。本文保留当时的系列审阅稿、API 适配状态与后续计划，不作为当前安装说明。
 
-![TeXada 系列 · Math Agent 与 Studio](../assets/texada-series-poster.png)
+当前 Studio 已提供本地浏览器工作台、图片/PDF 转写、多页预览和确定性语法候选；入口见[本地使用指南](local-studio.md)、[当前 AgentSkills](agent-skills.md)与[公式修复质量记录](formula-repair-quality.md)。模型实测范围见[本地验收](local-studio-acceptance.md)，不沿用下文的“待验证”状态作为当前结论。
+
+![2026-10-13 TeXada 系列概念海报](../assets/texada-series-poster.png)
+
+海报包含当时的 API/Q4 状态与界面示意，不是当前产品截图。
 
 TeXada 系列使用 MiniCPM 连接两类工作：先把公式描述、截图或未完成片段变成 LaTeX 候选，再把公式放回文档中检查和审阅。各仓库保留自己的运行方式、发布节奏和许可证，通过清楚的入口组成一个系列。
 
-## 两个工具的职责
+## 两个工具在当时版本中的职责
 
-| 项目 | 当前输入与任务 | 使用方式 | 源码许可证 |
+| 项目 | 当时记录的输入与任务 | 使用方式 | 源码许可证 |
 | --- | --- | --- | --- |
 | [TeXada Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) | 自然语言转公式、公式图片 OCR、LaTeX 补全；通过 Agent 工具检查候选 | 桌面应用及其后端；MiniCPM-V 4.7-1B 单模型 profile 在本机适配，尚未发布 | 当前开发版本 `AGPL-3.0-or-later`；历史标签以标签内声明为准 |
 | [TeXada Studio](https://github.com/CacinieP/TeXada-Studio-with-agentskills) | MiniCPM 生成公式候选；单个 `.tex` 中的公式语法和简单表格合计，diff 审阅、采用与导出 | Monaco / Python 工作台、Skill 任务包和 Tectonic 预览；本轮加入 MiniCPM-V 4.7-1B API 适配 | 原创代码、文档与合成样本 `AGPL-3.0-only`；第三方内容保留自身许可 |
@@ -17,7 +21,7 @@ TeXada 系列使用 MiniCPM 连接两类工作：先把公式描述、截图或�
 
 Studio 的具体支持范围、启动依赖与现有模型配置以 [README](../README.md) 为准，Skill 加载与状态管理见 [技术报告](skills-technical-report.md)。
 
-## 今天可以怎样搭配使用
+## 2026-10-13 的手动搭配流程
 
 1. 在 Math Agent 中输入公式描述、粘贴公式截图或补全 LaTeX 片段。
 2. 对照原始描述或截图审阅候选，复制要采用的 LaTeX。
@@ -35,7 +39,7 @@ Studio 的具体支持范围、启动依赖与现有模型配置以 [README](../
 
 模型来源：[官方 1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B) · [官方 GGUF 仓库](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf)。Q4 本机部署仍需单独完成兼容性、效果和资源验收；本轮 API 结果不能代表量化后的结果。
 
-Studio 通过 `scripts/run-minicpm-v47-studio.sh` 显式选择 4.7 API profile，通用启动入口仍保留本机服务配置；具体命令见 [README](../README.md#3-接入真实模型)。两项目的发布、真实候选质量与 Skill 对照证据分别记录。接入同一模型之后，两个工具仍保留各自的输入范围和检查方式。
+Studio 通过 `scripts/run-minicpm-v47-studio.sh` 显式选择 4.7 API profile，通用启动入口仍保留本机服务配置；具体命令见 [旧云 API 兼容说明](local-studio.md#旧云-api-入口与实验功能)。两项目的发布、真实候选质量与 Skill 对照证据分别记录。接入同一模型之后，两个工具仍保留各自的输入范围和检查方式。
 
 ## 系列迭代顺序
 
@@ -54,6 +58,8 @@ Studio 通过 `scripts/run-minicpm-v47-studio.sh` 显式选择 4.7 API profile�
 各仓库保留自身许可证与第三方声明。Studio 见 [LICENSE](../LICENSE) 和 [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md)；Math Agent 见其 [LICENSE](https://github.com/CacinieP/TeXada-the-Math-Agent/blob/main/LICENSE) 和 [项目说明](https://github.com/CacinieP/TeXada-the-Math-Agent)。发布系列材料时同时核对当前提交和状态日期。
 
 ## English overview
+
+This section retains the 2026-10-13 snapshot. For the current local browser workflow, see the [local guide](local-studio.md) and [AgentSkills guide](agent-skills.md). The poster above is historical concept artwork.
 
 The MiniCPM-driven TeXada series connects two complementary tools: Math Agent handles desktop natural language to formulas, formula OCR, and LaTeX completion; Studio generates formula repair candidates, checks syntax and simple table totals in a single `.tex` file, presents candidate diffs, and provides Tectonic previews. The current handoff is manual: copy a reviewed formula's LaTeX from Math Agent into a Studio document.
 
