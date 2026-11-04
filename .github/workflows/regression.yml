@@ -39,6 +39,7 @@ jobs:
         run: |
           node webui/test_studio.cjs
           node webui/test_latex.cjs
+          node webui/test_templates.cjs
           node skills/latex-cleanup/tests/test_audit_math.cjs
       - name: Python and launcher syntax
         run: |

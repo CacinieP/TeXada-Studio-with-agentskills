@@ -16,7 +16,7 @@
 </header>
 <main id="main">
   <nav id="activityRail" aria-label="工作区导航"><button id="activityDocuments" class="activity-button active" aria-label="文档与大纲" title="文档与大纲" aria-expanded="true" aria-controls="sidebar"></button><button id="activitySearch" class="activity-button" aria-label="查找和搜索" title="查找和搜索"></button><button id="activityOcr" class="activity-button" aria-label="图片与PDF识别" title="图片与PDF识别"></button><button id="activityAgent" class="activity-button" aria-label="Agent与审阅" title="Agent与审阅" aria-expanded="false" aria-controls="rightpanel"></button><div class="spacer"></div><button id="activitySettings" class="activity-button" aria-label="编辑器设置" title="编辑器设置"></button></nav>
-  <aside id="sidebar" aria-label="文档导航"><section class="navigator-section"><div class="navigator-heading"><h2>本地文档</h2><span id="fileCount" class="count"></span><div class="spacer"></div><button class="icon-button" id="btnNew" title="新建文档" aria-label="新建文档"></button><button class="icon-button" id="btnUpload" title="打开LaTeX文档" aria-label="打开LaTeX文档"></button></div><input type="file" id="fileInput" accept=".tex" hidden><label class="file-search"><span data-icon="search"></span><input id="fileFilter" placeholder="筛选文档…" aria-label="筛选文档"></label><div id="files"></div><div class="file-tools"><button id="btnRename" class="subtle-button">重命名</button><button id="btnDelete" class="subtle-button danger">删除</button></div></section><section class="navigator-section outline-section"><div class="navigator-heading"><h2>大纲</h2><span id="outlineCount" class="count"></span><div class="spacer"></div><button id="btnOutline" class="icon-button" title="转到章节" aria-label="转到章节"></button></div><div id="outline"><p class="hint">章节标题将显示在这里。</p></div></section></aside>
+  <aside id="sidebar" aria-label="文档导航"><section class="navigator-section"><div class="navigator-heading"><h2>本地文档</h2><span id="fileCount" class="count"></span><div class="spacer"></div><button class="icon-button" id="btnNew" title="新建文档" aria-label="新建文档"></button><button class="icon-button" id="btnNewFromTemplate" title="从模板新建" aria-label="从模板新建"></button><button class="icon-button" id="btnUpload" title="打开LaTeX文档" aria-label="打开LaTeX文档"></button></div><input type="file" id="fileInput" accept=".tex" hidden><label class="file-search"><span data-icon="search"></span><input id="fileFilter" placeholder="筛选文档…" aria-label="筛选文档"></label><div id="files"></div><div class="file-tools"><button id="btnRename" class="subtle-button">重命名</button><button id="btnDelete" class="subtle-button danger">删除</button></div></section><section class="navigator-section outline-section"><div class="navigator-heading"><h2>大纲</h2><span id="outlineCount" class="count"></span><div class="spacer"></div><button id="btnOutline" class="icon-button" title="转到章节" aria-label="转到章节"></button></div><div id="outline"><p class="hint">章节标题将显示在这里。</p></div></section></aside>
   <div class="vsep" id="sepL" title="拖拽调整文档导航"><button class="sep-btn" id="sepBtnL" aria-label="折叠或展开文档导航"></button></div>
   <section id="center" aria-label="文档工作台">
     <div class="workbar" role="toolbar" aria-label="文档操作"><div id="tabs" role="tablist" aria-label="文档视图"><button id="tab-edit" class="tab active" role="tab" aria-selected="true" aria-controls="duo" tabindex="0" onclick="showCenter('edit')"><span data-icon="file"></span><span id="tabname">未打开文档</span></button><button id="tab-diff" class="tab" role="tab" aria-selected="false" aria-controls="diff" aria-disabled="true" tabindex="-1" onclick="showCenter('diff')">修复对比</button></div><button class="icon-button" id="btnEditorTools" title="编辑与布局工具" aria-label="编辑与布局工具" aria-expanded="false" aria-controls="editorToolsMenu"></button><div class="spacer"></div><span id="pvTabStatus" class="sr-only"></span><button id="btnAgent" class="agent-switch" aria-expanded="false" aria-controls="rightpanel" title="Agent与审阅"><span data-icon="model"></span><span class="button-label">Agent</span><span class="switch-track" aria-hidden="true"><span></span></span></button><span class="toolbar-divider"></span><button class="toolbar-button" id="btnAnalyze">检查</button><button class="toolbar-button primary" id="btnCompile">编译</button><button class="toolbar-button hide" id="btnCancel">停止</button><button class="toolbar-button" id="btnExportMenu" aria-expanded="false" aria-haspopup="menu" aria-controls="exportMenu" title="导出文档">导出</button><button id="btnDiff" class="hide" disabled>查看修复对比</button></div>
@@ -41,8 +41,10 @@
 <dialog id="editorSettingsDialog"><div class="dialog-heading"><h2>编辑器设置</h2><button class="light-button icon-only" id="btnEditorSettingsClose" aria-label="关闭编辑器设置" title="关闭"></button></div><p class="hint">只调整本机编辑体验，修改立即生效。</p><div class="preference-row"><label for="prefFontSize">字体大小</label><div class="row"><button class="light-button icon-only" id="btnZoomOut" aria-label="缩小字号" title="缩小字号">A−</button><input id="prefFontSize" type="number" min="10" max="28" step="1" value="15" aria-label="编辑器字号"><span class="hint">px</span><button class="light-button icon-only" id="btnZoomIn" aria-label="增大字号" title="增大字号">A+</button></div></div><label class="preference-row" for="prefWordWrap"><span>自动换行<small>长行在编辑区域内折行，不改变源文件。</small></span><input id="prefWordWrap" type="checkbox" checked></label><label class="preference-row" for="prefMinimap"><span>代码小地图<small>在右侧展示全文缩略导航。</small></span><input id="prefMinimap" type="checkbox"></label><div class="actions"><button class="light-button" id="btnEditorReset">恢复默认</button><button class="act star" id="btnEditorDone">完成</button></div></dialog>
 <dialog id="commandDialog" class="command-palette" aria-label="命令面板"><div class="command-input-row"><span data-icon="search"></span><input id="commandInput" role="combobox" aria-controls="commandList" aria-expanded="false" aria-autocomplete="list" placeholder="输入命令或操作名称…" autocomplete="off"><kbd>Esc</kbd></div><div id="commandList" role="listbox" aria-label="可用命令"></div><div class="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 执行</span><span>所有操作均在本机执行</span></div></dialog>
 <dialog id="outlineDialog"><div class="dialog-heading"><h2>转到章节</h2><button class="light-button icon-only" id="btnOutlineClose" aria-label="关闭文档大纲" title="关闭"></button></div><div id="outlineDialogList"></div></dialog>
+<dialog id="templateDialog"><div class="dialog-heading"><h2>从模板新建</h2><button id="btnTemplateClose" class="icon-button" aria-label="关闭模板面板" title="关闭模板面板"></button></div><p class="hint">选择内置文档骨架创建本地文档；创建后可自由修改，原有模板不受影响。</p><div id="templateList" class="template-list" role="list" aria-label="内置文档模板"></div></dialog>
 <div id="toast" role="status" aria-live="polite" class="hide"></div>
 <script src="/static/editor/latex.js"></script>
+<script src="/static/editor/templates.js"></script>
 <script src="/static/monaco/0.52.2/min/vs/loader.js"></script>
 <script>
 const P = new URLSearchParams(location.search); const T = P.get("token") || "";
@@ -658,7 +660,7 @@ async function mutateDocument(operation,successMessage) {
     toast(successMessage);
   } finally { lockDocumentMutation(false); }
 }
-const starterDocument = "\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n\\section{新的文档}\n\n在这里开始写作。$E = mc^2$\n\n\\end{document}\n";
+const starterDocument = window.TeXadaTemplates?.defaultContent?.() ?? "\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n\\section{新的文档}\n\n在这里开始写作。$E = mc^2$\n\n\\end{document}\n";
 $("btnNew").onclick = async () => {
   if (busy || !discardAllowed()) return;
   const name = typeof prompt === "function" ? prompt("新文档名称（以 .tex 结尾）", "untitled.tex") : null;
@@ -859,6 +861,7 @@ const TOOL_ICON_PATHS = {
   chevronUp:'<path d="m5 15 7-7 7 7"/>',
   refresh:'<path d="M20 7a9 9 0 1 0 1 8M20 2v5h-5"/>',
   fit:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M8 8h8v8H8z"/>',
+  template:'<path d="M12 3 2 8l10 5 10-5zM2 13l10 5 10-5"/>',
 };
 function toolIcon(name) {
   return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${TOOL_ICON_PATHS[name] || TOOL_ICON_PATHS.file}</svg>`;
@@ -868,7 +871,7 @@ const TOOL_BUTTONS = {
   btnWorkspaceSettings:['settings','','工作区设置'],btnExportMenu:['download','导出','导出文档'],btnEditorTools:['columns','','编辑与布局工具'],btnQuickOutline:['outline','转到章节','转到章节'],btnTogglePreview:['columns','切换PDF预览','切换PDF预览'],btnImportClose:['close','','关闭识别面板'],btnBottomClose:['close','','关闭底部面板'],
 
   sepBtnL:['chevronLeft','','折叠或展开文档导航'],sepBtnR:['chevronRight','','折叠或展开检查面板'],sepBtnE:['chevronRight','','折叠或展开PDF预览'],sepBtnH:['chevronUp','','折叠或展开活动记录'],
-  btnSave:['save','','保存 · ⌘/Ctrl S'], btnNew:['plus','','新建文档'], btnUpload:['folder','','打开 LaTeX 文档'],
+  btnSave:['save','','保存 · ⌘/Ctrl S'], btnNew:['plus','','新建文档'], btnNewFromTemplate:['template','','从模板新建'], btnUpload:['folder','','打开 LaTeX 文档'],
   btnAnalyze:['checkCircle','检查','检查公式语法与表格'], btnFix:['sparkles','修复候选','生成待审阅的修复候选'], btnCompile:['play','编译','编译当前文档'],
   btnExport:['download','导出 LaTeX (.tex)','导出当前 LaTeX 源文件'], btnPdf:['download','导出 PDF','导出当前版本 PDF'],btnCancel:['stop','停止','停止当前任务'],
   btnRename:['edit','重命名','重命名当前文档'],btnDelete:['trash','删除','删除当前本地文档'],btnHistory:['history','运行记录','查看运行记录'],
@@ -877,7 +880,7 @@ const TOOL_BUTTONS = {
   btnOutline:['outline','','转到章节 · ⌘/Ctrl Shift O'],btnEditorSettings:['settings','编辑器设置','编辑器设置'],
   btnAccept:['check','采用候选','采用候选到编辑器'],btnReject:['close','拒绝候选','拒绝候选并保留原文'],btnReport:['file','检查报告','导出检查报告'],
   btnOcr:['scan','识别','识别所选图片或 PDF'],btnRefreshJobs:['refresh','','刷新运行记录'],btnInspectorClose:['close','','关闭检查面板'],
-  btnEditorSettingsClose:['close','','关闭编辑器设置'],btnOutlineClose:['close','','关闭文档大纲'],
+  btnEditorSettingsClose:['close','','关闭编辑器设置'],btnOutlineClose:['close','','关闭文档大纲'],btnTemplateClose:['close','','关闭模板面板'],
   btnZoomOut:['minus','','缩小字号'],btnZoomIn:['plus','','增大字号'],pvPrevious:['chevronLeft','','上一页'],pvNext:['chevronRight','','下一页'],pvZoomFit:['fit','适应','适应整页'],
 };
 function setToolLabel(id, label) {
@@ -1012,6 +1015,7 @@ $('btnFind').onclick=()=>runEditorAction('actions.find');$('btnReplace').onclick
 const EDITOR_COMMANDS=[
   {id:'file.new',label:'新建文档',detail:'创建本地 LaTeX 文档',icon:'plus',keywords:'new create',button:'btnNew'},
   {id:'file.open',label:'打开 LaTeX 文档',detail:'从本机导入 .tex',icon:'folder',keywords:'open import tex',button:'btnUpload'},
+  {id:'file.new-template',label:'从模板新建',detail:'选择内置文档骨架创建本地文档',icon:'template',keywords:'template new create blank beamer exam',button:'btnNewFromTemplate'},
   {id:'file.save',label:'保存文档',detail:'保存当前修改到本机',icon:'save',keywords:'save',shortcut:'⌘/Ctrl S',button:'btnSave'},
   {id:'editor.find',label:'查找',detail:'在当前文档中搜索',icon:'search',keywords:'find search',shortcut:'⌘/Ctrl F',button:'btnFind'},
   {id:'editor.replace',label:'查找和替换',detail:'打开编辑器替换面板',icon:'replace',keywords:'replace find',button:'btnReplace'},
@@ -1117,6 +1121,30 @@ function togglePreviewPane(){
   $('btnTogglePreview').setAttribute('aria-pressed',String(closed));layoutWorkspace();
 }
 function openImportPanel(){closeWorkspaceMenu(false);syncOcrControls();openDialog('importDialog');}
+function templateEntries(){return window.TeXadaTemplates?.list?.()||[];}
+function renderTemplateList(){
+  const entries=templateEntries();
+  $('templateList').innerHTML=entries.length?entries.map(template=>
+    `<button class="template-option" role="listitem" data-template-id="${esc(template.id)}" title="${esc(template.description)}"><span class="template-name">${esc(template.name)}</span><small>${esc(template.description)}</small></button>`
+  ).join(''):'<p class="hint">内置模板未加载；仍可用「新建文档」直接创建空白文档。</p>';
+}
+function openTemplatePanel(){closeWorkspaceMenu(false);renderTemplateList();openDialog('templateDialog');}
+function closeTemplatePanel(){closeDialog('templateDialog');}
+$('btnNewFromTemplate').onclick=openTemplatePanel;
+$('btnTemplateClose').onclick=closeTemplatePanel;
+$('templateDialog').addEventListener('cancel',event=>{event.preventDefault();closeTemplatePanel();});
+async function createFromTemplate(templateId){
+  const template=templateEntries().find(entry=>entry.id===templateId);
+  if(!template||busy||!discardAllowed())return;
+  const name=typeof prompt==="function"?prompt("新文档名称（以 .tex 结尾）","untitled.tex"):null;
+  if(!name)return;
+  closeTemplatePanel();
+  try { await mutateDocument(async()=>{await post("create",{name,content:template.content});return name;},"已从模板创建文档。"); } catch(error) { warn(error); }
+}
+$('templateList').addEventListener('click',event=>{
+  const item=event.target.closest?.('[data-template-id]');if(!item)return;
+  createFromTemplate(item.dataset.templateId);
+});
 function initializeWorkspace(){
   // Old light/card UI widths, collapsed flags and zero log heights do not govern this layout.
   $('sidebar').style.width='';$('rightpanel').style.width='320px';$('bottom').style.height='';$('previewPane').style.width='50%';

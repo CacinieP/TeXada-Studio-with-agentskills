@@ -71,13 +71,23 @@ assert.equal(complete("% \\frac",1,9).length,0,"comments do not open local snipp
 assert.ok(named(complete("\\% \\fr",1,8),"\\frac"),"escaped percent is not a comment");
 assert.equal(complete("\\\\% \\fr",1,9).length,0,"a percent after a literal double slash starts a comment");
 assert.equal(complete("\\doesnotexist",1,14).length,0);
+suggestion = named(complete("\\alp",1,5),"\\alpha");
+assert.equal(suggestion.insertText,"\\alpha$0","symbol snippets stay plain insertions");
+suggestion = named(complete("\\the",1,5),"\\begin{theorem}");
+assert.equal(suggestion.detail,"定理环境 · amsthm");
+assert.ok(named(complete("\\bmat",1,6),"\\begin{bmatrix}"));
+assert.ok(named(complete("\\eq",1,4),"\\eqref"));
 
 // Check every environment from actual snippet bodies, after expanding defaults.
 // This catches a mismatched \end even when the completion registration succeeds.
 function expandDefaults(text) {
   return text.replace(/\$\{\d+:([^{}]*(?:\\[A-Za-z]+[^{}]*)?)\}/g,"$1").replace(/\$\d+/g,"");
 }
-const required = ["section","subsection","equation","align","frac","sqrt","int","sum","table","figure"];
+const required = ["section","subsection","equation","align","frac","sqrt","int","sum","table","figure",
+  "theorem","definition","lemma","remark","proof","titleblock","abstract","toc","usepackage","bmatrix","vmatrix",
+  "eqref","cite","footnote","text","mathrm","mathbb","mathcal","mathbf","hat","bar","vec","overline","underbrace",
+  "binom","prod","left-paren","left-brace","alpha","theta","pi","omega","Gamma","Delta","partial","nabla","infty",
+  "leq","geq","neq","in","forall"];
 for (const name of required) assert.ok(latex.snippets.some(snippet => snippet.name === name),name+" is available locally");
 for (const snippet of latex.snippets) {
   assert.ok(snippet.body.includes("$0"),snippet.name+" has a final cursor stop");
@@ -157,4 +167,4 @@ assert.deepEqual(highlighted.states,["root"]);
 first.dispose(); first.dispose();
 assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["completion","configuration","tokens","register"]);
 assert.notEqual(latex.install(monaco),first,"disposal permits a fresh installation");
-console.log("LaTeX language configuration, tokenizer, 25 local snippets, completion ranges and idempotence passed.");
+console.log(`LaTeX language configuration, tokenizer, ${latex.snippets.length} local snippets, completion ranges and idempotence passed.`);
