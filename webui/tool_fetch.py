@@ -16,6 +16,7 @@ import io
 import os
 import platform as platform_module
 import shutil
+import subprocess
 import sys
 import tarfile
 import urllib.request
@@ -104,6 +105,38 @@ def tectonic_status(bin_dir=None):
     return {"in_path": bool(shutil.which("tectonic")),
             "installed_path": str(target) if target.exists() else None,
             "installed_version": version}
+
+
+def poppler_status():
+    """Poppler(pdfinfo/pdftoppm)是否可用,以及本机是否有 Homebrew。"""
+    return {"in_path": bool(shutil.which("pdftoppm")) and bool(shutil.which("pdfinfo")),
+            "brew": shutil.which("brew")}
+
+
+def install_poppler(run=None):
+    """通过 Homebrew 显式安装 Poppler(无官方单文件分发;GPL-2+,进程调用互不传染)。
+
+    run(argv) 可注入替代真实子进程,便于离线测试。
+    """
+    if sys.platform != "darwin":
+        raise ToolFetchError("此入口仅支持 macOS;Linux 请用系统包管理器安装 poppler-utils。")
+    brew = shutil.which("brew")
+    if not brew:
+        raise ToolFetchError("未找到 Homebrew;请先安装 brew,或手动安装 Poppler 并加入 PATH。")
+    runner = run or subprocess.run
+    try:
+        completed = runner([brew, "install", "poppler"], capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as error:
+        raise ToolFetchError("brew install poppler 超时;请手动重试。") from error
+    except OSError as error:
+        raise ToolFetchError(f"无法运行 brew:{error}") from error
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()[-400:]
+        raise ToolFetchError(f"brew 安装 Poppler 失败:{detail or '未知错误'}")
+    if not poppler_status()["in_path"]:
+        raise ToolFetchError("brew 报告成功但未找到 pdfinfo/pdftoppm;请检查 brew 状态。")
+    return {"ok": True, "tool": "poppler", "method": "homebrew",
+            "version": (completed.stdout or "").strip().splitlines()[-1][:120] if (completed.stdout or "").strip() else ""}
 
 
 def install_tectonic(bin_dir=None, fetch=None, progress=None):

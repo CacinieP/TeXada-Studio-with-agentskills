@@ -17,7 +17,7 @@ This remains a local, single-user development candidate, with no formal release 
 | Task | Workflow |
 | --- | --- |
 | Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
-| Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; review the candidate before creating a document |
+| Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; choose a start page, exclude or split pages, and continue with later batches; review the candidate before creating a document |
 | Edit and inspect | LaTeX highlighting, snippets and symbols, five document templates, find/replace, section outline, command palette, formula syntax checks, and simple totals |
 | Review repairs | Source-preserving deterministic syntax repairs first; model candidates require syntax and mutation-scope checks before explicit review |
 | Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
@@ -42,7 +42,7 @@ python3.13 -m venv .venv
 
 On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
 
-macOS can also generate a desktop window app (own window plus Dock entry, reusing a running session or starting its own backend): `.venv/bin/python desktop/build_app.py` — see the [desktop window guide](desktop/README.md) (Chinese).
+macOS can also generate a desktop app: a **self-contained bundle** (embedding Python, Tectonic, the TeX resource cache and Poppler — no repo, brew or network needed at runtime, via `desktop/build_bundle.py`) or a lightweight shell (`desktop/build_app.py`). See the [desktop guide](desktop/README.md) and the [bundling license audit](desktop/licenses-audit.md) (Chinese).
 
 ## Configuration
 
@@ -73,7 +73,7 @@ Image/PDF transcription requires an endpoint that actually supports `image_url` 
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
-Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. Poppler still needs a system package manager (macOS: `brew install poppler`); for other platforms see the [troubleshooting guide](docs/troubleshooting.md).
+Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. On macOS, the adjacent "Install Poppler" button drives `brew install poppler` explicitly; other platforms should use their system package manager (see the [troubleshooting guide](docs/troubleshooting.md)).
 
 Studio compiles only against cached TeX resources and never downloads packages while processing documents. First-time preparation:
 

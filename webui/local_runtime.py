@@ -212,17 +212,19 @@ def _candidate_text(value):
     return value
 
 
+def _page_body(text):
+    """单页转写的正文:剥离整文档骨架,保留可合并的正文内容。"""
+    match = re.search(r"\\begin\s*\{document\}(.*?)\\end\s*\{document\}", text, re.S)
+    return (match.group(1).strip() if match else text).strip()
+
+
 def _document(candidate_pages):
     """Produce one editable candidate, preserving explicit page boundaries."""
     bodies = []
     for item in candidate_pages:
-        text = item["text"]
         # Whole-document model output can be merged page by page. Preamble
         # declarations are not silently executed as multiple documents.
-        match = re.search(r"\\begin\s*\{document\}(.*?)\\end\s*\{document\}", text, re.S)
-        if match:
-            text = match.group(1).strip()
-        bodies.append(f"% Source page {item['page']} — OCR candidate; review against original\n" + text)
+        bodies.append(f"% Source page {item['page']} — OCR candidate; review against original\n" + _page_body(item["text"]))
     preamble = ("% TeXada Studio local OCR candidate — compare with the original before use.\n"
                 "\\documentclass[UTF8,fontset=fandol]{ctexart}\n"
                 "\\usepackage{amsmath,amssymb,graphicx,booktabs}\n"
@@ -398,7 +400,8 @@ class LocalRuntime:
             for image in images:
                 result = self._transcribe(image, settings)
                 pages.append({"page": image["page"], "width": image["width"], "height": image["height"],
-                              "image_sha256": hashlib.sha256(image["data"]).hexdigest(), **result})
+                              "image_sha256": hashlib.sha256(image["data"]).hexdigest(),
+                              "body": _page_body(result["text"]), **result})
         content = _document(pages)
         safe_stem = re.sub(r"[^\w.-]", "-", Path(name).stem).strip(".-")[:100] or "document"
         record = {"id": import_id, "name": safe_stem + ".tex", "source_name": name,

@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -83,8 +84,40 @@ class LauncherTests(unittest.TestCase):
     def test_launcher_env_marks_orphan_exit_without_dropping_existing_values(self):
         env = desktop_app.launcher_env({"PATH": "/bin", "HOME": "/tmp"})
         self.assertEqual(env["TEXADA_EXIT_WHEN_ORPHANED"], "1")
-        self.assertEqual(env["PATH"], "/bin")
+        self.assertEqual(env["PATH"], desktop_app.prepend_dirs("/bin", desktop_app.tool_bin_dirs()))
         self.assertEqual(env["HOME"], "/tmp")
+
+    def test_prepend_dirs_is_idempotent_and_ordered(self):
+        first = desktop_app.prepend_dirs("/usr/bin", ["/a", "/b"])
+        self.assertEqual(first, os.pathsep.join(["/a", "/b", "/usr/bin"]))
+        self.assertEqual(desktop_app.prepend_dirs(first, ["/a", "/b"]), first, "重复前置不叠加")
+        self.assertEqual(desktop_app.prepend_dirs("", [Path("/x")]), "/x")
+
+    def test_tool_bin_dirs_prepend_bundle_bin_when_bundled(self):
+        import importlib
+        with unittest.mock.patch.dict(os.environ, {"TEXADA_BUNDLE_DIR": "/tmp/fake-bundle"}):
+            refreshed = importlib.reload(desktop_app)
+            dirs = refreshed.tool_bin_dirs()
+        importlib.reload(desktop_app)
+        self.assertEqual(str(dirs[0]), str(Path("/tmp/fake-bundle").resolve() / "bin"))
+        self.assertIn(str(Path.home() / ".texada" / "bin"), [str(item) for item in dirs])
+
+    def test_seed_tex_cache_copies_only_when_target_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "src", Path(tmp) / "dst"
+            source.mkdir()
+            (source / "bundles").mkdir()
+            (source / "bundles" / "x").write_bytes(b"1")
+            copied = []
+
+            def copier(s, t):
+                copied.append((s, t))
+                Path(t).mkdir()
+
+            self.assertTrue(desktop_app.seed_tex_cache(source, target, copier=copier), "目标缺失时种子缓存")
+            self.assertFalse(desktop_app.seed_tex_cache(source, target, copier=copier), "目标已存在不重复种子")
+            self.assertFalse(desktop_app.seed_tex_cache(Path(tmp) / "missing", target, copier=copier))
+            self.assertEqual(copied, [(str(source), str(target))])
 
 
 class BuildTests(unittest.TestCase):

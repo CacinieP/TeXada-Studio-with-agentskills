@@ -1105,16 +1105,23 @@ def studio_settings(token: str = Query(""), body: dict = None):
 
 
 @app.post("/api/studio/tools/install")
-def studio_tools_install(token: str = Query("")):
+def studio_tools_install(token: str = Query(""), body: dict = None):
     _guard(token)
     # 仅安装用户显式请求的工具;启动与文档处理过程不做任何下载。
+    tool = (body or {}).get("tool", "tectonic")
     try:
-        result = tool_fetch.install_tectonic()
+        if tool == "poppler":
+            result = tool_fetch.install_poppler()
+        elif tool == "tectonic":
+            result = tool_fetch.install_tectonic()
+        else:
+            raise HTTPException(status_code=400, detail="未知工具;支持 tectonic 或 poppler。")
     except tool_fetch.ToolFetchError as error:
         raise HTTPException(status_code=400, detail=str(error))
     except OSError as error:
         raise HTTPException(status_code=502, detail=f"下载失败：{error}")
-    os.environ["TECTONIC"] = result["path"]
+    if tool == "tectonic":
+        os.environ["TECTONIC"] = result["path"]
     return {**result, "tools": {"tectonic": bool(shutil.which(_tectonic_command())),
                                 "pdftoppm": bool(shutil.which("pdftoppm")),
                                 "pdfinfo": bool(shutil.which("pdfinfo"))}}

@@ -17,7 +17,7 @@
 | 工作 | 操作 |
 | --- | --- |
 | 管理文档 | 导入或新建 `.tex`，保存、重命名、删除；已保存的修改在刷新后保留 |
-| 识别资料 | 导入 PNG、JPEG、WebP 或 PDF，每次最多识别 5 页；审阅 LaTeX 候选后新建文档 |
+| 识别资料 | 导入 PNG、JPEG、WebP 或 PDF，每次最多识别 5 页；支持起始页选择、按页剔除/拆分与续批识别；审阅 LaTeX 候选后新建文档 |
 | 编辑与检查 | LaTeX 高亮、常用片段与符号补全、五类文档模板、查找替换、文档大纲、命令面板；检查公式语法及简单合计 |
 | 修复与审阅 | 先做保留原文的确定性语法修复；模型候选经过语法和修改范围校验，查看 diff 后明确采用或拒绝 |
 | 预览与交付 | 编译当前文档，逐页预览并导出 PDF；也可导出 `.tex` 和质检报告 |
@@ -47,7 +47,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 启动器打开本机浏览器，文档和模型处理都在本地。编辑器资源已随源码提供，无需前端构建。首次安装依赖、模型与 TeX 资源需要联网准备，完整步骤见[首次准备与离线使用](docs/local-studio.md#首次准备与离线使用)。
 
-macOS 还可以生成桌面窗口应用（独立窗口 + Dock 入口，复用已有会话或自启后端）：`.venv/bin/python desktop/build_app.py`，详见[桌面窗口说明](desktop/README.md)。
+macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic、TeX 资源与 Poppler，产物不依赖仓库/brew/网络，`desktop/build_bundle.py`）或轻量薄壳（`desktop/build_app.py`），详见[桌面端说明](desktop/README.md)与[捆绑许可审计](desktop/licenses-audit.md)。
 
 ## 配置
 
@@ -78,7 +78,7 @@ macOS 还可以生成桌面窗口应用（独立窗口 + Dock 入口，复用已
 | PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
 | PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
-Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。Poppler 仍需系统包管理器（macOS：`brew install poppler`）；其他平台见[排错说明](docs/troubleshooting.md)。
+Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。macOS 旁的「安装 Poppler」按钮显式走 brew；其他平台用系统包管理器，见[排错说明](docs/troubleshooting.md)。
 
 Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中悄悄下载。首次准备：
 

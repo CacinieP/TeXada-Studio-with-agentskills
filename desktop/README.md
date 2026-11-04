@@ -1,30 +1,52 @@
-# TeXada Studio 桌面窗口(macOS,可选)
+# TeXada Studio 桌面端(macOS)
 
-在独立窗口(WKWebView)中打开本地 Studio,提供 Dock 图标与正常的开关机语义;
-复用当前仓库检出的 `.venv` 与启动器,不打包 Python、模型或 TeX 资源。
+两种形态,按需选择:
 
-## 生成与使用
+| 形态 | 命令 | 依赖 | 适用 |
+| --- | --- | --- | --- |
+| **自包含应用包**(推荐) | `.venv/bin/python desktop/build_bundle.py` | 构建机需一次准备(见下);**产物零依赖** | 日常使用;可拖到 ~/Applications,不依赖仓库/venv/brew/网络 |
+| 薄壳(仓库模式) | `.venv/bin/python desktop/build_app.py` | 始终需要仓库检出 + `.venv` | 开发调试;跟仓库代码同步 |
+
+两者都提供独立窗口(WKWebView)+ Dock 图标,复用已有会话或自启后端,窗口退出回收资源。
+
+## 自包含应用包
+
+### 构建机一次性准备
 
 ```bash
-.venv/bin/pip install -r desktop/requirements.txt   # 仅需一次;pywebview
-.venv/bin/python desktop/build_app.py               # 生成 dist/TeXada Studio.app
-open "dist/TeXada Studio.app"                       # 或在访达中双击
+.venv/bin/pip install py2app pywebview            # desktop/requirements.txt + py2app
+.venv/bin/python scripts/install_local_tools.py    # Tectonic → ~/.texada/bin(SHA256 校验)
+brew install poppler
+.venv/bin/python scripts/prepare-local-tex.py --download-resources   # TeX 资源缓存(~68 MiB)
 ```
 
-把 `TeXada Studio.app` 拖入 `~/Applications` 即可脱离 dist 目录使用。
+### 构建与使用
 
-## 行为
+```bash
+.venv/bin/python desktop/build_bundle.py           # 产物 dist/TeXada Studio.app(约 280 MiB)
+```
 
-- **复用优先**:工作区已有存活的 Studio 会话(终端或先前窗口启动的)时,新窗口直接连它,不另起服务、退出也不影响它。
-- **自持模式**:没有可用会话时,窗口进程拉起 `scripts/run-local-studio.py`(模型、端口与数据目录参数照常透传),关闭窗口即回收**自己启动**的后端。
-- **强杀安全**:窗口进程意外终止(SIGKILL 等)时,它启动的后端会在数秒内检测到孤儿状态并优雅退出,不留残留端口或会话记录。
-- 凭据仍存于用户数据目录的 `session.json`;窗口只加载回环私密入口,不引入新的网络路径。
+包内嵌:Python 运行时与全部服务端依赖、Tectonic、TeX 资源缓存、Poppler(pdfinfo/pdftoppm 及其动态库,重签名后自包含)、webui/harness/skills 源码与示例。**许可合规**见 [licenses-audit.md](licenses-audit.md)(副本随包分发)。
 
-## 已知限制
+行为:
+- 首次运行把包内 TeX 缓存种子到用户缓存目录;编译/预览全离线。
+- 后端以进程内线程运行:窗口退出(Cmd+Q/关窗)即整进程退出,无孤儿;被强杀时残留会话由 pid 存活检查自愈。
+- 模型服务仍是可选的外部回环端点(如 Ollama),在设置面板配置;不配置也可编辑、检查、编译。
 
-- 应用包是**本地生成的薄壳**:可执行文件内嵌生成时的仓库绝对路径。移动仓库或重建 `.venv` 后,重新运行 `desktop/build_app.py`。
-- 运行期间 Dock/菜单栏进程名显示为 "Python"(Homebrew Python 的 GUI 载入机制所致);窗口标题与功能不受影响。若需要完整应用身份,可后续引入 py2app 打包,本目录刻意不引入该构建链。
-- 仅支持 macOS;Windows/Linux 请继续使用浏览器入口(`scripts/start-local-studio.command` 或 `run-local-studio.py`)。
+### 已知限制
+
+- 构建产物绑定构建时的代码版本;更新仓库后重新构建。
+- 未做公证(notarization):分发给他人时 Gatekeeper 需右键打开;自用无碍。
+- 仅 macOS;Windows/Linux 用浏览器入口。
+
+## 薄壳(仓库模式)
+
+```bash
+.venv/bin/pip install -r desktop/requirements.txt
+.venv/bin/python desktop/build_app.py
+```
+
+细节见仓库历史文档;`TEXADA_EXIT_WHEN_ORPHANED=1` 的孤儿回收机制只在仓库模式(子进程启动器)生效。
 
 ## 测试
 
@@ -32,4 +54,4 @@ open "dist/TeXada Studio.app"                       # 或在访达中双击
 .venv/bin/python -m unittest discover -s desktop -p 'test_*.py'
 ```
 
-覆盖会话读取(回环/凭据校验)、存活判定、启动器命令行与环境组装、应用包结构生成;不启动 GUI、不联网。
+覆盖会话读取(回环/凭据校验)、存活判定、PATH 前置、TeX 缓存种子、命令行与环境组装、两种包结构生成;不启动 GUI、不联网。

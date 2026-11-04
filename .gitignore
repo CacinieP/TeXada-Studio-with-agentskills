@@ -24,3 +24,7 @@ dist/
 
 # Local evaluation traces and scratch evidence may contain document text.
 /work/
+
+# py2app 构建中间产物
+desktop/build/
+desktop/dist/
