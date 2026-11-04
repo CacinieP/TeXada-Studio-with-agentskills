@@ -37,7 +37,9 @@ jobs:
           .venv/bin/pip install -r webui/requirements.txt
           .venv/bin/pip install -r desktop/requirements.txt py2app
       - name: Install Tectonic (pinned official release, SHA256 verified)
-        run: .venv/bin/python scripts/install_local_tools.py
+        run: |
+          .venv/bin/python scripts/install_local_tools.py
+          echo "$HOME/.texada/bin" >> "$GITHUB_PATH"
       - name: Install Poppler
         run: brew install poppler
       - name: Prepare TeX resource cache
