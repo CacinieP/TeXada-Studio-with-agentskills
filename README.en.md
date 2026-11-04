@@ -18,7 +18,7 @@ This remains a local, single-user development candidate, with no formal release 
 | --- | --- |
 | Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
 | Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; review the candidate before creating a document |
-| Edit and inspect | LaTeX highlighting and snippets, find/replace, section outline, command palette, formula syntax checks, and simple totals |
+| Edit and inspect | LaTeX highlighting, snippets and symbols, five document templates, find/replace, section outline, command palette, formula syntax checks, and simple totals |
 | Review repairs | Source-preserving deterministic syntax repairs first; model candidates require syntax and mutation-scope checks before explicit review |
 | Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
 | Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
@@ -29,7 +29,7 @@ Formula repair follows Math Agent's source-preservation approach: close unambigu
 
 The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
 
-Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets need no model call; `Ctrl+Space` can request suggestions. The status bar shows cursor, selection, and word counts.
+Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets — common commands, theorem-class environments, Greek letters and math symbols — need no model call; `Ctrl+Space` can request suggestions. Sectioning commands, preamble/definition directives (including `\input`/`\include` file splits), and cross-reference keys each get their own color, so the document's structural modules stand out. The editor folds documents by TeX structure: environments pair with their `\end`, and sections close at the next heading. The sidebar's "new from template" action creates documents from five offline skeletons: blank article, lecture notes, exam paper, Beamer, and English article. The status bar shows cursor, selection, and word counts.
 
 ## Start
 

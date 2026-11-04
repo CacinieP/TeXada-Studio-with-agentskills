@@ -8,6 +8,7 @@ const hash = text => createHash('sha256').update(text, 'utf8').digest('hex');
 // Exercise the page's own handlers offline; no browser or remote API calls.
 const html = fs.readFileSync(process.argv[2] || path.join(__dirname, 'studio.html'), 'utf8');
 const stylesheet = fs.readFileSync(path.join(__dirname, 'static', 'editor', 'studio.css'), 'utf8');
+const templates = require('./static/editor/templates.js');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 const elements = new Map();
 function eventTarget() {
@@ -171,7 +172,7 @@ const legacyPreferences=new Map([
 const context = vm.createContext({
   URLSearchParams, URL, Blob, TextEncoder, crypto:webcrypto, require: amdRequire, monaco,
   location: { search: '' },
-  window: { innerWidth:1440,innerHeight:900,addEventListener:windowEvents.addEventListener,
+  window: { innerWidth:1440,innerHeight:900,addEventListener:windowEvents.addEventListener,TeXadaTemplates:templates,
     matchMedia(query){const max=Number(query.match(/max-width:\s*(\d+)px/)?.[1]||Infinity);return {matches:this.innerWidth<=max,media:query,addEventListener(){},removeEventListener(){}};} },
   document: {
     getElementById: get,
@@ -439,6 +440,23 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.testEditor.setValue('NEW DURING CREATE');finishCreate();await creating;
   assert.equal(context.testEditor.getValue(),'NEW DURING CREATE');assert.equal(run('curName'),'rename-a.tex');
   assert.equal(run('isDirty()'),true);assert.equal(run('busy'),false);
+
+  // The template picker lists the shipped skeletons and creates from them verbatim.
+  context.testEditor.setValue('template base');run("savedContent='template base';documentOrigin='local';");
+  get('btnNewFromTemplate').onclick();
+  assert.equal(get('templateDialog').open,true,'sidebar button opens the template picker');
+  assert.match(get('templateList').innerHTML,/data-template-id="exam-paper"/,'picker lists shipped templates');
+  context.prompt=()=> 'from-template.tex';
+  let templateBody=null;
+  context.createWire=(url,requestOptions)=>{templateBody=JSON.parse(requestOptions.body);return Promise.resolve({name:'from-template.tex'});};
+  run('j=createWire');
+  await run('createFromTemplate("exam-paper")');
+  assert.equal(templateBody && templateBody.name,'from-template.tex','template creation posts the chosen file name');
+  assert.equal(templateBody && templateBody.content,templates.list().find(template=>template.id==='exam-paper').content,'create posts the shipped template verbatim');
+  assert.equal(get('templateDialog').open,false,'picker closes after creation');
+  assert.equal(run('busy'),false);
+  get('btnTemplateClose').onclick();
+  assert.equal(get('templateDialog').open,false);
 
   context.testEditor.setValue('delete original');run("savedContent='delete original';documentOrigin='local';");context.confirm=()=>true;
   let finishDelete,notifyDelete;const sawDelete=new Promise(resolve=>{notifyDelete=resolve;});

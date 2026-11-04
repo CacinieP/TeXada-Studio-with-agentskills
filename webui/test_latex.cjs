@@ -14,14 +14,15 @@ function fakeMonaco(registered = []) {
     }}; },
     setMonarchTokensProvider(id,value) { calls.push(["tokens",id]); definitions.set("tokens",value); return disposable("tokens"); },
     setLanguageConfiguration(id,value) { calls.push(["configuration",id]); definitions.set("configuration",value); return disposable("configuration"); },
-    registerCompletionItemProvider(id,value) { calls.push(["completion",id]); definitions.set("completion",value); return disposable("completion"); }
+    registerCompletionItemProvider(id,value) { calls.push(["completion",id]); definitions.set("completion",value); return disposable("completion"); },
+    registerFoldingRangeProvider(id,value) { calls.push(["folding",id]); definitions.set("folding",value); return disposable("folding"); }
   }};
 }
 
 const monaco = fakeMonaco();
 const first = latex.install(monaco);
 assert.equal(latex.install(monaco),first,"installation is idempotent per editor instance");
-assert.deepEqual(monaco.calls.map(call => call[0]),["register","tokens","configuration","completion"]);
+assert.deepEqual(monaco.calls.map(call => call[0]),["register","tokens","configuration","completion","folding"]);
 assert.equal(monaco.calls[0][1].id,"latex");
 assert.ok(monaco.calls[0][1].extensions.includes(".tex"));
 assert.equal(first.snippetCount,latex.snippets.length);
@@ -43,7 +44,7 @@ assert.equal(config.folding.markers.start.test("% region formula"),true);
 assert.equal(config.folding.markers.end.test("% endregion"),true);
 assert.deepEqual("\\operatorname x_1 12.5".match(new RegExp(config.wordPattern,"g")),["\\operatorname","x_1","12.5"]);
 
-function model(text) { const lines=text.split("\n"); return {getLineContent:number => lines[number-1]}; }
+function model(text) { const lines=text.split("\n"); return {getLineContent:number => lines[number-1], getLineCount:() => lines.length}; }
 const provider = monaco.definitions.get("completion");
 function complete(text,lineNumber,column) {
   return provider.provideCompletionItems(model(text),{lineNumber,column}).suggestions;
@@ -72,12 +73,36 @@ assert.ok(named(complete("\\% \\fr",1,8),"\\frac"),"escaped percent is not a com
 assert.equal(complete("\\\\% \\fr",1,9).length,0,"a percent after a literal double slash starts a comment");
 assert.equal(complete("\\doesnotexist",1,14).length,0);
 
+// Folding pairs environments and closes sections at the next heading.
+const folding = monaco.definitions.get("folding");
+const folds = text => folding.provideFoldingRanges(model(text),{}).map(range => `${range.start}-${range.end}`);
+assert.deepEqual(folds("\\section{A}\ntext\n\\subsection{B}\n\\begin{align}\nx\n\\end{align}\n\\section{C}"),["4-6","3-6","1-6"],
+  "environments fold to their \\end and sections to the next heading");
+assert.deepEqual(folds("\\begin{verbatim}\n\\section{fake}\n\\end{verbatim}"),["1-3"],
+  "verbatim content does not open sections");
+assert.deepEqual(folds("% \\begin{itemize}\n\\begin{itemize}\na\n\\end{itemize}"),["2-4"],
+  "commented structure does not fold");
+assert.deepEqual(folds("\\begin{itemize}\nx"),["1-2"],"an unterminated environment folds to the end of the document");
+assert.deepEqual(folds("\\begin{a}\n\\begin{b}\n\\end{a}"),["1-3"],"a mismatched inner environment is discarded, not folded");
+assert.deepEqual(folds("\\section*{A}\ntext\n\\section{B}"),["1-2"],"starred and unstarred sections share a level");
+assert.deepEqual(folds("plain text only"),[]);
+suggestion = named(complete("\\alp",1,5),"\\alpha");
+assert.equal(suggestion.insertText,"\\alpha$0","symbol snippets stay plain insertions");
+suggestion = named(complete("\\the",1,5),"\\begin{theorem}");
+assert.equal(suggestion.detail,"定理环境 · amsthm");
+assert.ok(named(complete("\\bmat",1,6),"\\begin{bmatrix}"));
+assert.ok(named(complete("\\eq",1,4),"\\eqref"));
+
 // Check every environment from actual snippet bodies, after expanding defaults.
 // This catches a mismatched \end even when the completion registration succeeds.
 function expandDefaults(text) {
   return text.replace(/\$\{\d+:([^{}]*(?:\\[A-Za-z]+[^{}]*)?)\}/g,"$1").replace(/\$\d+/g,"");
 }
-const required = ["section","subsection","equation","align","frac","sqrt","int","sum","table","figure"];
+const required = ["section","subsection","equation","align","frac","sqrt","int","sum","table","figure",
+  "theorem","definition","lemma","remark","proof","titleblock","abstract","toc","usepackage","bmatrix","vmatrix",
+  "eqref","cite","footnote","text","mathrm","mathbb","mathcal","mathbf","hat","bar","vec","overline","underbrace",
+  "binom","prod","left-paren","left-brace","alpha","theta","pi","omega","Gamma","Delta","partial","nabla","infty",
+  "leq","geq","neq","in","forall"];
 for (const name of required) assert.ok(latex.snippets.some(snippet => snippet.name === name),name+" is available locally");
 for (const snippet of latex.snippets) {
   assert.ok(snippet.body.includes("$0"),snippet.name+" has a final cursor stop");
@@ -132,7 +157,7 @@ function tokenize(text) {
   return {tokens,states};
 }
 let highlighted=tokenize("\\section{Title} % comment\n$x^2 + \\frac{1}{2}$");
-assert.ok(highlighted.tokens.some(token => token.value === "\\section" && token.token === "keyword"));
+assert.ok(highlighted.tokens.some(token => token.value === "\\section" && token.token === "keyword.section"));
 assert.ok(highlighted.tokens.some(token => token.value === "% comment" && token.token === "comment"));
 assert.ok(highlighted.tokens.some(token => token.value === "2" && token.token === "number"));
 assert.ok(highlighted.tokens.some(token => token.value === "\\frac" && token.token === "keyword"));
@@ -154,7 +179,25 @@ highlighted=tokenize("\\begin{comment}\n$x$\n\\end{comment}\n$y$");
 assert.equal(highlighted.tokens.filter(token => token.token === "delimiter.math").length,2);
 assert.deepEqual(highlighted.states,["root"]);
 
+// TeX's modular building blocks keep their own token classes.
+highlighted=tokenize("\\documentclass{ctexart}\n\\usepackage{amsmath}\n\\section*{摘要}\n\\label{eq:main} 见 \\eqref{eq:main} 与 \\cite{knuth}。\n\\input{ch1.tex}\n$\\frac{1}{2}$");
+assert.ok(highlighted.tokens.some(token => token.value === "\\documentclass" && token.token === "keyword.directive"),"documentclass is a directive");
+assert.ok(highlighted.tokens.some(token => token.value === "\\usepackage" && token.token === "keyword.directive"),"usepackage is a directive");
+assert.ok(highlighted.tokens.some(token => token.value === "\\input" && token.token === "keyword.directive"),"file-splitting inputs are directives");
+assert.ok(highlighted.tokens.some(token => token.value === "\\section*" && token.token === "keyword.section"),"starred section variants stay sections");
+assert.ok(!highlighted.tokens.some(token => token.value.includes("摘要")),"section titles remain plain text");
+assert.ok(highlighted.tokens.some(token => token.value === "\\label" && token.token === "keyword.reference"),"label commands are references");
+assert.ok(highlighted.tokens.some(token => token.value === "eq:main" && token.token === "string.reference"),"label keys highlight with their command");
+assert.ok(highlighted.tokens.some(token => token.value === "\\eqref" && token.token === "keyword.reference"),"eqref is a reference");
+assert.ok(highlighted.tokens.some(token => token.value === "knuth" && token.token === "string.reference"),"citation keys highlight with their command");
+assert.ok(highlighted.tokens.some(token => token.value === "\\frac" && token.token === "keyword"),"ordinary commands keep the plain keyword class");
+assert.deepEqual(highlighted.states,["root"]);
+highlighted=tokenize("\\definecolor{accent}{rgb}{1,0,0} \\subsubsection{小节} \\citep{lamport}");
+assert.ok(highlighted.tokens.some(token => token.value === "\\definecolor" && token.token === "keyword"),"longer commands are not split into directives");
+assert.ok(highlighted.tokens.some(token => token.value === "\\subsubsection" && token.token === "keyword.section"));
+assert.ok(highlighted.tokens.some(token => token.value === "\\citep" && token.token === "keyword.reference"),"longest reference alias wins over its prefix");
+
 first.dispose(); first.dispose();
-assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["completion","configuration","tokens","register"]);
+assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["folding","completion","configuration","tokens","register"]);
 assert.notEqual(latex.install(monaco),first,"disposal permits a fresh installation");
-console.log("LaTeX language configuration, tokenizer, 25 local snippets, completion ranges and idempotence passed.");
+console.log(`LaTeX language configuration, tokenizer, ${latex.snippets.length} local snippets, completion ranges and idempotence passed.`);

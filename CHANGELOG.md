@@ -4,6 +4,10 @@
 
 ### Added
 
+- Expand the local Monaco snippet pack from 25 to 82 entries, adding amsthm theorem-class environments, matrices and determinants, cross-references, accents, adaptive delimiters and common Greek letters and math symbols.
+- Add five offline document templates (blank article, lecture notes, exam paper, Beamer, English article) with a picker reachable from the sidebar and the command palette; blank new documents now come from the same template module.
+- Highlight TeX's modular building blocks with dedicated token classes: sectioning commands (bold blue), preamble and definition directives including `\input`/`\include` file splits (violet), and cross-references with their keys (`\label`/`\ref`/`\cite`, teal) join the existing keyword/comment/math coloring in the shipped theme.
+- Fold documents by TeX structure: a local folding provider pairs `\begin`/`\end` environments and closes sections at the next heading of the same or higher level, ignoring commented-out structure and verbatim content; unterminated environments fold to the end of the document.
 - Refresh the bilingual repository entry with a current synthetic-workspace screenshot, local deployment/troubleshooting guides and source distribution checksums with per-file manifests.
 - Add a Studio operation Skill and current AgentSkills guide; align formula, table, OCR-input and reporting instructions with the local Web UI and its review/version boundaries.
 - Fresh local verification records for 2026-10-15, with installation and model-switch troubleshooting.
