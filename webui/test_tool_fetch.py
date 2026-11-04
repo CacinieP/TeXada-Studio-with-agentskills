@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import tool_fetch
@@ -124,6 +125,50 @@ class InstallTectonicTests(unittest.TestCase):
         status = tool_fetch.tectonic_status(self.bin_dir)
         self.assertEqual(status["installed_path"], str(binary))
         self.assertEqual(status["installed_version"], "0.17.0")
+
+
+class PopplerTests(unittest.TestCase):
+    def test_status_reports_availability_and_brew(self):
+        status = tool_fetch.poppler_status()
+        self.assertIn("in_path", status)
+        self.assertIn("brew", status)
+
+    def test_install_runs_brew_once_and_reports_success(self):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            return SimpleNamespace(returncode=0, stdout="==> Installed poppler\n", stderr="")
+
+        def which(name):
+            return f"/opt/homebrew/bin/{name}" if name in {"brew", "pdftoppm", "pdfinfo"} else None
+
+        with mock.patch.object(tool_fetch.sys, "platform", "darwin"), \
+             mock.patch.object(tool_fetch.shutil, "which", side_effect=which):
+            result = tool_fetch.install_poppler(run=run)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["method"], "homebrew")
+        self.assertEqual(calls, [["/opt/homebrew/bin/brew", "install", "poppler"]])
+
+    def test_install_requires_brew(self):
+        with mock.patch.object(tool_fetch.sys, "platform", "darwin"), \
+             mock.patch.object(tool_fetch.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "Homebrew"):
+                tool_fetch.install_poppler(run=lambda argv, **kwargs: None)
+
+    def test_install_maps_brew_failure(self):
+        def run(argv, **kwargs):
+            return SimpleNamespace(returncode=1, stdout="", stderr="Error: offline")
+
+        with mock.patch.object(tool_fetch.sys, "platform", "darwin"), \
+             mock.patch.object(tool_fetch.shutil, "which", side_effect=lambda name: "/opt/homebrew/bin/" + name):
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "失败"):
+                tool_fetch.install_poppler(run=run)
+
+    def test_install_rejects_non_darwin(self):
+        with mock.patch.object(tool_fetch.sys, "platform", "linux"):
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "macOS"):
+                tool_fetch.install_poppler(run=lambda argv, **kwargs: None)
 
 
 if __name__ == "__main__":

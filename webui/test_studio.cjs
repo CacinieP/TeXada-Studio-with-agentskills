@@ -598,9 +598,49 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   ocrRequests[6].resolve(recognized('retry.tex','retry candidate'));await ocrRetried;
   assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(get('ocrName').value,'retry.tex');
   assert.equal(get('ocrDialog').open,true);assert.equal(run('busy'),false);
+
+  // PDF page splitting: chosen ranges reach the request and the review dialog splits per page.
+  run('cancelOcrReview();openImportPanel();chooseOcrFile(ocrA);');
+  get('ocrStart').value='3';get('ocrPages').value='2';
+  const ocrSplitPending=get('btnOcr').onclick();await flushOcr();
+  assert.equal(ocrRequests.at(-1).body.page_start,3,'the chosen start page reaches the import request');
+  assert.equal(ocrRequests.at(-1).body.max_pages,2);
+  ocrRequests.at(-1).resolve({name:'split-doc.tex',content:'merged candidate',requires_review:true,
+    pages:[{page:3,body:'page three body'},{page:4,body:'page four body'}],source_pages:6,has_more_pages:true});
+  await ocrSplitPending;await flushOcr();
+  assert.equal(get('ocrDialog').open,true);
+  assert.equal(get('ocrPageSplitField').hidden,false,'multi-page results expose the split controls');
+  assert.equal(get('btnOcrSplit').hidden,false);
+  assert.equal(get('btnOcrMore').hidden,false);
+  assert.match(get('btnOcrMore').textContent,/第 5 页起/,'continuation proposes the next batch');
+  assert.match(get('ocrPageList').innerHTML,/data-ocr-page="3"/,'page checkboxes are rendered');
+  assert.equal(run('JSON.stringify(checkedOcrPageNumbers())'),'[3,4]');
+  const togglePage=(page,checked)=>get('ocrPageList').listeners.get('change')({target:{checked,dataset:{ocrPage:String(page)}}});
+  togglePage(4,false);
+  assert.match(get('ocrCandidate').value,/page three body/);
+  assert.doesNotMatch(get('ocrCandidate').value,/page four body/,'unchecked pages drop out of the merged candidate');
+  assert.equal(get('ocrCandidate').value.split('\\clearpage').length-1,0,'a single remaining page has no page break');
+  get('ocrCandidate').value='my manual edits';get('ocrCandidate').listeners.get('input')({});
+  togglePage(3,false);
+  assert.equal(get('ocrCandidate').value,'my manual edits','manual edits are never clobbered by page toggles');
+  togglePage(3,true);togglePage(4,true);
+  context.testEditor.setValue('split base');run("savedContent='split base';documentOrigin='local';busy=false;");
+  let splitCreates=[];
+  context.createWire=(url,options)=>{const body=JSON.parse(options.body);splitCreates.push(body);return Promise.resolve({name:body.name});};
+  run('j=createWire');
+  get('ocrName').value='split-doc.tex';
+  await get('btnOcrSplit').onclick();
+  assert.equal(splitCreates.length,2,'each checked page becomes its own document');
+  assert.deepEqual(splitCreates.map(body=>body.name),['split-doc-第3页.tex','split-doc-第4页.tex']);
+  assert.match(splitCreates[0].content,/page three body/);
+  assert.match(splitCreates[1].content,/page four body/);
+  assert.match(splitCreates[0].content,/\\begin\{document\}/,'split documents remain compilable');
+  assert.match(splitCreates[0].content,/\\end\{document\}/);
+  run('ocrReviewActive=true;openDialog("ocrDialog");');
+  get('ocrName').value='retry.tex';get('ocrCandidate').value='retry candidate';
   run('savingDocument=true');await get('btnOcrCreate').onclick();
   assert.equal(get('ocrDialog').open,true,'waiting for source save cannot close an uncreated review');
-  assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(ocrRequests.length,7);
+  assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(ocrRequests.length,8);
   run('savingDocument=false');
   get('btnOcrCancel').onclick();get('btnImportClose').onclick();
 
@@ -613,7 +653,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   get('btnImportClose').onclick();run('openImportPanel();chooseOcrFile(ocrB)');
   await get('btnOcr').onclick();assert.equal(get('btnOcr').disabled,true);
   finishOcrRead();await ocrReading;
-  assert.equal(ocrRequests.length,7,'cancelled file reading cannot send an obsolete model request');
+  assert.equal(ocrRequests.length,8,'cancelled file reading cannot send an obsolete model request');
   assert.equal(get('ocrCandidate').value,'retry candidate');assert.equal(get('ocrDialog').open,false);
   assert.equal(get('btnOcr').disabled,false);get('btnImportClose').onclick();
 

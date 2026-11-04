@@ -77,6 +77,16 @@ class AppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("无适配平台", response.text)
 
+    def test_tools_install_poppler_selects_installer_and_unknown_tool_fails(self):
+        with patch.object(studio.tool_fetch, "install_poppler",
+                          return_value={"ok": True, "tool": "poppler", "method": "homebrew"}) as poppler_install:
+            response = self.client.post("/api/studio/tools/install", params=self.auth, json={"tool": "poppler"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["ok"])
+        self.assertEqual(poppler_install.call_count, 1)
+        unknown = self.client.post("/api/studio/tools/install", params=self.auth, json={"tool": "unknown"})
+        self.assertEqual(unknown.status_code, 400)
+
     def test_default_model_is_minicpm_and_explicit_environment_override_still_works(self):
         for extra, model, base in (({}, "MiniCPM-V-4.7-1B", "http://127.0.0.1:11434"),
                                    ({"VLM_MODEL": "other-model", "VLM_BASE_URL": "http://localhost:9000/v1"},
