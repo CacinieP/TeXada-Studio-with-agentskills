@@ -176,6 +176,10 @@
         [/[^\\%$#&_^~{}\[\]()0-9]+/, ""]
       ],
       commands:[
+        [/\\(?:subparagraph|subsubsection|subsection|section|paragraph|part|chapter)\*?(?![A-Za-z@])/, "keyword.section"],
+        [/\\(?:documentclass|usepackage|RequirePackage|newtheorem|newcommand|renewcommand|providecommand|DeclareMathOperator|DeclarePairedDelimiter|def|let|input|include|includeonly|bibliography|addbibresource)(?![A-Za-z@])/, "keyword.directive"],
+        [/(\\(?:label|pageref|eqref|autoref|cref|Cref|nocite|citep|citet|cite|ref)\*?)(\s*\{)([^}]*)(\})/, ["keyword.reference", "delimiter.bracket", "string.reference", "delimiter.bracket"]],
+        [/\\(?:label|pageref|eqref|autoref|cref|Cref|nocite|citep|citet|cite|ref)\*?(?![A-Za-z@])/, "keyword.reference"],
         [/(\\(?:begin|end))(\s*\{)([^}]*)(\})/, ["keyword", "delimiter.bracket", "tag", "delimiter.bracket"]],
         [/\\[A-Za-z@]+\*?/, "keyword"],
         [/\\[^A-Za-z@\s]/, "keyword"],

@@ -142,7 +142,7 @@ function tokenize(text) {
   return {tokens,states};
 }
 let highlighted=tokenize("\\section{Title} % comment\n$x^2 + \\frac{1}{2}$");
-assert.ok(highlighted.tokens.some(token => token.value === "\\section" && token.token === "keyword"));
+assert.ok(highlighted.tokens.some(token => token.value === "\\section" && token.token === "keyword.section"));
 assert.ok(highlighted.tokens.some(token => token.value === "% comment" && token.token === "comment"));
 assert.ok(highlighted.tokens.some(token => token.value === "2" && token.token === "number"));
 assert.ok(highlighted.tokens.some(token => token.value === "\\frac" && token.token === "keyword"));
@@ -163,6 +163,24 @@ assert.deepEqual(highlighted.states,["root"]);
 highlighted=tokenize("\\begin{comment}\n$x$\n\\end{comment}\n$y$");
 assert.equal(highlighted.tokens.filter(token => token.token === "delimiter.math").length,2);
 assert.deepEqual(highlighted.states,["root"]);
+
+// TeX's modular building blocks keep their own token classes.
+highlighted=tokenize("\\documentclass{ctexart}\n\\usepackage{amsmath}\n\\section*{摘要}\n\\label{eq:main} 见 \\eqref{eq:main} 与 \\cite{knuth}。\n\\input{ch1.tex}\n$\\frac{1}{2}$");
+assert.ok(highlighted.tokens.some(token => token.value === "\\documentclass" && token.token === "keyword.directive"),"documentclass is a directive");
+assert.ok(highlighted.tokens.some(token => token.value === "\\usepackage" && token.token === "keyword.directive"),"usepackage is a directive");
+assert.ok(highlighted.tokens.some(token => token.value === "\\input" && token.token === "keyword.directive"),"file-splitting inputs are directives");
+assert.ok(highlighted.tokens.some(token => token.value === "\\section*" && token.token === "keyword.section"),"starred section variants stay sections");
+assert.ok(!highlighted.tokens.some(token => token.value.includes("摘要")),"section titles remain plain text");
+assert.ok(highlighted.tokens.some(token => token.value === "\\label" && token.token === "keyword.reference"),"label commands are references");
+assert.ok(highlighted.tokens.some(token => token.value === "eq:main" && token.token === "string.reference"),"label keys highlight with their command");
+assert.ok(highlighted.tokens.some(token => token.value === "\\eqref" && token.token === "keyword.reference"),"eqref is a reference");
+assert.ok(highlighted.tokens.some(token => token.value === "knuth" && token.token === "string.reference"),"citation keys highlight with their command");
+assert.ok(highlighted.tokens.some(token => token.value === "\\frac" && token.token === "keyword"),"ordinary commands keep the plain keyword class");
+assert.deepEqual(highlighted.states,["root"]);
+highlighted=tokenize("\\definecolor{accent}{rgb}{1,0,0} \\subsubsection{小节} \\citep{lamport}");
+assert.ok(highlighted.tokens.some(token => token.value === "\\definecolor" && token.token === "keyword"),"longer commands are not split into directives");
+assert.ok(highlighted.tokens.some(token => token.value === "\\subsubsection" && token.token === "keyword.section"));
+assert.ok(highlighted.tokens.some(token => token.value === "\\citep" && token.token === "keyword.reference"),"longest reference alias wins over its prefix");
 
 first.dispose(); first.dispose();
 assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["completion","configuration","tokens","register"]);
