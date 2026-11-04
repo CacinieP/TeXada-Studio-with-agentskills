@@ -46,6 +46,11 @@ UTF-8 document/input SHA256 hashes, versioned envelope, action scope, budget,
 checkpoint, `requires_review: true`, and an empty controlled-evidence list.
 The complete source is used for local binding and is not sent to Math.
 
+The shared TeX scanner excludes comments, verbatim/code literals and macro
+definitions; display math and documents with unsupported category-code changes
+are not eligible. Candidates must preserve the original dollar delimiters,
+including when they contain escaped dollars, percent signs or trailing backslashes.
+
 The configured Math wire is `POST /api/handoff/formula`. The response must echo
 the transfer, document/input hashes, range, formula ID, source revision, original
 text and checkpoint. Studio checks candidate text/hash, typed Diff/evidence and

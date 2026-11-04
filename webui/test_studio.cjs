@@ -239,7 +239,12 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   let finishFile;
   context.fileRequest = () => new Promise(resolve => { finishFile = resolve; });
   run('j = fileRequest; loadFiles = async () => {}; analyze = async () => {}; compilePreview = async () => {};');
+  get('pvImgWrap').innerHTML='<img src="/api/studio/preview/old-document.png">';
+  get('pvLog').textContent='old document compiler failure';get('pvLog').classList.remove('hide');
   const loading = run("loadFile('other.tex')");
+  assert.doesNotMatch(get('pvImgWrap').innerHTML,/<img/,'opening another document removes the previous PDF even while its file request is pending');
+  assert.equal(get('pvLog').textContent,'','switching documents clears the previous compiler log');
+  assert.equal(get('pvLog').classList.contains('hide'),true);
   assert.equal(oldDiff.disposed && oldOriginal.disposed && oldModified.disposed, true);
   assert.equal(run('diffShown'), false, 'file switch leaves diff immediately');
   assert.equal(run('diffEditor === null && origModel === null && modModel === null'), true);
@@ -398,9 +403,14 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   await get('btnPdf').onclick();assert.equal(pdfFetches,1);
   context.testEditor.setValue('edited after compilation');
   await get('btnPdf').onclick();assert.equal(pdfFetches,1,'stale PDF must not be fetched');
+  get('pvImgWrap').innerHTML='<img src="/api/studio/preview/previous-document.png">';
+  get('pvLog').textContent='previous document compiler log';get('pvLog').classList.remove('hide');
   run('invalidatePreview()');assert.equal(run('lastPreviewTag'),null);
   assert.equal(get('btnPdf').disabled,true);
   assert.equal(get('btnPdf').classList.contains('hide'),false,'invalid PDF stays discoverable in export menu');
+  assert.doesNotMatch(get('pvImgWrap').innerHTML,/<img/,'invalidating a version removes its stale page, not just its export binding');
+  assert.equal(get('pvLog').textContent,'','previous-document compiler details must not remain attached to the new version');
+  assert.equal(get('pvLog').classList.contains('hide'),true);
 
   // Even a response whose PDF bytes arrive later must keep its source binding.
   context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};setPdfAvailable(true);");
@@ -634,6 +644,11 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.notEqual(run('selectedCommand'),initialCommand);
   get('commandInput').value='查找和替换';get('commandInput').listeners.get('input')();
   assert.equal(run('filteredCommands.length'),1);
+  context.safariImeEnter={key:'Enter',isComposing:false,keyCode:229,preventDefault(){throw new Error('IME confirmation intercepted');}};
+  const actionBeforeIme=context.testEditor.lastAction;
+  run('handleGlobalEditorKey(safariImeEnter)');
+  assert.equal(run('commandPaletteOpen'),true,'Safari IME confirmation keeps the command palette open');
+  assert.equal(context.testEditor.lastAction,actionBeforeIme,'confirming Chinese text must not execute the selected command');
   await run('executeCommand()');assert.equal(context.testEditor.lastAction,'editor.action.startFindReplaceAction');
   assert.equal(run('commandPaletteOpen'),false);assert.equal(restoredFocus,1);
   const focusBeforeReopening=context.document.activeElement;

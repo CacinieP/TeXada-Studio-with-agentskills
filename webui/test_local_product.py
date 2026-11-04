@@ -259,6 +259,14 @@ class LocalProductTest(unittest.TestCase):
         self.assertNotIn("review", studio._read_job(job_id))
         self.assertEqual(studio._read_job_events(job_id), [])
 
+    def test_non_string_review_decisions_are_rejected_without_recording_review(self):
+        job_id, original, candidate = self.candidate()
+        for decision in ([], {}, None, True, 42):
+            with self.subTest(decision=decision):
+                self.assertEqual(self.decision(job_id, original, candidate, decision).status_code, 400)
+        self.assertNotIn("review", studio._read_job(job_id))
+        self.assertEqual(studio._read_job_events(job_id), [])
+
     def test_jobs_recover_interrupted_state_and_ignore_broken_records(self):
         job_id = "b" * 32
         studio._save_job(job_id, {"name": "notes.tex", "created_at": 1.0,
@@ -271,6 +279,42 @@ class LocalProductTest(unittest.TestCase):
         self.assertTrue(rows[0]["done"])
         self.assertIn("中断", rows[0]["error"])
         self.assertFalse(rows[0]["has_candidate"])
+
+    def test_malformed_history_metadata_does_not_break_history_or_review(self):
+        valid_id, _, _ = self.candidate()
+        studio._jobs.clear()  # Exercise recovery from disk, as after a restart.
+        invalid = [{"created_at": value} for value in ("yesterday", None, True, float("nan"), float("inf"))]
+        invalid += [{"review": value} for value in ([], {}, {"decision": []}, {"decision": "maybe"})]
+        for index, changes in enumerate(invalid):
+            job_id = f"{index + 1:032x}"
+            studio._save_job(job_id, {"done": True, "log": [], "result": None,
+                                      "created_at": 1.0, **changes})
+        rows = self.get("jobs")
+        self.assertEqual(rows.status_code, 200, rows.text)
+        self.assertEqual([row["id"] for row in rows.json()["jobs"]], [valid_id])
+
+    def test_incomplete_candidate_hashes_cannot_be_reviewed(self):
+        original, candidate = "Original $x+$", "Original $x+1$"
+        hashes = {"original_sha256": digest(original), "candidate_sha256": digest(candidate)}
+        job_id = "f" * 32
+        for missing in ("original_sha256", "candidate_sha256"):
+            for include_request_hash in (False, True):
+                with self.subTest(missing=missing, include_request_hash=include_request_hash):
+                    studio._save_job(job_id, {"done": True, "log": [],
+                                              "result": {key: value for key, value in hashes.items() if key != missing}})
+                    body = {"name": "notes.tex", "content": original, "decision": "accept"}
+                    if include_request_hash:
+                        body["candidate_sha256"] = digest(candidate)
+                    response = self.post(f"jobs/{job_id}/decision", body)
+                    self.assertEqual(response.status_code, 409, response.text)
+                    self.assertNotIn("review", studio._read_job(job_id))
+                    self.assertEqual(studio._read_job_events(job_id), [])
+
+        # A complete stored candidate still requires the caller's exact hash.
+        studio._save_job(job_id, {"done": True, "log": [], "result": hashes})
+        response = self.post(f"jobs/{job_id}/decision", {"name": "notes.tex", "content": original,
+                                                       "decision": "accept"})
+        self.assertEqual(response.status_code, 409, response.text)
 
     def test_cancel_is_persisted_and_takes_effect_before_compilation(self):
         with patch.object(studio.threading, "Thread"):

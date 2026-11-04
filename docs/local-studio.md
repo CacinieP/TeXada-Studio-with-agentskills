@@ -218,6 +218,7 @@ report: state/quickstart/report.md
 .venv/bin/python -m unittest discover -s scripts -p 'test_*.py' -v
 .venv/bin/python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py' -v
 node webui/test_studio.cjs
+node webui/test_latex.cjs
 node skills/latex-cleanup/tests/test_audit_math.cjs
 ```
 

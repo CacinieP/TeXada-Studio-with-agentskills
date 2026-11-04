@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- Clear stale PDF pages and compiler logs when the source changes, and keep Safari IME confirmation from executing command-palette actions.
+- Use TeX lexical context for single-formula handoffs and reject candidates that consume or escape the existing closing delimiter.
+- Isolate damaged task history and reject incomplete candidate bindings or malformed review decisions without server errors.
+- Classify invalid reference totals as input errors before attempting table repair.
+- Run the JavaScript behavior and LaTeX cleanup suites in CI alongside the existing Python regressions.
 - Preserve the editor until the user adopts a reviewed candidate; reset failed controls and discard stale file or preview responses.
 - Fix empty diff panels, stale comparisons, hidden collapse controls and preview resizing.
 - Reject partial LaTeX parses and malformed checker input; handle missing dependencies without issuing repair requests.
