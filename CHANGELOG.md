@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add a CI build for the self-contained desktop app: a macOS arm64 workflow installs the pinned Tectonic release and Poppler, prepares the TeX cache, runs `desktop/build_bundle.py`, smoke-tests the bundle in an isolated environment (stripped PATH/HOME, offline compile against the bundled cache), then uploads a ditto-zipped artifact with a SHA256 checksum.
 - Ship a fully self-contained macOS app: `desktop/build_bundle.py` freezes the Python runtime, server dependencies, Tectonic, the TeX resource cache and Poppler (with a hand-rolled dylib collector that rewrites load commands and re-signs ad hoc) into one `TeXada Studio.app`; the backend runs as an in-process thread so quitting the window leaves nothing behind. License audit for every bundled component ships as `desktop/licenses-audit.md`.
 - Add PDF page-splitting OCR import: the import dialog gains a start-page field, the review dialog lists per-page candidates that can be excluded or split into one document per page, and a continuation button batches the remaining pages of long PDFs.
 - Add one-click Poppler install (macOS): a second settings-dialog button and `tool_fetch.install_poppler` drive `brew install poppler` explicitly, mirroring the pinned Tectonic bootstrap.

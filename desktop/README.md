@@ -26,6 +26,8 @@ brew install poppler
 .venv/bin/python desktop/build_bundle.py           # 产物 dist/TeXada Studio.app(约 280 MiB)
 ```
 
+也可以不在本机构建:[`.github/workflows/bundle-build.yml`](../.github/workflows/bundle-build.yml) 会在 GitHub Actions 的 macOS arm64 runner 上完成同一流程(安装固定版 Tectonic → brew 装 Poppler → 准备 TeX 缓存 → 构建 → **隔离冒烟**〔剥离 PATH/HOME 下直测三个二进制并用捆绑缓存编译出 PDF〕→ ditto 打包并上传 artifact `TeXada-Studio-macOS-arm64`,附 SHA256)。触发方式:改动相关路径的 PR、`v*` 标签,或在 Actions 页手动 `workflow_dispatch`。
+
 包内嵌:Python 运行时与全部服务端依赖、Tectonic、TeX 资源缓存、Poppler(pdfinfo/pdftoppm 及其动态库,重签名后自包含)、webui/harness/skills 源码与示例。**许可合规**见 [licenses-audit.md](licenses-audit.md)(副本随包分发)。
 
 行为:

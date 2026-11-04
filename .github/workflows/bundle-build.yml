@@ -1,0 +1,74 @@
+name: Desktop bundle
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - desktop/**
+      - scripts/install_local_tools.py
+      - scripts/prepare-local-tex.py
+      - webui/**
+      - harness/**
+      - skills/**
+      - samples/docs/**
+      - .github/workflows/bundle-build.yml
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Prepare build dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r webui/requirements.txt
+          .venv/bin/pip install -r desktop/requirements.txt py2app
+      - name: Install Tectonic (pinned official release, SHA256 verified)
+        run: .venv/bin/python scripts/install_local_tools.py
+      - name: Install Poppler
+        run: brew install poppler
+      - name: Prepare TeX resource cache
+        run: .venv/bin/python scripts/prepare-local-tex.py --download-resources
+      - name: Build self-contained app
+        run: .venv/bin/python desktop/build_bundle.py --output dist-app
+      - name: Isolated smoke test (no repo, no brew, no network in the test env)
+        run: |
+          R="dist-app/TeXada Studio.app/Contents/Resources"
+          ISOLATED_HOME="$RUNNER_TEMP/iso-home"
+          mkdir -p "$ISOLATED_HOME/Library/Caches"
+          cp -R "$R/tex-cache" "$ISOLATED_HOME/Library/Caches/TectonicProject.Tectonic"
+          for tool in tectonic pdfinfo pdftoppm; do
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/$tool" -v
+          done
+          WORK="$RUNNER_TEMP/smoke"
+          mkdir -p "$WORK/out"
+          printf '\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n$x^2+1$\n\\end{document}\n' > "$WORK/smoke.tex"
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+            "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
+          test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
+      - name: Package and checksum
+        run: |
+          cd dist-app
+          ditto -c -k --keepParent "TeXada Studio.app" "TeXada-Studio-macOS-arm64.zip"
+          shasum -a 256 "TeXada-Studio-macOS-arm64.zip" | tee checksum.txt
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeXada-Studio-macOS-arm64
+          path: |
+            dist-app/TeXada-Studio-macOS-arm64.zip
+            dist-app/checksum.txt
+          if-no-files-found: error
