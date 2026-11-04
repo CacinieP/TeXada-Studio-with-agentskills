@@ -1,0 +1,4 @@
+interface:
+  display_name: "TeXada Studio"
+  short_description: "操作本地 Web UI，编辑 LaTeX、审阅候选并验证保存与 PDF 导出"
+  default_prompt: "使用 $texada-studio 在本地工作区检查文档，保留原文并交付可审阅的候选和验证结果。"

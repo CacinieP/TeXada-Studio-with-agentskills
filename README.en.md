@@ -1,5 +1,7 @@
 # TeXada Studio Local
 
+The editor is a local Web UI: FastAPI serves the application, Monaco runs in the browser, and documents are stored in the selected local data directory. See the [current AgentSkills guide](docs/agent-skills.md) for workspace operations and the runtime Skill boundaries.
+
 Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review MiniCPM candidates, and save or export the result on your own computer.
 
 The interface uses TeXada's deep navy and cyan palette, with source and PDF side by side. Documents, outline, image import, Agent review and logs open through the sidebar and drawers, alongside deterministic checks and explicit candidate review.

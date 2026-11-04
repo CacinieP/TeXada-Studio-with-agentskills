@@ -4,6 +4,8 @@
 
 界面采用 TeXada 的深海蓝与青蓝品牌，以源码和 PDF 双栏为主体。文件、大纲、图片识别、Agent 审阅与日志通过侧栏和抽屉展开，结合确定性检查、修复候选和审阅记录。
 
+编辑器采用本地 Web UI：FastAPI 提供本机服务，浏览器使用 Monaco 编辑源码，文档保存在所选本地数据目录。外部 Agent 的操作入口与运行时 Skill 范围见 [AgentSkills 使用指南](docs/agent-skills.md)。
+
 [English](README.en.md) · [本地使用指南](docs/local-studio.md) · [本地验收记录](docs/local-studio-acceptance.md) · [示例](samples/README.md) · [文档导航](docs/index.md)
 
 当前是本地单用户开发候选，尚无本次正式 Release。本机 MiniCPM-V 4.7 1B Q4 已完成固定图片与两页 PDF 转写、候选编译及缺失括号修复；Chrome 已验证保存刷新、候选审阅、历史恢复、多页预览和导出等主流程。结果是本机 smoke 验收，不是 OCR 准确率、数学正确率或跨平台评测；详见[验收记录](docs/local-studio-acceptance.md)。

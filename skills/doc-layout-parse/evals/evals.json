@@ -2,7 +2,7 @@
   "schema_version": 1,
   "skill": "doc-layout-parse",
   "status": "planned",
-  "implemented_scope": "Preparation of an already supplied layout.json; no PDF/OCR parser is implemented.",
+  "implemented_scope": "The CLI consumes a supplied layout.json. Local Studio separately implements image/PDF-to-LaTeX transcription candidates; structured bbox/layout-tree extraction remains unimplemented and is the planned evaluation scope here.",
   "existing_examples": [
     "../../../samples/exam-01/layout.json",
     "../../../samples/paper-01/layout.json",

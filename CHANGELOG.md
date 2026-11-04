@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add a Studio operation Skill and current AgentSkills guide; align formula, table, OCR-input and reporting instructions with the local Web UI and its review/version boundaries.
 - Fresh local verification records for 2026-10-15, with installation and model-switch troubleshooting.
 
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
