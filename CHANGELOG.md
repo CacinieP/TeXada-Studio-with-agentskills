@@ -4,6 +4,7 @@
 
 ### Added
 
+- Produce a notarized DMG in CI when signing secrets are configured: the bundle workflow imports a Developer ID Application certificate into a temporary keychain, signs the app with a hardened runtime and timestamp, notarizes and staples it, then builds/signs/notarizes/staples a UDZO disk image (with an /Applications symlink) and gates it through `spctl`; without secrets it falls back to the unsigned zip artifact.
 - Add a CI build for the self-contained desktop app: a macOS arm64 workflow installs the pinned Tectonic release and Poppler, prepares the TeX cache, runs `desktop/build_bundle.py`, smoke-tests the bundle in an isolated environment (stripped PATH/HOME, offline compile against the bundled cache), then uploads a ditto-zipped artifact with a SHA256 checksum.
 - Ship a fully self-contained macOS app: `desktop/build_bundle.py` freezes the Python runtime, server dependencies, Tectonic, the TeX resource cache and Poppler (with a hand-rolled dylib collector that rewrites load commands and re-signs ad hoc) into one `TeXada Studio.app`; the backend runs as an in-process thread so quitting the window leaves nothing behind. License audit for every bundled component ships as `desktop/licenses-audit.md`.
 - Add PDF page-splitting OCR import: the import dialog gains a start-page field, the review dialog lists per-page candidates that can be excluded or split into one document per page, and a continuation button batches the remaining pages of long PDFs.
