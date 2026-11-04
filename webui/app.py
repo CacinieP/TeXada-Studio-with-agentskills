@@ -8,6 +8,7 @@
 import hashlib
 import hmac
 import json
+import math
 import os
 import platform
 import shutil
@@ -808,6 +809,16 @@ def _read_job(job_id):
             or (job.get("result") is not None and not isinstance(job["result"], dict))
             or (job.get("error") is not None and not isinstance(job["error"], str))):
         return None
+    # A single damaged record must not break sorting or JSON serialization of
+    # all history, nor expose an invalid review to the decision endpoint.
+    created_at = job.get("created_at", 0)
+    review = job.get("review")
+    if (type(created_at) not in (int, float)
+            or (isinstance(created_at, float) and not math.isfinite(created_at))
+            or (review is not None and (not isinstance(review, dict)
+                or not isinstance(review.get("decision"), str)
+                or review["decision"] not in {"accept", "reject"}))):
+        return None
     if not job.get("done"):
         job.update(done=True, error="任务在服务重启或中断前未完成；请新建任务，历史事件仍保留。")
     if job.get("result") is None:
@@ -1075,8 +1086,12 @@ def studio_job_decision(job_id: str, token: str = Query(""), body: dict = None):
         result = (job or {}).get("result")
         if not job or not job["done"] or not isinstance(result, dict):
             raise HTTPException(status_code=409, detail="没有已完成、可审阅的候选。")
+        if any(not isinstance(result.get(key), str)
+               or not _re.fullmatch(r"[a-f0-9]{64}", result[key])
+               for key in ("original_sha256", "candidate_sha256")):
+            raise HTTPException(status_code=409, detail="候选记录不完整；请重新生成。")
         decision = body.get("decision")
-        if decision not in {"accept", "reject"}:
+        if not isinstance(decision, str) or decision not in {"accept", "reject"}:
             raise HTTPException(status_code=400, detail="decision 必须为 accept 或 reject。")
         name, content = _document_body(body)
         if (name != job.get("name", name) or text_hash(content) != result["original_sha256"]

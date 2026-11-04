@@ -10,6 +10,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from .tex_context import extract_math
+
 CHECKPOINT = "MiniCPM-V-4.7-1B"
 MAX_DOCUMENT_BYTES = 262144
 MAX_FORMULA_CHARS = 32768
@@ -66,6 +68,24 @@ def _transfer_id(value):
     return value
 
 
+def _has_unescaped_dollar(text):
+    escaped = False
+    for char in text:
+        if char == "$" and not escaped:
+            return True
+        escaped = not escaped if char == "\\" else False
+    return False
+
+
+def _preserves_inline_delimiters(candidate):
+    # An odd trailing slash escapes the existing '$'; an unescaped '%' comments
+    # it out. Check the complete wrapper rather than only interior dollars.
+    nodes = extract_math("$" + candidate + "$")
+    return (len(nodes) == 1 and nodes[0]["opening"] == "$"
+            and nodes[0]["body_start"] == 1 and nodes[0]["body_end"] == len(candidate) + 1
+            and nodes[0]["end"] == len(candidate) + 2)
+
+
 def build_envelope(body):
     if not isinstance(body, dict) or set(body) != REQUEST_FIELDS:
         raise HandoffError("invalid_handoff_request")
@@ -88,11 +108,11 @@ def build_envelope(body):
         raise HandoffError("invalid_source_range")
     start, end = source_range["start"], source_range["end"]
     # Only an existing, complete dollar-delimited inline body may be transferred.
-    spans, offset = [], 0
-    for line in content.splitlines(keepends=True):
-        spans.extend((offset + match.start(1), offset + match.end(1))
-                     for match in re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line))
-        offset += len(line)
+    # Share the scanner used by document checks so comments, raw literals,
+    # macro definitions and display math cannot masquerade as inline formulas.
+    spans = {(node["body_start"], node["body_end"]) for node in extract_math(content)
+             if node["kind"] == "inline" and node["opening"] == "$"
+             and node["reason"] != "category_codes_unsupported"}
     if (start, end) not in spans:
         raise HandoffError("range_is_not_one_inline_formula")
     original = content[start:end]
@@ -130,7 +150,8 @@ def validate_response(envelope, response):
     if (not candidate_valid_utf8 or response.get("status") != "review_required" or not isinstance(candidate, str)
             or not candidate.strip() or len(candidate) > MAX_FORMULA_CHARS
             or any(ord(c) < 32 or ord(c) == 127 for c in candidate)
-            or re.search(r"(?<!\\)\$", candidate)
+            or _has_unescaped_dollar(candidate)
+            or not _preserves_inline_delimiters(candidate)
             or not _hash(response.get("candidate_sha256")) or sha256(candidate) != response["candidate_sha256"]):
         raise HandoffError("invalid_handoff_candidate", 502)
     if envelope["requested_action"] == "complete" and not candidate.startswith(envelope["original_latex"]):
