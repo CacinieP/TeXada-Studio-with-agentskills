@@ -4,7 +4,7 @@ Edit LaTeX, transcribe images or PDFs, check formulas and simple totals, review 
 
 Studio is a local workspace opened in your browser. Documents and run records stay on your machine; image transcription and model candidates use the local model service you configure.
 
-[中文](README.md) · [Start](#start) · [Local guide](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [Documentation](docs/index.md)
+[中文](README.md) · [Start](#start) · [Configuration](#configuration) · [Local guide](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [Documentation](docs/index.md)
 
 ![TeXada Studio: local LaTeX source and a compiled Chinese PDF](assets/studio-workspace.png)
 
@@ -25,11 +25,7 @@ This remains a local, single-user development candidate, with no formal release 
 
 Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
 
-Formula repair follows Math Agent's source-preservation approach: close unambiguous syntax, recheck it, and reject changed numbers, variables, operators or deleted terms. Missing operands and unsupported notation remain manual items. See the [repair-quality record](docs/formula-repair-quality.md) for the bounded policy and comparison evidence.
-
 The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
-
-Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets — common commands, theorem-class environments, Greek letters and math symbols — need no model call; `Ctrl+Space` can request suggestions. Sectioning commands, preamble/definition directives (including `\input`/`\include` file splits), and cross-reference keys each get their own color, so the document's structural modules stand out. The editor folds documents by TeX structure: environments pair with their `\end`, and sections close at the next heading. The sidebar's "new from template" action creates documents from five offline skeletons: blank article, lecture notes, exam paper, Beamer, and English article. The status bar shows cursor, selection, and word counts.
 
 ## Start
 
@@ -44,30 +40,50 @@ python3.13 -m venv .venv
 ./scripts/start-local-studio.command
 ```
 
-On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Its private entry URL is stored in an owner-only `session.json` in the user data directory; access credentials are not printed. Stop the launcher with `Ctrl+C`.
+On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
 
-Initial installation of dependencies, model weights, fonts, and TeX resources may require network access. Studio compiles against cached TeX resources and does not silently download packages while processing documents. Prepare the resources needed by your documents before using compilation offline. See [first-time setup](docs/local-studio.md#首次准备与离线使用).
+## Configuration
 
-Run `.venv/bin/python scripts/prepare-local-tex.py` to check the fixed TeX sample offline. When needed, explicitly add `--download-resources` for initial preparation, then repeat the offline check.
+### Local model service
 
-Monaco assets are bundled with the source; no frontend build is required. See [source packaging](docs/source-package.md) for archive contents and checksums. A source ZIP still requires Python and the optional tools listed below.
+Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/completions`) on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and never falls back to a cloud model. Three ways to connect:
+
+1. **In the UI**: status bar "local model" → save the endpoint and model name → run the explicit connection check. The connection details are kept in the user data directory.
+2. **Reuse an existing service at launch** (for example an Ollama instance already running locally):
+
+   ```bash
+   .venv/bin/python scripts/run-local-studio.py \
+     --base-url http://127.0.0.1:11434/v1 \
+     --model minicpm-v4.7-1b:latest --no-auto-model
+   ```
+
+   The model name must exactly match an id returned by your service's `/v1/models`; on exit the launcher stops only model processes it started itself.
+3. **Auto-start local weights**: by default the launcher looks for the GGUF and projector under `~/.texada/models/` and requires `llama-server`; pass `--gguf`/`--mmproj` to point at explicit paths.
+
+Image/PDF transcription requires an endpoint that actually supports `image_url` — appearing in the model list is not verification. Deterministic syntax repairs need no model. See the [model guide](docs/local-studio.md#本机模型连接) for downloads, default paths, and optional parameters.
+
+### Optional tools and TeX resources
 
 | Feature | Additional requirements |
 | --- | --- |
-| Editing and deterministic checks | Python dependencies above; Monaco is bundled |
+| Editing and deterministic checks | Python dependencies above; editor assets are bundled |
 | Model candidates and image transcription | A local MiniCPM-V 4.7 1B service; automatic startup also needs `llama-server`, GGUF and projector. Deterministic repairs need no model |
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
-To reuse an existing local service:
+On macOS, `brew install tectonic poppler` installs the optional tools; for other platforms see the [troubleshooting guide](docs/troubleshooting.md).
+
+Studio compiles only against cached TeX resources and never downloads packages while processing documents. First-time preparation:
 
 ```bash
-.venv/bin/python scripts/run-local-studio.py \
-  --base-url http://127.0.0.1:18081/v1 \
-  --model MiniCPM-V-4.7-1B --no-auto-model
+.venv/bin/python scripts/prepare-local-tex.py --download-resources
 ```
 
-Local mode accepts only HTTP endpoints on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and has no cloud fallback. The launcher reuses existing services and stops only model processes it started itself. See the [model guide](docs/local-studio.md#本机模型连接) for model sources and path options.
+Re-run without the flag afterwards for an offline check.
+
+### Editor preferences and local data
+
+Font size, word wrap, and minimap preferences persist in your browser. Documents, run records, and connection details live in the user data directory; the private browser entry is written to an owner-only `session.json`, credentials are never printed, and the entry is renewed on every launch. See [local data and recovery](docs/local-studio.md#本地数据与恢复).
 
 ## First document
 
@@ -78,25 +94,23 @@ Local mode accepts only HTTP endpoints on `localhost`, `127.0.0.1`, or `[::1]`. 
 
 Use **Save** or `⌘/Ctrl+S` to persist edits. OCR and repair candidates do not automatically replace the source.
 
-## Scope
+Formula repairs follow a source-preservation policy: candidates must not change numbers, variables, or operators or delete terms; unambiguous delimiters are closed and rechecked first. See the [repair-quality record](docs/formula-repair-quality.md) for the policy and evidence.
 
-The TeX scanner skips comments, common literal environments, and command definitions. It recognizes `$...$`, `$$...$$`, `\(...\)`, `\[...\]`, and common math environments. Complex alignments, unknown macros, and unsupported expressions remain for human review.
+Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets — common commands, theorem-class environments, Greek letters and math symbols — need no model call; `Ctrl+Space` can request suggestions. Sectioning commands, preamble/definition directives (including `\input`/`\include` file splits), and cross-reference keys each get their own color, so the document's structural modules stand out. The editor folds documents by TeX structure: environments pair with their `\end`, and sections close at the next heading. The sidebar's "new from template" action creates documents from five offline skeletons: blank article, lecture notes, exam paper, Beamer, and English article. The status bar shows cursor, selection, and word counts.
 
-Syntax acceptance, compilation, faithful transcription, and mathematical correctness are separate judgments. A false equation can compile successfully. Review OCR, repairs, and table findings against the original.
+## Scope and boundaries
 
-The current unit of work is one `.tex` file. Multi-file projects and multi-user collaboration are outside this local version's scope. See the [roadmap](docs/roadmap.md).
+Syntax acceptance, compilation, faithful transcription, and mathematical correctness are separate judgments: a false equation can pass both syntax and compilation. Review OCR, repairs, and table findings against the original.
 
-## Samples and development
+The scanner handles common inline and display math and skips comments and literal text; complex alignments, unknown macros, and unsupported structures remain for human review. The current unit of work is one `.tex` file; multi-file projects and collaboration are outside this local version's scope. See [checking and review boundaries](docs/local-studio.md#检查与审阅边界) and the [roadmap](docs/roadmap.md).
 
-The [local guide](docs/local-studio.md#开发与复现) retains the model-free CLI example, test commands, and research protocols.
+## Documentation and technical material
+
+Start with the [local guide](docs/local-studio.md) and the [troubleshooting guide](docs/troubleshooting.md). Further entry points:
 
 - [Studio operation Skill](skills/texada-studio/SKILL.md) and [AgentSkills guide](docs/agent-skills.md): workspace operations, formula/table/OCR inputs and review boundaries.
-- [Current validation](docs/current-validation.md), [source packaging](docs/source-package.md), [architecture](docs/architecture.md), and [CLI Harness](harness/README.md).
-
-- [Casebook](docs/casebook.md), [historical validation](docs/validation.md), and [Skill comparison](docs/skills-pilot-analysis.md).
-- [Skill design](docs/skills-technical-report.md), [constrained planning](docs/studio-constrained-planner.md), [Skill selection](docs/studio-skill-selection.md), and [formula handoff](docs/studio-formula-handoff.md).
-- [TeXada series](docs/texada-series.md) and [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) for complementary formula input and document review.
-- Historical demonstration: [video](https://www.bilibili.com/video/BV16Kan6rEGv/), [recording evidence](docs/dynamic-demo.md), [WeChat article](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw), and [project report](docs/project-report.md). Each describes its own dated revision.
+- [Current validation](docs/current-validation.md), [architecture](docs/architecture.md), [CLI Harness](harness/README.md), and [source packaging](docs/source-package.md).
+- The complete list of casebooks, validation history, Skill experiments, series notes, and historical demos lives in the [documentation index](docs/index.md).
 
 The legacy `run-minicpm-v47-studio.sh` explicitly selects a cloud API workflow. See [compatibility notes](docs/local-studio.md#旧云-api-入口与实验功能); its results are separate from local inference acceptance.
 

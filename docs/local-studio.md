@@ -116,7 +116,15 @@ macOS 可双击 `scripts/start-local-studio.command`，或运行：
   --model MiniCPM-V-4.7-1B --no-auto-model
 ```
 
-模型名称必须是本机服务真实使用的名称。Ollama 用户应使用自己已安装并支持所需能力的完整标签。没有可用模型时，文档管理、编辑和确定性检查仍可使用，生成与 OCR 会显示连接错误。
+模型名称必须是本机服务真实使用的名称。Ollama 用户应使用自己已安装并支持所需能力的完整标签，例如本机已拉取 `minicpm-v4.7-1b` 时：
+
+```bash
+.venv/bin/python scripts/run-local-studio.py \
+  --base-url http://127.0.0.1:11434/v1 \
+  --model minicpm-v4.7-1b:latest --no-auto-model
+```
+
+没有可用模型时，文档管理、编辑和确定性检查仍可使用，生成与 OCR 会显示连接错误。
 
 ### 自动启动已有权重
 

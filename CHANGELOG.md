@@ -21,6 +21,7 @@
 
 ### Changed
 
+- Restructure both READMEs for end users: add a consolidated Configuration section (model service with an Ollama reuse example, optional tools and TeX cache, editor preferences and local data) and move scanner boundaries, packaging and historical-material links into the documentation index and local guide.
 - Reorganize documentation around setup, reproducible examples and implementation details; require Python 3.11+ for the Harness.
 - Vendor Monaco 0.52.2 locally, preserve its MIT license and verify pinned package and file hashes.
 - Use scoped signed cookies for editor assets and an explicit token for API access.
