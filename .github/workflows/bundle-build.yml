@@ -52,9 +52,9 @@ jobs:
           ISOLATED_HOME="$RUNNER_TEMP/iso-home"
           mkdir -p "$ISOLATED_HOME/Library/Caches"
           cp -R "$R/tex-cache" "$ISOLATED_HOME/Library/Caches/TectonicProject.Tectonic"
-          for tool in tectonic pdfinfo pdftoppm; do
-            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/$tool" -v
-          done
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/tectonic" --version
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdfinfo" -v
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdftoppm" -v
           WORK="$RUNNER_TEMP/smoke"
           mkdir -p "$WORK/out"
           printf '\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n$x^2+1$\n\\end{document}\n' > "$WORK/smoke.tex"
