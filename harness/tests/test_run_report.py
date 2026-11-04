@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from unittest.mock import patch
 
-from docforensics import __main__ as cli, pipeline
+from docforensics import __main__ as cli, pipeline, state
 from docforensics.__main__ import write_run_report
 
 
@@ -82,12 +82,29 @@ class RunReportTest(unittest.TestCase):
         self.assertNotIn("old+", report)
 
     def test_reuse_displays_prior_candidate_without_counting_old_requests(self):
-        report = self.render([self.terminal(repaired=True, original="x+", latex="x+1"),
+        report = self.render([self.terminal(repaired=True, original=r"\frac{a}{b", latex=r"\frac{a}{b}"),
             {"action": "SKIP", "run_id": "two", "doc": "paper", "node_id": "f1", "status": "OK",
              "input_sha256": "a", "context_sha256": "b", "reused_run_id": "one"}], "two")
         self.assertIn("请求尝试：0", report)
         self.assertIn("复用 1", report)
-        self.assertIn("x+1", report)
+        self.assertIn(r"\frac{a}{b}", report)
+
+    def test_actual_deterministic_repair_report_keeps_source_and_zero_http_calls(self):
+        original = r"\frac{a}{b"
+        provider = pipeline.FixtureProvider()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                pipeline, "run_verify", side_effect=[{"status": "RETRY"}, {"status": "OK"}]):
+            self.assertEqual(pipeline.process_formula(directory, "paper",
+                             {"id": "f1", "type": "formula", "data": {"latex": original}},
+                             provider, run_id="one"), "OK")
+            events = state.load_events(directory)
+            report = Path(write_run_report(directory, provider, events, "one")).read_text()
+        self.assertIn("请求尝试：0", report)
+        self.assertIn("OK 1", report)
+        self.assertIn(original, report)
+        self.assertIn(original + "}", report)
+        self.assertFalse(any(event["action"] == "PROVIDER_START" for event in events))
+        self.assertEqual(events[-1]["provider"], "deterministic-syntax")
 
     def test_unmatched_start_is_unknown_and_unfinished_history_remains_visible(self):
         report = self.render([

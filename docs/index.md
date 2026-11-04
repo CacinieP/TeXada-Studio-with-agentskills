@@ -5,7 +5,7 @@
 | 目标 | 入口 | 能找到什么 |
 | --- | --- | --- |
 | 了解 TeXada 系列 | [系列说明](texada-series.md) · [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) | MiniCPM 驱动的两个工具、手动 LaTeX 交接和迭代计划 |
-| 启用 MiniCPM-V 4.7 | [适配说明](minicpm-v47.md) · [启动步骤](../README.md#3-接入真实模型) | ModelBest API profile、请求契约与独立验收范围 |
+| 启用本机 MiniCPM | [本机连接](local-studio.md#本机模型连接) · [4.7 适配说明](minicpm-v47.md) | 本地权重/端点；旧 ModelBest profile 的显式兼容与验收范围 |
 | 看完整操作 | [B站视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [连续实录与证据](dynamic-demo.md) | 源码编辑、候选审阅、完整等待与导出 |
 | 本地运行与排错 | [README](../README.md) · [English](../README.en.md) · [排错](troubleshooting.md) | 安装、启动、模型配置和常见故障 |
 | 选择样本 | [样本目录](../samples/README.md) · [案例手册](casebook.md) | `.tex`、结构化输入、逐例预期 |
@@ -13,13 +13,16 @@
 | 复现检查器行为 | [27 个检查案例](../samples/evaluation/README.md) | 运行命令、预期状态与结果解释 |
 | 比较 Skill 指令 | [研究协议](../samples/research/README.md) · [先导实验解读](skills-pilot-analysis.md) | 三组对照、来源、候选和人工复核 |
 | 理解 Skill 设计 | [Skills 技术报告](skills-technical-report.md) · [架构](architecture.md) | 职责划分、指令契约、工具执行、候选回判与对照实验 |
-| 查看已有验证 | [验证记录](validation.md) · [编译记录](evaluation-results/studio-latex/README.md) | 当次输入、环境和结果 |
+| 使用当前 Skill | [AgentSkills 使用指南](agent-skills.md) | Studio 操作入口、任务路由、当前能力与运行时加载范围 |
+| 核对公式修复质量 | [修复质量记录](formula-repair-quality.md) | Math Agent 参考、保真范围、对照指标与复现方法 |
+| 查看已有验证 | [当前验证](current-validation.md) · [历史验证](validation.md) · [编译记录](evaluation-results/studio-latex/README.md) | 版本、输入、环境和结果 |
 | 修改项目 | [贡献说明](../CONTRIBUTING.md) · [路线图](roadmap.md) | 开发约定、相关测试和后续工作 |
 | 部署与维护 | [部署手册](../deploy/README.md) · [安全说明](../SECURITY.md) | 配置、升级、数据备份和信任边界 |
+| 源码分发 | [源码包与校验](source-package.md) | 固定提交、文件清单与 SHA256 核验 |
 
 ## 当前复现状态
 
-最新本地复现见[2026-10-15 验证记录](validation.md#本地重新验证2026-10-15)。遇到安装或模型切换问题，先查[排错说明](troubleshooting.md)。历史演示与实验保留原日期、模型和环境，不能代替当前版本的复现。
+当前本地复现见[2026-11-04 验证记录](current-validation.md)。遇到安装、模型或资源问题，先查[排错说明](troubleshooting.md)。历史演示与实验保留原日期、模型和环境，不能代替当前版本的复现。
 
 ## 项目、技术与发布
 

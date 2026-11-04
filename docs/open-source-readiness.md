@@ -2,6 +2,8 @@
 
 更新：2026-09-29。项目源码按 AGPL-3.0-only 开源，[实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/)已在B站发布。当前作为实验原型供本地复现；首个 Release 和外部用户试跑待安排。
 
+2026-11-04 补充：本地 Web UI、保真修复、AgentSkills 与源码校验包的当前状态见[当前验证记录](current-validation.md)、[本地指南](local-studio.md)和[源码打包](source-package.md)。下文保留原日期的准备与实验记录。
+
 ## 已具备的条件
 
 | 项目 | 当前状态 | 入口 |

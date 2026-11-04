@@ -1,12 +1,16 @@
 # TeXada Studio 本地版
 
-在自己的电脑上编辑 LaTeX，识别图片或 PDF，检查公式语法和简单表格合计。MiniCPM 给出候选，你对照原文审阅，再保存、预览和导出。
+在自己的电脑上编辑 LaTeX、识别图片或 PDF、检查公式和简单表格。查看修复差异，审阅后保存，再编译和导出。
 
-界面采用 TeXada 的深海蓝与青蓝品牌，以源码和 PDF 双栏为主体。文件、大纲、图片识别、Agent 审阅与日志通过侧栏和抽屉展开，结合确定性检查、修复候选和审阅记录。
+这是在浏览器中打开的本地工作台。源码、文档与运行记录保存在本机；图片识别和模型候选使用你配置的本机模型服务。
 
-[English](README.en.md) · [本地使用指南](docs/local-studio.md) · [本地验收记录](docs/local-studio-acceptance.md) · [示例](samples/README.md) · [文档导航](docs/index.md)
+[English](README.en.md) · [开始使用](#开始使用) · [完整指南](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [文档导航](docs/index.md)
 
-当前是本地单用户开发候选，尚无本次正式 Release。本机 MiniCPM-V 4.7 1B Q4 已完成固定图片与两页 PDF 转写、候选编译及缺失括号修复；Chrome 已验证保存刷新、候选审阅、历史恢复、多页预览和导出等主流程。结果是本机 smoke 验收，不是 OCR 准确率、数学正确率或跨平台评测；详见[验收记录](docs/local-studio-acceptance.md)。
+![TeXada Studio：本地 LaTeX 源码与中文 PDF 双栏工作区](assets/studio-workspace.png)
+
+当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
+
+当前面向本地单用户，仍是开发候选，尚无本次正式 Release。已验证范围见[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
 
 ## 这版可以做什么
 
@@ -15,7 +19,7 @@
 | 管理文档 | 导入或新建 `.tex`，保存、重命名、删除；已保存的修改在刷新后保留 |
 | 识别资料 | 导入 PNG、JPEG、WebP 或 PDF，每次最多识别 5 页；审阅 LaTeX 候选后新建文档 |
 | 编辑与检查 | LaTeX 高亮与常用片段补全、查找替换、文档大纲、命令面板；检查公式语法及简单合计 |
-| 修复与审阅 | 有界 MiniCPM 候选生成，查看 diff，明确采用或拒绝，保留任务和审阅历史 |
+| 修复与审阅 | 先做保留原文的确定性语法修复；模型候选经过语法和修改范围校验，查看 diff 后明确采用或拒绝 |
 | 预览与交付 | 编译当前文档，逐页预览并导出 PDF；也可导出 `.tex` 和质检报告 |
 | 连接本机模型 | 保存本地服务地址与模型名称，显式检查连接；不会自动改用云模型 |
 
@@ -25,9 +29,11 @@
 
 ## 开始使用
 
-需要 Python 3.11+，本轮使用 3.13。先在项目目录安装依赖：
+需要 **Python 3.11+**。下面以已安装的 `python3.13` 为例，也可替换为其他满足要求的版本：
 
 ```bash
+git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
+cd TeXada-Studio-with-agentskills
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r webui/requirements.txt
 .venv/bin/python scripts/run-local-studio.py --check
@@ -45,10 +51,12 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 可用 `.venv/bin/python scripts/prepare-local-tex.py` 离线检查固定样本的 TeX 资源；需要时显式加 `--download-resources` 完成首次准备，再重新离线检查。
 
+Monaco 编辑器资源已随源码提供，无需前端构建。源码包与校验方法见[源码打包](docs/source-package.md)；源码 ZIP 需要自行准备 Python 和所需的可选工具。
+
 | 想使用的功能 | 还需准备 |
 | --- | --- |
 | 编辑、语法检查、简单表格检查 | 上述 Python 依赖；Monaco 资源已随源码提供 |
-| 本地候选与图片识别 | 本机 MiniCPM-V 4.7 1B 服务；自动启动还需 `llama-server`、GGUF 和 projector |
+| 模型候选与图片识别 | 本机 MiniCPM-V 4.7 1B 服务；自动启动还需 `llama-server`、GGUF 和 projector；确定性语法候选不需要模型 |
 | PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
 | PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
@@ -64,12 +72,14 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 ## 第一份文档
 
-1. 打开 `math-clean.tex`，点击“检查文档”和“编译预览”。
+1. 打开 `welcome.tex` 或 `math-clean.tex`，点击“检查”；编译依赖就绪后点击“编译”。
 2. 打开 `math-delimiters.tex`，生成修复候选，查看 diff 后决定是否采用；采用后点击“保存”。
 3. 刷新页面，确认保存内容仍在，再导出当前版本的 `.tex` 或 PDF。
 4. 选择自己有权使用的图片或 PDF，点击“开始识别”；对照原件审阅识别结果，再新建文档。
 
 “保存”或 `⌘/Ctrl+S` 才会把编辑内容写入本地文档。识别结果和修复候选都不会自动覆盖原文。
+
+公式修复参考 Math Agent 的保真策略：先补可确定的分组或定界符，再用同一检查器验证；候选不能改数字、变量、运算符或删项。缺少操作数、未知宏和解析器不支持的记号保留人工核对。方法、对照样例与验证边界见[公式修复质量记录](docs/formula-repair-quality.md)。
 
 用顶栏“命令”或 `⌘/Ctrl+Shift+P` 查找操作；侧栏大纲可跳转到章节。查找与替换使用编辑器自带面板，外观菜单可以调整字号、自动换行和小地图，设置会在本机保留。LaTeX 常用命令提供片段建议，也可按 `Ctrl+Space` 主动唤出。状态栏显示光标行列、选区和文档字数。
 
@@ -84,6 +94,9 @@ TeX 提取器会跳过注释、常见原样环境和命令定义，识别 `$...$
 ## 示例、验证与开发
 
 无需模型的 CLI 样本、完整测试命令和研究协议见[本地指南](docs/local-studio.md#开发与复现)。主要入口：
+
+- [Studio 操作 Skill](skills/texada-studio/SKILL.md)、[AgentSkills 使用指南](docs/agent-skills.md)：工作区操作、公式/表格、OCR 输入与审阅边界。
+- [当前验证](docs/current-validation.md)、[源码打包](docs/source-package.md)、[架构](docs/architecture.md)、[CLI Harness](harness/README.md)。
 
 - [案例手册](docs/casebook.md)、[历史验证记录](docs/validation.md)、[Skill 对照实验](docs/skills-pilot-analysis.md)。
 - [Skill 设计与技术报告](docs/skills-technical-report.md)、[受限规划](docs/studio-constrained-planner.md)、[Skill 选择](docs/studio-skill-selection.md)、[单公式交接](docs/studio-formula-handoff.md)。

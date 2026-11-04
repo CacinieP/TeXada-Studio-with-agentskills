@@ -2,6 +2,8 @@
 
 更新：2026-09-29。
 
+本文保留该日期的设计说明与实验边界。当前版本的 Web UI、OCR 输入路线、TeX 扫描器与 Skill 加载范围见 [当前 AgentSkills 使用指南](agent-skills.md)；历史限制不应作为当前功能的判断依据。
+
 [架构](architecture.md) · [案例与命令](casebook.md) · [验证记录](validation.md)
 
 ## 问题与设计

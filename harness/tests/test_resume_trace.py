@@ -38,7 +38,14 @@ class ProviderDouble:
     repair_table = repair_formula
 
 
-def formula(latex="x+"):
+# This source has no deterministic rule/blocker; provider-path tests isolate
+# journaling from the separately tested conservative mutation guard.
+PROVIDER_SOURCE = r"\sin(x"
+PROVIDER_CANDIDATE = r"\sin(x)"
+TEST_SCOPE = {"allowed": True, "reason": "test_authorized_scope", "method": "test"}
+
+
+def formula(latex=PROVIDER_SOURCE):
     return {"id": "f-1", "type": "formula", "data": {"latex": latex}}
 
 
@@ -128,6 +135,17 @@ class ResumeTest(unittest.TestCase):
             changed_environment = pipeline.node_identity(node, provider)
         self.assertNotEqual(before[1], changed_environment[1])
 
+    def test_repair_policy_changes_invalidate_context_without_changing_input(self):
+        node, provider = formula("x"), ProviderDouble()
+        before = pipeline.node_identity(node, provider)
+        real_hash = pipeline._file_sha256
+        def changed_policy(path):
+            return "changed-policy" if str(path).endswith("formula_repair.py") else real_hash(path)
+        with patch.object(pipeline, "_file_sha256", side_effect=changed_policy):
+            after = pipeline.node_identity(node, provider)
+        self.assertEqual(before[0], after[0])
+        self.assertNotEqual(before[1], after[1])
+
     def test_crop_bytes_change_input_hash_without_exposing_path(self):
         with tempfile.TemporaryDirectory() as directory:
             crop = Path(directory) / "private-crop.bin"
@@ -180,38 +198,45 @@ class ResumeTest(unittest.TestCase):
         for failure_reason in sorted(pipeline.TRANSIENT_PROVIDER_FAILURES):
             with self.subTest(reason=failure_reason), tempfile.TemporaryDirectory() as directory:
                 sample, journal = Path(directory) / "sample", str(Path(directory) / "journal")
-                save_layout(sample, [formula("x+")])
-                provider = ProviderDouble([None, "x"], model_calls=1)
+                save_layout(sample, [formula()])
+                provider = ProviderDouble(model_calls=1)
                 original_repair = provider.repair_formula
+                recovered = False
                 def repair(node):
-                    candidate = original_repair(node)
-                    provider.last_trace["reason"] = failure_reason if candidate is None else "ok"
-                    return candidate
+                    original_repair(node)
+                    provider.last_trace["reason"] = "ok" if recovered else failure_reason
+                    return PROVIDER_CANDIDATE if recovered else None
                 provider.repair_formula = repair
                 with patch.object(pipeline, "run_verify", side_effect=[
                         {"status": "RETRY", "reason": "parse_error"},
-                        {"status": "RETRY", "reason": "parse_error"}, {"status": "OK"}]):
+                        {"status": "RETRY", "reason": "parse_error"}, {"status": "OK"}]) as check, patch.object(
+                        pipeline, "assess_candidate", return_value=TEST_SCOPE) as scope:
                     pipeline.run(str(sample), journal, provider, run_id="failed")
+                    recovered = True
                     pipeline.run(str(sample), journal, provider, run_id="recovered")
                     pipeline.run(str(sample), journal, provider, run_id="reused")
-                self.assertEqual(provider.calls, 2)
+                failed_attempts = 2 if failure_reason in {"bad_candidate_json", "bad_candidate_type", "empty_candidate"} else 1
+                self.assertEqual(provider.calls, failed_attempts + 1)
+                self.assertEqual(check.call_count, 3)
+                scope.assert_called_once_with(PROVIDER_SOURCE, PROVIDER_CANDIDATE)
                 events = state.load_events(journal)
                 terminals = [e for e in events if e.get("action") == "TERMINAL"]
                 self.assertFalse(terminals[0]["resumable"])
                 self.assertTrue(terminals[1]["resumable"])
                 self.assertEqual(terminals[0]["input_sha256"], terminals[1]["input_sha256"])
                 self.assertEqual(terminals[0]["context_sha256"], terminals[1]["context_sha256"])
-                self.assertEqual(sum(e["model_calls"] for e in terminals), 2)
+                self.assertEqual([e["model_calls"] for e in terminals], [failed_attempts, 1])
                 rejected = [e for e in events if e.get("action") == "CANDIDATE_REJECTED"]
                 self.assertEqual(rejected[0]["reason"], failure_reason)
                 self.assertEqual([e["reused_run_id"] for e in events if e.get("action") == "SKIP"], ["recovered"])
 
     def test_exhausted_syntax_retries_and_human_boundaries_remain_resumable(self):
-        for checks, candidates in (([{"status": "RETRY", "reason": "syntax"}] * 3, ["a+", "b+"]),
+        for checks, candidates in (([{"status": "RETRY", "reason": "syntax"}] * 3,
+                                    [PROVIDER_SOURCE, " " + PROVIDER_SOURCE]),
                                     ([{"status": "NEEDS_HUMAN", "reason": "bad_input"}], [])):
             with self.subTest(checks=checks), tempfile.TemporaryDirectory() as directory:
                 sample, journal = Path(directory) / "sample", str(Path(directory) / "journal")
-                save_layout(sample, [formula("x+")])
+                save_layout(sample, [formula()])
                 provider = ProviderDouble(candidates)
                 with patch.object(pipeline, "run_verify", side_effect=checks) as check:
                     pipeline.run(str(sample), journal, provider, run_id="human")
@@ -239,22 +264,25 @@ class ResumeTest(unittest.TestCase):
 
 class CandidateTraceTest(unittest.TestCase):
     def test_two_candidates_preserve_rejection_acceptance_and_model_counts(self):
-        provider = ProviderDouble(["x+", "x"], model_calls=1)
-        node = formula("broken+")
+        provider = ProviderDouble([PROVIDER_SOURCE, PROVIDER_CANDIDATE], model_calls=1)
+        node = formula()
         original_node = copy.deepcopy(node)
         checks = [{"status": "RETRY", "reason": "original_error"},
                   {"status": "RETRY", "reason": "still_broken"}, {"status": "OK", "reason": "parsed"}]
-        with tempfile.TemporaryDirectory() as directory, patch.object(pipeline, "run_verify", side_effect=checks):
+        with tempfile.TemporaryDirectory() as directory, patch.object(pipeline, "run_verify", side_effect=checks), \
+                patch.object(pipeline, "assess_candidate", return_value=TEST_SCOPE):
             self.assertEqual(pipeline.process_formula(directory, "d", node, provider, run_id="r"), "OK")
             events = state.load_events(directory)
-        self.assertEqual([e["action"] for e in events], ["CHECK", "PROVIDER_START", "PROVIDER_RESULT", "CHECK",
-            "CANDIDATE_REJECTED", "PROVIDER_START", "PROVIDER_RESULT", "CHECK", "CANDIDATE_ACCEPTED", "TERMINAL"])
+        self.assertEqual([e["action"] for e in events], ["CHECK", "PROVIDER_START", "PROVIDER_RESULT", "CHECK", "CANDIDATE_SCOPE",
+            "CANDIDATE_REJECTED", "PROVIDER_START", "PROVIDER_RESULT", "CHECK", "CANDIDATE_SCOPE",
+            "CANDIDATE_ACCEPTED", "TERMINAL"])
         self.assertEqual([(e["stage"], e["checker_reason"]) for e in events if e["action"] == "CHECK"],
                          [("original", "original_error"), ("candidate", "still_broken"), ("candidate", "parsed")])
-        self.assertEqual([e["candidate"] for e in events if e["action"] == "PROVIDER_RESULT"], ["x+", "x"])
+        self.assertEqual([e["candidate"] for e in events if e["action"] == "PROVIDER_RESULT"],
+                         [PROVIDER_SOURCE, PROVIDER_CANDIDATE])
         terminal = events[-1]
-        self.assertEqual((terminal["attempts"], terminal["model_calls"], terminal["latex"]), (2, 2, "x"))
-        self.assertEqual(terminal["original"], "broken+")
+        self.assertEqual((terminal["attempts"], terminal["model_calls"], terminal["latex"]), (2, 2, PROVIDER_CANDIDATE))
+        self.assertEqual(terminal["original"], PROVIDER_SOURCE)
         self.assertTrue(terminal["review_required"])
         self.assertNotIn("adopted", terminal)
         self.assertTrue(all(e["run_id"] == "r" for e in events))
@@ -262,12 +290,14 @@ class CandidateTraceTest(unittest.TestCase):
         self.assertEqual(node, original_node)
 
     def test_fixture_candidates_have_zero_model_calls(self):
-        provider = ProviderDouble(["x"], model_calls=0)
+        provider = ProviderDouble([PROVIDER_CANDIDATE], model_calls=0)
         with tempfile.TemporaryDirectory() as directory, patch.object(
-                pipeline, "run_verify", side_effect=[{"status": "RETRY"}, {"status": "OK"}]):
+                pipeline, "run_verify", side_effect=[{"status": "RETRY"}, {"status": "OK"}]), patch.object(
+                pipeline, "assess_candidate", return_value=TEST_SCOPE):
             pipeline.process_formula(directory, "d", formula(), provider)
             terminal = state.load_events(directory)[-1]
         self.assertEqual(terminal["model_calls"], 0)
+        self.assertEqual(provider.calls, 1)
         self.assertEqual(terminal["attempts"], 1)
         self.assertTrue(terminal["model_calls_known"])
 
@@ -288,7 +318,7 @@ class CandidateTraceTest(unittest.TestCase):
         self.assertEqual(events[-1]["provider_reason"], "provider_exception")
 
     def test_environment_failure_rejects_candidate_without_second_provider_call(self):
-        provider = ProviderDouble(["x", "y"], model_calls=1)
+        provider = ProviderDouble([PROVIDER_CANDIDATE, "unused"], model_calls=1)
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 pipeline, "run_verify", side_effect=[{"status": "RETRY"},
                                                      {"status": "NEEDS_ENV", "reason": "missing_parser"}]):
@@ -298,17 +328,18 @@ class CandidateTraceTest(unittest.TestCase):
         self.assertEqual(events[-2]["action"], "CANDIDATE_REJECTED")
         self.assertEqual(events[-2]["checker_status"], "NEEDS_ENV")
         self.assertFalse(events[-1]["repaired"])
-        self.assertEqual(events[-1]["latex"], "x+")
+        self.assertEqual(events[-1]["latex"], PROVIDER_SOURCE)
         self.assertEqual(events[-1]["reason"], "env: missing_parser")
 
     def test_exhausted_candidates_remain_visible_and_original_is_preserved(self):
-        provider = ProviderDouble(["a+", "b+"], model_calls=0)
+        candidates = [PROVIDER_SOURCE, " " + PROVIDER_SOURCE]
+        provider = ProviderDouble(candidates, model_calls=0)
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 pipeline, "run_verify", return_value={"status": "RETRY", "reason": "parse_error"}):
-            self.assertEqual(pipeline.process_formula(directory, "d", formula("original+"), provider), "NEEDS_HUMAN")
+            self.assertEqual(pipeline.process_formula(directory, "d", formula(), provider), "NEEDS_HUMAN")
             events = state.load_events(directory)
-        self.assertEqual([e["candidate"] for e in events if e["action"] == "CANDIDATE_REJECTED"], ["a+", "b+"])
-        self.assertEqual(events[-1]["latex"], "original+")
+        self.assertEqual([e["candidate"] for e in events if e["action"] == "CANDIDATE_REJECTED"], candidates)
+        self.assertEqual(events[-1]["latex"], PROVIDER_SOURCE)
         self.assertEqual(events[-1]["attempts"], 2)
 
     def test_invalid_candidate_response_is_preserved_with_bounded_trace(self):
@@ -320,16 +351,22 @@ class CandidateTraceTest(unittest.TestCase):
                     "usage": {"prompt_tokens": 12, "completion_tokens": 20, "total_tokens": 32}}
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 pipeline, "run_verify", return_value={"status": "RETRY", "reason": "parse_error"}), patch.object(
-                provider, "_chat", side_effect=invalid_response):
+                provider, "_chat", side_effect=invalid_response) as chat:
             pipeline.process_formula(directory, "d", formula(), provider)
             events = state.load_events(directory)
-        result = next(e for e in events if e["action"] == "PROVIDER_RESULT")
-        self.assertEqual(result["reason"], "bad_candidate_json")
-        self.assertEqual(result["raw_candidate_response"], content[:8192])
-        self.assertTrue(result["response_truncated"])
-        self.assertEqual(result["usage"]["total_tokens"], 32)
+        results = [e for e in events if e["action"] == "PROVIDER_RESULT"]
+        self.assertEqual(len(results), 2)
+        for result in results:
+            self.assertEqual(result["reason"], "bad_candidate_json")
+            self.assertEqual(result["raw_candidate_response"], content[:8192])
+            self.assertTrue(result["response_truncated"])
+            self.assertEqual(result["usage"]["total_tokens"], 32)
+        self.assertEqual(chat.call_count, 2)
+        feedback = json.loads(chat.call_args_list[1].args[0])["repair_context"]
+        self.assertEqual(feedback["rejection_reason"], "bad_candidate_json")
         self.assertEqual(events[-1]["provider_reason"], "bad_candidate_json")
-        self.assertEqual(events[-1]["model_calls"], 1)
+        self.assertEqual(events[-1]["model_calls"], 2)
+        self.assertFalse(events[-1]["resumable"])
 
     def test_missing_formula_data_is_not_sent_to_provider(self):
         for data in (None, [], {}, {"other": "not latex"}):

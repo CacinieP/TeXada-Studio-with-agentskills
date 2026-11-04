@@ -4,6 +4,8 @@
 
 ### Added
 
+- Refresh the bilingual repository entry with a current synthetic-workspace screenshot, local deployment/troubleshooting guides and source distribution checksums with per-file manifests.
+- Add a Studio operation Skill and current AgentSkills guide; align formula, table, OCR-input and reporting instructions with the local Web UI and its review/version boundaries.
 - Fresh local verification records for 2026-10-15, with installation and model-switch troubleshooting.
 
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
@@ -23,10 +25,12 @@
 
 ### Fixed
 
+- Prefer source-preserving deterministic formula repairs inspired by Math Agent; reject mathematical drift, retain unsupported/ambiguous input, and carry bounded rejection feedback across model retries. Apply the same scope policy in Studio, the constrained planner and CLI, with policy hashes bound to resume identity.
 - Clear stale PDF pages and compiler logs when the source changes, and keep Safari IME confirmation from executing command-palette actions.
 - Use TeX lexical context for single-formula handoffs and reject candidates that consume or escape the existing closing delimiter.
 - Isolate damaged task history and reject incomplete candidate bindings or malformed review decisions without server errors.
 - Classify invalid reference totals as input errors before attempting table repair.
+- Run the JavaScript behavior and LaTeX cleanup suites in CI alongside the existing Python regressions.
 - Preserve the editor until the user adopts a reviewed candidate; reset failed controls and discard stale file or preview responses.
 - Fix empty diff panels, stale comparisons, hidden collapse controls and preview resizing.
 - Reject partial LaTeX parses and malformed checker input; handle missing dependencies without issuing repair requests.

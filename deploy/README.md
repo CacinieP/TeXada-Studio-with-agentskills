@@ -1,66 +1,93 @@
-# 部署与维护
+# 运行、部署与维护
 
-当前部署面向可信用户：一个 Uvicorn worker、一个共享 token。TeX 编译尚无沙箱，多用户隔离也未实现；信任边界见 [SECURITY.md](../SECURITY.md)。
+当前默认交付是本地单用户 WebUI：在自己的电脑运行 FastAPI，用浏览器编辑 `.tex`，连接同机模型服务。CLI 布局树检查是独立入口。源码包不包含 Python 环境、模型权重、TeX 工具或用户数据，不是安装即用的桌面二进制应用。
 
-## 准备候选版本
+## 准备独立目录
 
-使用已审阅的提交，在目标机器的用户目录建立独立目录和虚拟环境。需要 SSH 传输时，在本地仓库根目录执行；将 `texada-node` 换成自己的 SSH 别名：
+使用已审阅的提交或源码包建立新目录，保留旧版本以便回滚。需要把已提交源码传到自己管理的另一台机器时，可在仓库根目录执行；将 `texada-node` 换成自己的 SSH 别名：
 
 ```bash
 git archive HEAD | ssh texada-node \
   'mkdir ~/texada-candidate && tar -xf - -C ~/texada-candidate'
 ```
 
-目录已存在时 `mkdir` 会失败，避免覆盖旧部署。此方式只传输已提交源码；配置和运行数据另行管理。
+目录已存在时 `mkdir` 会失败，避免覆盖旧部署。此方式不传输未提交改动、配置或运行数据。
 
-在目标机器执行：
+在目标项目目录使用 Python 3.11+：
 
 ```bash
-cd ~/texada-candidate
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r webui/requirements.txt
-python -m pip check
+.venv/bin/python -m pip install -r webui/requirements.txt
+.venv/bin/python -m pip check
+.venv/bin/python scripts/run-local-studio.py --check
 ```
 
-使用 Python 3.11+，已验证版本为3.13。仅编辑和分析时，到此已具备 Python 环境。编译与预览另需本机依赖：
+`--check` 离线检查依赖和配置，不连接模型、不启动服务、不写入会话。编辑、文档管理和确定性检查不需要模型；模型候选及图片识别另需可用的本机服务。当前实机验收以 macOS 为主，路径中的 Windows/Linux 分支不代表完成了这些平台的实机测试。
+
+PDF 编译与导入还需要 Tectonic、Poppler 和预先准备的 TeX 资源。`TECTONIC` 可以指定已有编译器路径。先执行 `.venv/bin/python scripts/prepare-local-tex.py` 离线检查固定样本；需要首次联网准备时，再显式加 `--download-resources`。Studio 正常编译使用 `--untrusted --only-cached`，缺缓存会提示失败。字体及首次准备范围见[本地使用指南](../docs/local-studio.md#首次准备与离线使用)。
+
+## 默认本地启动
+
+macOS 可双击 `scripts/start-local-studio.command`，或从项目目录运行：
 
 ```bash
-"${TECTONIC:-tectonic}" --version
-pdftoppm -v
+.venv/bin/python scripts/run-local-studio.py
 ```
 
-`TECTONIC` 可指向用户目录中的编译器。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。MiniCPM-V 4.7-1B API profile 通过 `https://api.modelbest.cn/v1` 请求候选，部署端只需网络与 API 配置；本机量化模型服务另行准备和验收。
-
-## 配置和启动
+默认监听 `127.0.0.1:8888` 并打开浏览器。使用已部署的本机模型时可明确指定：
 
 ```bash
-cp .env.example .env
+.venv/bin/python scripts/run-local-studio.py \
+  --base-url http://127.0.0.1:18081/v1 \
+  --model MiniCPM-V-4.7-1B --no-auto-model
 ```
 
-编辑 `.env` 中的非敏感配置：设置 `VLM_BASE_URL=https://api.modelbest.cn/v1`、`VLM_MODEL=MiniCPM-V-4.7-1B`、`SKILL_MODE=on` 和需要时的 `TECTONIC` 路径。`DEMO_TOKEN` 和 `VLM_API_KEY`（或 `TEXADA_OPENAI_API_KEY`）通过当前进程环境提供；示例中的凭据占位保持注释。token 可用 `python -c 'import secrets; print(secrets.token_urlsafe(32))'` 生成。若沿用旧 `.env`，删除空的凭据赋值，避免加载配置时覆盖已有环境变量。
+只接受 `http://localhost`、`127.0.0.1` 或 `[::1]` 的 OpenAI-compatible `/v1` 服务，模型名必须与该服务实际标签一致。本地请求绕过代理、拒绝重定向，不读取或发送云 API Key，也不自动回退到其他服务。指定模型不可用时，保留配置并提示连接问题；不要据此切换成云服务。
+
+自动启动需要本机已有 `llama-server`、GGUF 与视觉 projector；启动器不下载它们。退出只停止自己启动的模型，不关闭已有 Ollama 或其他服务。安装与可选路径参数见[本机模型连接](../docs/local-studio.md#本机模型连接)。
+
+启动器生成私密访问 token，关闭 Uvicorn 访问日志，只把入口写入受限权限的 `session.json`。同一数据目录已有运行会话时重新打开该会话。需要选择目录、端口或不自动打开浏览器时：
 
 ```bash
-set -a
-. ./.env
-set +a
-: "${DEMO_TOKEN:?请先配置 token}"
+.venv/bin/python scripts/run-local-studio.py \
+  --state-dir ./state/local-profile --port 8890 --no-browser
+```
+
+私密 URL、token 和 `session.json` 不应进入截图、报告或源码包。此访问控制不是多用户账号系统；远程共享需另行设计权限与隔离，信任边界见[安全说明](../SECURITY.md)。
+
+## 数据、升级与回滚
+
+默认数据位于系统用户数据目录；`--state-dir` 或 `TEXADA_STUDIO_STATE_DIR` 可另选位置。直接启动 Uvicorn 且未配置目录时才使用仓库 `state/studio/`，不要把这个兼容默认值当成本地启动器的数据位置。
+
+1. 升级前保存当前文档，等待任务结束并停止服务，再备份实际用户数据目录。
+2. 备份包括 `documents/`（含历史与删除副本）、`jobs/`、`imports/` 与本机模型设置；来源文件和事件可能含私人内容。不要把当前 `session.json` 作为普通报告分发。
+3. 在独立候选目录安装依赖，用自己的新测试数据目录验收。保留旧源码、虚拟环境和原数据备份，不覆盖运行中的版本。
+4. 验收后仅迁移需要且兼容的数据。回滚前另存新版本产生的文档，再启动旧目录和对应环境。
+
+完成任务可从界面历史恢复候选，采用/拒绝会记录在任务中；采用只更新编辑器，保存才写入文档。保存、改名、删除和同名导入有版本检查，发现冲突需重开核对。中断任务保留已有事件但不继续后台执行，应重新发起。完整数据位置见[本地数据与恢复](../docs/local-studio.md#本地数据与恢复)。
+
+## 验收候选版本
+
+- 先运行[无需模型的 CLI 样本](../harness/README.md#跑通一个样本)和[开发回归](../docs/local-studio.md#回归测试)。截至 `ceae9a7` 的本轮记录为 420 项 Python 测试通过；它们不是模型准确率评测。
+- 用 `math-clean.tex` 检查加载、保存、刷新、编译和多页预览；更改内容后确认旧 PDF 不再代表当前版本。
+- 用 `math-delimiters.tex` 检查确定性候选、diff、拒绝与采用，再保存和刷新。修复成功可能为零模型请求，不能把它记成实际推理。
+- 使用自己有权处理的固定图片/PDF，单独验证本机视觉端点、来源页码和新文档审阅；CLI `layout.json` 与公式文本修复不替代 OCR 验收。
+
+[公式质量记录](../docs/formula-repair-quality.md)记录本轮 20 个合成案例的保真范围和本机对照；[较早本地验收](../docs/local-studio-acceptance.md)与[历史验证](../docs/validation.md)仅证明各自日期的版本。缺资源、模型或编译失败时，保留具体状态，不以另一种执行模式的结果替代。
+
+## 旧云 API 兼容入口
+
+`scripts/run-minicpm-v47-studio.sh` 是需要明确选择的旧 API profile，设置 `TEXADA_LOCAL_MODE=0`，默认使用 `https://api.modelbest.cn/v1` 与 `MiniCPM-V-4.7-1B`。它与上述本地启动器不同，不提供“无云端请求”的保证；公式文本会发送到配置的端点。只有在已有授权的云配置下使用。
+
+通过当前进程环境提供自己的 `DEMO_TOKEN` 和 `VLM_API_KEY`（或兼容的 `TEXADA_OPENAI_API_KEY`），不把值写进文档、源码或共享命令记录。配置好后可运行：
+
+```bash
 export TEXADA_STUDIO_PYTHON="$PWD/.venv/bin/python"
+export SKILL_MODE=on
+export TEXADA_STUDIO_STATE_DIR="$PWD/state/legacy-api-profile"
 ./scripts/run-minicpm-v47-studio.sh --workers 1
 ```
 
-启动器显式选择 `MiniCPM-V-4.7-1B`，默认使用 ModelBest API，并在本机 `127.0.0.1:8888` 提供 Studio。通过 SSH 隧道或已配置的 HTTPS 代理访问 `/studio?token=你的token`，访问凭据仅保存在私密配置中。代理配置与日志处理见安全说明，模型请求契约见 [4.7 适配说明](../docs/minicpm-v47.md)。
+需要覆盖端点时在启动前明确设置 `VLM_BASE_URL`；模型 profile 固定选择 MiniCPM-V 4.7 1B。`.env.example` 只提供配置示例，启动脚本不会自动读取 `.env`。这个旧 profile 不提供云 OCR；需要图片/PDF 导入时，使用上述本地启动器和已验证的本机视觉服务，分别运行和验收。
 
-使用其他本机端口或现有本机模型服务时，显式设置 `VLM_BASE_URL`、`VLM_MODEL` 和 `VLM_API_KEY`，再直接运行 `python -m uvicorn app:app --app-dir webui --host 127.0.0.1 --port 你的端口 --workers 1`。服务根地址或以 `/v1` 结尾的地址均可使用，端点须支持 OpenAI-compatible Chat Completions。
-
-需要保持终端会话时可先运行 `tmux new -s texada`，在会话内执行上述启动命令；`Ctrl-B D` 脱离，`tmux attach -t texada` 返回。停止前等待任务结束，再按 `Ctrl-C`。
-
-## 验收、升级和回滚
-
-1. 记录提交号与依赖版本，先跑 [README](../README.md#1-先跑无需模型的样本) 的 fixture。
-2. 用 `math-clean.tex` 核对样本加载、分析和预览，再用 `math-delimiters.tex` 验证模型候选、diff、采用与导出，记录实际结果。
-3. 升级前停止服务，备份原目录的 `state/`。上传文件在 `state/studio/documents/`，任务结果在 `state/studio/jobs/`；它们由 Git 忽略。
-4. 保留旧源码与虚拟环境，从候选目录启动服务。仅迁移需要且兼容的数据。
-5. 回滚时先另存候选版本产生的新数据，再恢复旧目录、旧环境和备份。
-
-正在执行的任务依赖进程内存；重启后需重新发起，完成任务的磁盘记录仍可查询。Monaco 资源已打包；离线部署还需预备本机模型、字体和 TeX 包，仪表盘 `/` 的 KaTeX 仍来自 CDN。API profile 需要网络。常见问题见[排错说明](../docs/troubleshooting.md)。
+手动启动 WebUI 或经 SSH 隧道、HTTPS 反向代理访问时，仍只使用一个 worker，并处理 URL token 的历史和日志泄漏问题。Tectonic 的 `--untrusted` 不是操作系统隔离；当前服务面向个人可信文档，没有多用户权限、配额或任务队列。详细边界见[安全说明](../SECURITY.md)，旧模型请求契约见[4.7 适配说明](../docs/minicpm-v47.md)。常见故障见[排错说明](../docs/troubleshooting.md)。

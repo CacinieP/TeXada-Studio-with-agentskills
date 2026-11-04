@@ -287,6 +287,7 @@ from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
 from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
+from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
@@ -474,7 +475,10 @@ def _formula_problems(content: str, emit=None):
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=vj)
         if vj.get("status") != "OK":
-            problems.append({**node, "type": "formula", "status": vj["status"], "reason": vj.get("reason", "")})
+            blocker = repair_blocker(node["latex"]) if vj.get("status") == "RETRY" else None
+            problems.append({**node, "type": "formula", "status": "NEEDS_HUMAN" if blocker else vj["status"],
+                             "reason": ("无法确定语法修复，保留原文供人工核对：" + blocker) if blocker else vj.get("reason", ""),
+                             **({"repair_blocker": blocker} if blocker else {})})
     for index, diagnostic in enumerate(parsed["diagnostics"]):
         problems.append({**diagnostic, "id": f"math-boundary-{index}", "type": "formula",
                          "status": "NEEDS_HUMAN", "latex": "",
@@ -579,6 +583,50 @@ def _analyze(content: str):
     return fp + tp
 
 
+def _formula_repair_context(attempt, check, previous_candidate=None, rejection_reason=None):
+    return {"attempt": attempt,
+            "checker": {"status": check.get("status", "RETRY"), "reason": check.get("reason", "")},
+            "previous_candidate": previous_candidate, "rejection_reason": rejection_reason}
+
+
+def _formula_rejection_feedback(outcome):
+    reason, scope = outcome["reason"], outcome.get("scope", {})
+    if "token_index" in scope:
+        reason += (f"; token {scope['token_index']}: "
+                   f"{str(scope.get('original_token'))[:96]!r} -> {str(scope.get('candidate_token'))[:96]!r}")
+    return reason[:512]
+
+
+def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, remaining=None, allow_math_whitespace=False):
+    """The same verifier and a source-preservation guard must both accept."""
+    try:
+        valid = (isinstance(candidate, str) and bool(candidate.strip()) and len(candidate) <= 32768
+                 and not any((ord(c) < 32 or ord(c) == 127)
+                             and not (allow_math_whitespace and c in "\n\r\t") for c in candidate)
+                 and bool(candidate.encode("utf-8")))
+    except UnicodeEncodeError:
+        valid = False
+    if not valid:
+        check = {"status": "NEEDS_HUMAN", "reason": "invalid_candidate"}
+        emit("CANDIDATE_CHECK", node_id=node_id, attempt=attempt, candidate=candidate,
+             check=check, executed=False)
+        return {"accepted": False, "check": check, "reason": "invalid_candidate"}
+    check = _verify_formula(candidate)
+    emit("CANDIDATE_CHECK", node_id=node_id, attempt=attempt, candidate=candidate, check=check)
+    if check.get("status") == "NEEDS_ENV":
+        return {"accepted": False, "check": check, "reason": "checker_unavailable"}
+    if remaining is not None and remaining() <= 0:
+        return {"accepted": False, "check": check, "reason": "planner_deadline_exhausted"}
+    scope = assess_candidate(original, candidate)
+    emit("CANDIDATE_SCOPE", node_id=node_id, attempt=attempt, candidate=candidate, scope=scope)
+    if remaining is not None and remaining() <= 0:
+        return {"accepted": False, "check": check, "reason": "planner_deadline_exhausted"}
+    accepted = check.get("status") == "OK" and scope.get("allowed") is True
+    reason = ("checker_accepted_not_user_adopted" if accepted else
+              scope.get("reason", "mutation_scope_rejected") if scope.get("allowed") is not True else "checker_rejected")
+    return {"accepted": accepted, "check": check, "scope": scope, "reason": reason}
+
+
 def _apply_fixes(content: str, log, *, provider=None, emit=None):
     provider = provider if provider is not None else PROVIDER
     if provider is None:
@@ -595,41 +643,75 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
             continue
         if p["status"] != "RETRY":
             log.append(f"[doc-formula-verify] {p['id']} 需要人工审阅，保留原文")
-            emit("REPAIR_SKIPPED", node_id=p["id"], reason="needs_human")
+            emit("REPAIR_SKIPPED", node_id=p["id"], reason=p.get("repair_blocker") or "needs_human")
             continue
         latex = p["latex"]
+        blocker = repair_blocker(latex)
+        if blocker:
+            log.append(f"[doc-formula-verify] {p['id']} 无法确定缺失内容，保留原文供人工核对：{blocker}")
+            emit("REPAIR_SKIPPED", node_id=p["id"], reason=blocker)
+            continue
         fixed, ok = None, False
-        for attempt in (1, 2):
+        previous_candidate, rejection_reason = None, None
+        feedback_check = {"status": p["status"], "reason": p.get("reason", "")}
+        seen = set()
+        deterministic = deterministic_candidate(latex)
+        if deterministic is not None:
+            seen.add(deterministic)
+            emit("DETERMINISTIC_REPAIR", node_id=p["id"], original=latex,
+                 candidate=deterministic, model_calls=0)
+            outcome = _check_formula_candidate(latex, deterministic, node_id=p["id"],
+                                               attempt=0, emit=emit, allow_math_whitespace=True)
+            emit("CANDIDATE_ACCEPTED" if outcome["accepted"] else "CANDIDATE_REJECTED",
+                 node_id=p["id"], attempt=0, candidate=deterministic,
+                 reason=outcome["reason"], check=outcome["check"], provider="deterministic-formula", model_calls=0)
+            if outcome["accepted"]:
+                fixed, ok = deterministic, True
+                log.append(f"[doc-formula-verify] {p['id']} 确定性语法修复 → 同一检查器回判 ✓ ：{fixed}")
+            elif outcome["check"].get("status") == "NEEDS_ENV":
+                verifier_unavailable = True
+                log.append(f"[doc-formula-verify] {p['id']} 候选回判检查器不可用，停止尝试并保留原文")
+            else:
+                previous_candidate, rejection_reason = deterministic, _formula_rejection_feedback(outcome)
+                feedback_check = outcome["check"]
+        for attempt in (() if ok or verifier_unavailable else (1, 2)):
             log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 模型文本修复（第 {attempt} 次）")
-            emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex)
-            cand = provider.repair_formula({"id": p["id"], "data": {"latex": latex}})
+            context = _formula_repair_context(attempt, feedback_check, previous_candidate, rejection_reason)
+            emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex, repair_context=context)
+            cand = provider.repair_formula({"id": p["id"], "data": {"latex": latex, "repair_context": context}})
             provider_trace = getattr(provider, "last_trace", {})
             if not isinstance(provider_trace, dict):
                 provider_trace = {"reason": "trace_unavailable", "model_calls": None}
             emit("PROVIDER_RESULT", node_id=p["id"], attempt=attempt,
                  candidate=cand, provider_trace=provider_trace)
             if not isinstance(cand, str) or not cand.strip():
-                log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选")
+                previous_candidate = None
+                rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
+                log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选：{rejection_reason}")
                 emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
-                     candidate=cand, reason="no_valid_candidate")
+                     candidate=cand, reason=rejection_reason)
                 continue
-            vj = _verify_formula(cand)
-            emit("CANDIDATE_CHECK", node_id=p["id"], attempt=attempt, candidate=cand, check=vj)
-            if vj.get("status") == "NEEDS_ENV":
+            if cand in seen:
+                emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
+                     candidate=cand, reason="repeated_candidate")
+                log.append(f"[doc-formula-verify] {p['id']} 重复候选，停止尝试并保留原文")
+                break
+            seen.add(cand)
+            outcome = _check_formula_candidate(latex, cand, node_id=p["id"], attempt=attempt, emit=emit)
+            emit("CANDIDATE_ACCEPTED" if outcome["accepted"] else "CANDIDATE_REJECTED",
+                 node_id=p["id"], attempt=attempt, candidate=cand,
+                 reason=outcome["reason"], check=outcome["check"])
+            if outcome["check"].get("status") == "NEEDS_ENV":
                 verifier_unavailable = True
                 log.append(f"[doc-formula-verify] {p['id']} 候选回判检查器不可用，停止尝试并保留原文")
-                emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
-                     candidate=cand, reason="checker_unavailable", check=vj)
                 break
-            if vj.get("status") == "OK":
+            if outcome["accepted"]:
                 fixed, ok = cand, True
-                log.append(f"[doc-formula-verify] {p['id']} 修复 → SymPy 回判 ✓ ：{cand}")
-                emit("CANDIDATE_ACCEPTED", node_id=p["id"], attempt=attempt,
-                     candidate=cand, check=vj, meaning="checker_accepted_not_user_adopted")
+                log.append(f"[doc-formula-verify] {p['id']} 修复 → 同一检查器与来源范围回判 ✓ ：{cand}")
                 break
-            log.append(f"[doc-formula-verify] {p['id']} SymPy 拒绝：{vj.get('reason','')[:80]}")
-            emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
-                 candidate=cand, reason="checker_rejected", check=vj)
+            previous_candidate, rejection_reason = cand, _formula_rejection_feedback(outcome)
+            feedback_check = outcome["check"]
+            log.append(f"[doc-formula-verify] {p['id']} 候选拒绝：{rejection_reason}")
         if ok and fixed != latex:
             start, end = p.get("body_start"), p.get("body_end")
             if isinstance(start, int) and isinstance(end, int) and content[start:end] == latex:
@@ -675,10 +757,19 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
     if r"\begin{tabular}" in mask_opaque(content):
         nodes.append({"id": "table-document", "kind": "table", "line": 1, "document_text": content})
 
+    verifier_unavailable = False
+    formula_feedback = {}
+
     def check(node):
+        nonlocal verifier_unavailable
         if node["kind"] == "formula":
-            result = (_verify_formula(node["latex"]) if node.get("checkable", True) else
-                      {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")})
+            if verifier_unavailable:
+                result = {"status": "NEEDS_ENV", "reason": "checker_unavailable"}
+            else:
+                result = (_verify_formula(node["latex"]) if node.get("checkable", True) else
+                          {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")})
+            if result.get("status") == "NEEDS_ENV":
+                verifier_unavailable = True
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=result)
             return result
@@ -688,30 +779,83 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         return {"status": status, "problems": problems}
 
     def repair(node, timeout):
+        nonlocal verifier_unavailable
         if node["kind"] == "formula":
-            emit("PROVIDER_START", node_id=node["id"], attempt=node["attempts"], original=node["latex"])
-            repair_options = {"timeout": timeout}
+            original, attempt = node["latex"], node["attempts"]
+            feedback = formula_feedback.setdefault(node["id"], {
+                "previous_candidate": None, "rejection_reason": None, "seen": set()})
+            calls = 0
+
+            def finish(candidate, outcome, *, stop=False):
+                nonlocal verifier_unavailable
+                check_result = outcome["check"]
+                if check_result.get("status") == "NEEDS_ENV":
+                    verifier_unavailable = True
+                    stop = True
+                if outcome["reason"] == "planner_deadline_exhausted":
+                    stop = True
+                emit("CANDIDATE_ACCEPTED" if outcome["accepted"] else "CANDIDATE_REJECTED",
+                     node_id=node["id"], attempt=attempt, candidate=candidate,
+                     reason=outcome["reason"], check=check_result)
+                feedback.update(previous_candidate=candidate, rejection_reason=_formula_rejection_feedback(outcome), check=check_result)
+                edit = {"line": node["line"], "before": original, "after": candidate,
+                        "skill": "doc-formula-verify", "start": node["start"], "end": node["end"]}
+                return {"accepted": outcome["accepted"], "check": check_result,
+                        "edits": [edit] if outcome["accepted"] and candidate != original else [],
+                        "model_calls": calls, "stop": stop}
+
+            if verifier_unavailable:
+                return {"accepted": False, "check": {"status": "NEEDS_ENV", "reason": "checker_unavailable"},
+                        "model_calls": 0, "stop": True}
+            blocker = repair_blocker(original)
+            if blocker:
+                emit("REPAIR_SKIPPED", node_id=node["id"], reason=blocker, model_calls=0)
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": blocker},
+                        "model_calls": 0, "stop": True}
+            deterministic = deterministic_candidate(original) if attempt == 1 else None
+            if deterministic is not None:
+                feedback["seen"].add(deterministic)
+                emit("DETERMINISTIC_REPAIR", node_id=node["id"], original=original,
+                     candidate=deterministic, model_calls=0)
+                outcome = _check_formula_candidate(original, deterministic, node_id=node["id"],
+                                                   attempt=attempt, emit=emit, remaining=planner.remaining_seconds,
+                                                   allow_math_whitespace=True)
+                if outcome["accepted"] or outcome["check"].get("status") == "NEEDS_ENV" or planner.remaining_seconds() <= 0:
+                    return finish(deterministic, outcome)
+                emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt,
+                     candidate=deterministic, reason=outcome["reason"], check=outcome["check"],
+                     provider="deterministic-formula", model_calls=0)
+                feedback.update(previous_candidate=deterministic, rejection_reason=_formula_rejection_feedback(outcome), check=outcome["check"])
+            if planner.remaining_seconds() <= 0:
+                return finish(None, {"accepted": False, "check": {"status": "NEEDS_HUMAN"},
+                                     "reason": "planner_deadline_exhausted"})
+            context = _formula_repair_context(attempt, feedback.get("check", node.get("check", {})),
+                                              feedback["previous_candidate"], feedback["rejection_reason"])
+            emit("PROVIDER_START", node_id=node["id"], attempt=attempt, original=original, repair_context=context)
+            repair_options = {"timeout": min(timeout, planner.remaining_seconds())}
             if skill_selection:
                 repair_options["loaded_skill"] = node["loaded_skill"]
-            candidate = provider.repair_formula({"id": node["id"], "data": {"latex": node["latex"]}}, **repair_options)
-            emit("PROVIDER_RESULT", node_id=node["id"], attempt=node["attempts"], candidate=candidate,
-                 provider_trace=getattr(provider, "last_trace", {}))
+            calls = 1
+            candidate = provider.repair_formula({"id": node["id"], "data": {
+                "latex": original, "repair_context": context}}, **repair_options)
+            provider_trace = getattr(provider, "last_trace", {})
+            if not isinstance(provider_trace, dict):
+                provider_trace = {"reason": "trace_unavailable", "model_calls": None}
+            emit("PROVIDER_RESULT", node_id=node["id"], attempt=attempt, candidate=candidate,
+                 provider_trace=provider_trace)
             if planner.remaining_seconds() <= 0:
-                emit("CANDIDATE_REJECTED", node_id=node["id"], candidate=candidate, reason="planner_deadline_exhausted")
-                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "planner_deadline_exhausted"}}
-            valid_candidate = (isinstance(candidate, str) and bool(candidate.strip()) and len(candidate) <= 32768
-                               and not any(ord(c) < 32 or ord(c) == 127 for c in candidate))
-            result = _verify_formula(candidate) if valid_candidate else {"status": "RETRY"}
-            accepted = result.get("status") == "OK"
-            emit("CANDIDATE_CHECK", node_id=node["id"], candidate=candidate, check=result)
-            if planner.remaining_seconds() <= 0:
-                emit("CANDIDATE_REJECTED", node_id=node["id"], candidate=candidate, reason="planner_deadline_exhausted")
-                return {"accepted": False, "check": result}
-            emit("CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED", node_id=node["id"],
-                 candidate=candidate, reason="checker_accepted_not_user_adopted" if accepted else "checker_rejected")
-            edit = {"line": node["line"], "before": node["latex"], "after": candidate,
-                    "skill": "doc-formula-verify", "start": node["start"], "end": node["end"]}
-            return {"accepted": accepted, "check": result, "edits": [edit] if accepted and candidate != node["latex"] else []}
+                return finish(candidate, {"accepted": False, "check": {"status": "NEEDS_HUMAN"},
+                                          "reason": "planner_deadline_exhausted"})
+            if not isinstance(candidate, str) or not candidate.strip():
+                reason = provider_trace.get("reason") or "no_valid_candidate"
+                return finish(None, {"accepted": False, "check": node.get("check", {"status": "RETRY"}), "reason": reason})
+            if candidate in feedback["seen"]:
+                return finish(candidate, {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "repeated_candidate"},
+                                          "reason": "repeated_candidate"}, stop=True)
+            feedback["seen"].add(candidate)
+            outcome = _check_formula_candidate(original, candidate, node_id=node["id"],
+                                               attempt=attempt, emit=emit, remaining=planner.remaining_seconds)
+            return finish(candidate, outcome)
         edits, line_offsets, offset = [], [], 0
         lines = content.splitlines(keepends=True)
         for line in lines:

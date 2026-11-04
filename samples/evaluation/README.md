@@ -2,6 +2,8 @@
 
 27个合成输入直接调用公式和表格检查器：10个公式、17个表格。用于复现输入契约、数字处理和已知边界，运行时无需模型或网络。
 
+完整 Studio 修复流程另用 [formula-repair-quality.json](formula-repair-quality.json) 的 20 个合成案例评测，包含结构修复、正确输入、危险候选和歧义输入；入口、指标与模型验证边界见[修复质量记录](../../docs/formula-repair-quality.md)。
+
 ## 运行
 
 在仓库根目录、已激活的 Python 环境中执行：
