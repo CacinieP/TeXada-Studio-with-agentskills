@@ -69,6 +69,23 @@ def audit(rec: dict):
     totals = expected.get("totals", {})
     if not isinstance(totals, dict):
         return "NEEDS_HUMAN", "bad_expectation", "totals must be an object"
+    # Reference data is supplied by the caller, not extracted from the table.
+    # Validate it before table mismatches can trigger a model repair request.
+    parsed_totals = []
+    for key, want in totals.items():
+        if not isinstance(key, str):
+            return "NEEDS_HUMAN", "bad_expectation", "totals keys must be strings"
+        try:
+            idx = int(key.split(":", 1)[1])
+        except (ValueError, IndexError):
+            return "NEEDS_HUMAN", "bad_expectation", f"unparseable totals key: {key}"
+        if not key.startswith(("col:", "row:")):
+            return "NEEDS_HUMAN", "bad_expectation", f"unknown totals key: {key}"
+        if idx < 0:
+            return "NEEDS_HUMAN", "bad_expectation", f"negative totals index: {key}"
+        if to_decimal(want) is None:
+            return "NEEDS_HUMAN", "bad_expectation", f"total {key}: expected value must be a finite decimal number"
+        parsed_totals.append((key, idx, want))
 
     # 1) 行列数
     if "n_rows" in expected and len(rows) != expected["n_rows"]:
@@ -78,6 +95,12 @@ def audit(rec: dict):
         return "RETRY", "shape_mismatch", f"col count mismatch at rows {bad}"
     if any(len(row) != len(rows[0]) for row in rows):
         return "RETRY", "shape_mismatch", "rows must have a consistent column count"
+    # First allow repair of a missing row/column against an explicit target
+    # shape, then validate references before any numeric mismatch is reported.
+    for key, idx, _ in parsed_totals:
+        limit = len(rows[0]) if key.startswith("col:") else len(rows)
+        if idx >= limit:
+            return "NEEDS_HUMAN", "bad_expectation", f"total index {key} out of range"
 
     # 2) 表内自洽：识别合计行（A 线）
     total_labels = ("合计", "总计", "total")
@@ -107,17 +130,8 @@ def audit(rec: dict):
                 )
 
     # 3) 与基准对照（B 线）
-    for key, want in totals.items():
-        if not isinstance(key, str):
-            return "NEEDS_HUMAN", "bad_expectation", "totals keys must be strings"
-        try:
-            idx = int(key.split(":", 1)[1])
-        except (ValueError, IndexError):
-            return "NEEDS_HUMAN", "bad_expectation", f"unparseable totals key: {key}"
-
+    for key, idx, want in parsed_totals:
         if key.startswith("col:"):
-            if idx < 0 or idx >= len(rows[0]):
-                return "NEEDS_HUMAN", "bad_expectation", f"col index {idx} out of range"
             vals = []
             for r in data_rows:
                 d = to_decimal(r[idx]) if idx < len(r) else None
@@ -125,9 +139,7 @@ def audit(rec: dict):
                     return "RETRY", "bad_number", f"non-numeric cell in col {idx}: {r[idx]!r}"
                 vals.append(d)
             got = exact_sum(vals)
-        elif key.startswith("row:"):
-            if idx < 0 or idx >= len(rows):
-                return "NEEDS_HUMAN", "bad_expectation", f"row index {idx} out of range"
+        else:
             vals = []
             for c in rows[idx][1:]:
                 d = to_decimal(c)
@@ -135,11 +147,8 @@ def audit(rec: dict):
                     return "RETRY", "bad_number", f"non-numeric cell in row {idx}: {c!r}"
                 vals.append(d)
             got = exact_sum(vals)
-        else:
-            return "NEEDS_HUMAN", "bad_expectation", f"unknown totals key: {key}"
-
-        w = to_decimal(str(want))
-        if w is None or got is None:
+        w = to_decimal(want)
+        if got is None:
             return "RETRY", "bad_number", f"total {key}: expect={want!r} got_sum={got}"
         if got != w:
             return "RETRY", "sum_mismatch", f"total {key}: expect {w}, got {got}"

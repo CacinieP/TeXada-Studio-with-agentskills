@@ -77,6 +77,8 @@ function invalidatePreview(message = "内容已变化，请重新编译预览。
   ++previewEpoch; lastPreviewTag = null; previewBinding = null; previewPages = []; previewPage = 0;
   setPdfAvailable(false); $("pvPrevious").disabled = true; $("pvNext").disabled = true;
   $("pvPage").textContent = "—"; $("pvTabStatus").textContent = ""; $("pvStatus").textContent = message;
+  $("pvImgWrap").innerHTML = '<div class="preview-empty"><p>请编译当前文档，查看此版本的 PDF。</p></div>';
+  $("pvLog").textContent = ""; $("pvLog").classList.add("hide");
 }
 function applyTheme(theme) {
   const contrast=theme === 'midnight'?'midnight':'dark';
@@ -1044,7 +1046,8 @@ $('commandInput').addEventListener('input',()=>{selectedCommand=0;renderCommands
 $('commandList').addEventListener('click',event=>{const item=event.target.closest?.('[data-command-index]');if(item)executeCommand(item.dataset.commandIndex);});
 $('commandDialog').addEventListener('cancel',event=>{event.preventDefault();closeCommandPalette();});
 function handleGlobalEditorKey(event){
-  if(event.isComposing)return;
+  // Safari can dispatch the IME-confirming Enter after compositionend.
+  if(event.isComposing||(event.key==='Enter'&&event.keyCode===229))return;
   if(!commandPaletteOpen&&handleWorkspaceKeys(event))return;
   if(commandPaletteOpen){if(['ArrowDown','ArrowUp','Enter','Escape'].includes(event.key)){event.preventDefault();event.stopPropagation?.();if(event.key==='Escape')closeCommandPalette();else if(event.key==='Enter')executeCommand();else moveCommandSelection(event.key==='ArrowDown'?1:-1);}return;}
   const key=event.key?.toLowerCase();

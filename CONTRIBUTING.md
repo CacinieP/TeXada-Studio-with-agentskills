@@ -16,14 +16,14 @@ PR 写清具体问题、修改后的行为和实际运行的验证命令。UI �
 | 改动 | 验证入口 |
 | --- | --- |
 | Web API、静态资源 | `python -m unittest discover -s webui -p 'test_*.py' -v` |
-| Studio 交互 | `node webui/test_studio.cjs`；布局变更另做浏览器检查 |
+| Studio 交互 | `node webui/test_studio.cjs`、`node webui/test_latex.cjs`；布局变更另做浏览器检查 |
 | CLI 重试、状态、报告 | `python -m unittest discover -s harness/tests -p 'test_*.py' -v`；重放 fixture 首跑和续跑 |
 | 检查器契约 | [27 个案例](samples/evaluation/README.md)，保留新报告 |
 | 评估运行器 | `python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v` |
 | latex-cleanup | [该模块测试说明](skills/latex-cleanup/tests/CASES.md) |
 | 文档 | 核对命令、相对链接和中英文一致性 |
 
-依赖安装和完整测试列表见 [README](README.md#4-测试与评估复现)。当前没有自动 CI，PR 中需记录本地验证结果。
+依赖安装和完整测试列表见[本地指南](docs/local-studio.md#回归测试)。[Studio regression](.github/workflows/regression.yml) 会在 PR 和 main 推送时运行 Harness、Web UI、Scripts 的 Python 回归与语法检查；JavaScript 行为和 LaTeX cleanup 测试需另行本地运行，PR 中记录验证结果和未覆盖的环境。
 
 ## 样本与文档
 
