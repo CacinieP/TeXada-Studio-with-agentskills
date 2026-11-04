@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- Prefer source-preserving deterministic formula repairs inspired by Math Agent; reject mathematical drift, retain unsupported/ambiguous input, and carry bounded rejection feedback across model retries. Apply the same scope policy in Studio, the constrained planner and CLI, with policy hashes bound to resume identity.
 - Clear stale PDF pages and compiler logs when the source changes, and keep Safari IME confirmation from executing command-palette actions.
 - Use TeX lexical context for single-formula handoffs and reject candidates that consume or escape the existing closing delimiter.
 - Isolate damaged task history and reject incomplete candidate bindings or malformed review decisions without server errors.

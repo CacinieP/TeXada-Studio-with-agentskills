@@ -14,6 +14,7 @@
 | 比较 Skill 指令 | [研究协议](../samples/research/README.md) · [先导实验解读](skills-pilot-analysis.md) | 三组对照、来源、候选和人工复核 |
 | 理解 Skill 设计 | [Skills 技术报告](skills-technical-report.md) · [架构](architecture.md) | 职责划分、指令契约、工具执行、候选回判与对照实验 |
 | 使用当前 Skill | [AgentSkills 使用指南](agent-skills.md) | Studio 操作入口、任务路由、当前能力与运行时加载范围 |
+| 核对公式修复质量 | [修复质量记录](formula-repair-quality.md) | Math Agent 参考、保真范围、对照指标与复现方法 |
 | 查看已有验证 | [验证记录](validation.md) · [编译记录](evaluation-results/studio-latex/README.md) | 当次输入、环境和结果 |
 | 修改项目 | [贡献说明](../CONTRIBUTING.md) · [路线图](roadmap.md) | 开发约定、相关测试和后续工作 |
 | 部署与维护 | [部署手册](../deploy/README.md) · [安全说明](../SECURITY.md) | 配置、升级、数据备份和信任边界 |

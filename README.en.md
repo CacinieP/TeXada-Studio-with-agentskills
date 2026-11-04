@@ -2,7 +2,7 @@
 
 The editor is a local Web UI: FastAPI serves the application, Monaco runs in the browser, and documents are stored in the selected local data directory. See the [current AgentSkills guide](docs/agent-skills.md) for workspace operations and the runtime Skill boundaries.
 
-Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review MiniCPM candidates, and save or export the result on your own computer.
+Edit LaTeX, transcribe images or PDFs, check formula syntax and simple table totals, review local-rule or MiniCPM candidates, and save or export the result on your own computer.
 
 The interface uses TeXada's deep navy and cyan palette, with source and PDF side by side. Documents, outline, image import, Agent review and logs open through the sidebar and drawers, alongside deterministic checks and explicit candidate review.
 
@@ -17,11 +17,13 @@ This is a local, single-user development candidate, with no formal release for t
 | Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
 | Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; review the candidate before creating a document |
 | Edit and inspect | LaTeX highlighting and snippets, find/replace, section outline, command palette, formula syntax checks, and simple totals |
-| Review repairs | Bounded MiniCPM candidate generation, diffs, accept/reject decisions, and persistent task history |
+| Review repairs | Source-preserving deterministic syntax repairs first; model candidates require syntax and mutation-scope checks before explicit review |
 | Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
 | Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
 
 Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
+
+Formula repair follows Math Agent's source-preservation approach: close unambiguous syntax, recheck it, and reject changed numbers, variables, operators or deleted terms. Missing operands and unsupported notation remain manual items. See the [repair-quality record](docs/formula-repair-quality.md) for the bounded policy and comparison evidence.
 
 The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
 

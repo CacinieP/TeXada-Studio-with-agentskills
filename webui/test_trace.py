@@ -28,6 +28,18 @@ class Provider:
 
 
 class TraceTest(unittest.TestCase):
+    def setUp(self):
+        # These fixtures isolate orchestration, budgets and evidence. Real
+        # source-preservation behavior is covered by test_formula_repair_quality.
+        for name, replacement in (
+            ("repair_blocker", lambda original: None),
+            ("deterministic_candidate", lambda original: None),
+            ("assess_candidate", lambda original, candidate: {"allowed": True, "reason": "fixture_scope", "method": "fixture"}),
+        ):
+            guard = patch.object(studio, name, replacement)
+            guard.start()
+            self.addCleanup(guard.stop)
+
     def test_invalid_text_never_creates_a_background_job(self):
         bodies = [{"name": "plain.tex", "content": value} for value in (None, 42, [], {}, True, "\ud800")]
         bodies += [{"name": value, "content": "text"} for value in (None, 42, [], {})]

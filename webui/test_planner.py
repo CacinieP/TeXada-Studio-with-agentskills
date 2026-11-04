@@ -39,6 +39,18 @@ class ScriptedProvider:
 
 
 class PlannerTest(unittest.TestCase):
+    def setUp(self):
+        # These fixtures isolate orchestration, budgets and evidence. Real
+        # source-preservation behavior is covered by test_formula_repair_quality.
+        for name, replacement in (
+            ("repair_blocker", lambda original: None),
+            ("deterministic_candidate", lambda original: None),
+            ("assess_candidate", lambda original, candidate: {"allowed": True, "reason": "fixture_scope", "method": "fixture"}),
+        ):
+            guard = patch.object(studio, name, replacement)
+            guard.start()
+            self.addCleanup(guard.stop)
+
     def make_host(self, **kwargs):
         self.check, self.repair = Mock(return_value={"status": "RETRY"}), Mock(return_value={"accepted": False})
         self.events = []
