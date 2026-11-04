@@ -39,7 +39,7 @@ brew install poppler
 | `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` | App Store Connect API 密钥(公证推荐) | appstoreconnect.apple.com → 用户与访问 → 密钥;`.p8` 原文存 `ASC_KEY_P8` |
 | (备选)`APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Apple ID + 专用密码公证 | appleid.apple.com 生成 App 专用密码 |
 
-设置(在本机仓库目录):`gh secret set MACOS_CERTIFICATE < 证书.p12.base64` 等;随后 `gh workflow run "Desktop bundle"` 或打 `v*` 标签即可产出公证 DMG。流程:导入临时钥匙串 → `codesign --deep --options runtime --timestamp` 签名应用 → 公证并 staple 应用 → 制作含 `/Applications` 符号链接的 UDZO DMG → 签名 DMG → 公证 + staple + `spctl` 验证。
+设置(在本机仓库目录):`gh secret set MACOS_CERTIFICATE < 证书.p12.base64` 等;随后 `gh workflow run "Desktop bundle"` 或打 `v*` 标签即可产出公证 DMG。流程:导入临时钥匙串 → `sign_bundle.py` 逐个签名全部 Mach-O（含 Resources 内工具与扩展），再由内到外签名 bundle → 公证并 staple 应用 → 制作含 `/Applications` 符号链接的 UDZO DMG → 签名 DMG → 公证 + staple + `spctl` 验证。
 
 > 注意:Apple Development 证书(本机开发用)不能用于分发签名;需要付费 Apple Developer Program 账号创建 **Developer ID Application** 证书。
 

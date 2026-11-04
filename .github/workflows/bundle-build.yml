@@ -31,6 +31,32 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+      # ---- 签名与公证:配置了仓库 secrets 时产出公证 DMG;否则回退未签名 zip ----
+      - name: Detect signing secrets
+        id: detect
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          if [ -n "$MACOS_CERTIFICATE" ]; then echo "has_signing=true" >> "$GITHUB_OUTPUT";
+          else echo "has_signing=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Import signing certificate into a temporary keychain
+        if: steps.detect.outputs.has_signing == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          CERTFILE="$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
+          KEYCHAIN_PWD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security set-keychain-settings -lut 21600 build.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
+          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
+          security list-keychains -d user -s build.keychain-db
+          rm -f "$CERTFILE"
+
       - name: Prepare build dependencies
         run: |
           python3 -m venv .venv
@@ -62,31 +88,6 @@ jobs:
             "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
           test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
 
-      # ---- 签名与公证:配置了仓库 secrets 时产出公证 DMG;否则回退未签名 zip ----
-      - name: Detect signing secrets
-        id: detect
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          if [ -n "$MACOS_CERTIFICATE" ]; then echo "has_signing=true" >> "$GITHUB_OUTPUT";
-          else echo "has_signing=false" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Import signing certificate into a temporary keychain
-        if: steps.detect.outputs.has_signing == 'true'
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-        run: |
-          CERTFILE="$RUNNER_TEMP/certificate.p12"
-          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
-          KEYCHAIN_PWD="$(uuidgen)"
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
-          security list-keychains -d user -s build.keychain-db "$(security list-keychains -d user | tr -d '"')"
-          rm -f "$CERTFILE"
-
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'
         run: |
@@ -96,8 +97,7 @@ jobs:
             exit 1
           fi
           echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "dist-app/TeXada Studio.app"
-          codesign --verify --deep --strict --verbose=2 "dist-app/TeXada Studio.app"
+          .venv/bin/python desktop/sign_bundle.py "dist-app/TeXada Studio.app" --identity "$IDENTITY"
 
       - name: Store notarytool credentials
         if: steps.detect.outputs.has_signing == 'true'
@@ -143,7 +143,7 @@ jobs:
           xcrun notarytool submit "dist-app/TeXada-Studio-macOS-arm64.dmg" --keychain-profile NOTARY_PROFILE --wait
           xcrun stapler staple "dist-app/TeXada-Studio-macOS-arm64.dmg"
           xcrun stapler validate "dist-app/TeXada-Studio-macOS-arm64.dmg"
-          spctl -a -t open -vv "dist-app/TeXada-Studio-macOS-arm64.dmg"
+          spctl -a -t open --context context:primary-signature -vv "dist-app/TeXada-Studio-macOS-arm64.dmg"
           cd dist-app
           shasum -a 256 "TeXada-Studio-macOS-arm64.dmg" | tee checksum.txt
       - name: Upload notarized DMG
