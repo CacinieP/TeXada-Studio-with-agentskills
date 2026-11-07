@@ -24,7 +24,7 @@
       "thinking"
     ]
   },
-  "execution": "Local checker; SSH-forwarded Spark Ollama HTTP endpoint; text only",
+  "execution": "Local checker; SSH-forwarded Ollama HTTP endpoint; text only",
   "max_tokens": 1024,
   "cold_start": "No model listed by api/ps immediately before experiment; no latency benchmark claim",
   "ollama_version_observed_during_run": "0.34.4"

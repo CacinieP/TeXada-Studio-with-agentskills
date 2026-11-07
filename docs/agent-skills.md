@@ -13,7 +13,6 @@ Studio 的编辑器是本地 Web UI：Python/FastAPI 提供服务，浏览器中
 | 选择文档输入路线 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | Studio 图片/PDF 转写候选，或 CLI 已有 `layout.json`；两种输出不能直接互换 |
 | 交付检查证据 | [doc-report](../skills/doc-report/SKILL.md) | 本轮事件、候选与拒绝原因、复用来源及未验证项 |
 | 直接清洗磁盘源码 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 保留内容含义的 TeX/Markdown 清洗、编译与有来源的 OCR 校订 |
-| 操作已分配的 DGX Spark | [spark-ops](../skills/spark-ops/SKILL.md) | 用户级节点部署与诊断；普通本机编辑使用 Studio 流程 |
 
 外部 coding agent 可以直接读取目标 Skill，例如：
 
