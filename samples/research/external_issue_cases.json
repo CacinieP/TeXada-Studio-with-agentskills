@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "dataset_id": "external-issue-20261108-v1",
+  "dataset_kind": "open-source",
+  "annotation_status": "pending",
+  "cases": [
+    {
+      "id": "K43",
+      "original_latex": "\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "add support for matrices",
+        "url": "https://github.com/KaTeX/KaTeX/issues/43",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "987bbc0ad9509a5d8f1883b2a3cbeb1de04495a8a72e28eb9ea5ed677e63aa51"
+      }
+    },
+    {
+      "id": "K69",
+      "original_latex": "x = {-c \\pm \\sqrt{b^2-4ac} \\over 2a}.",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Error with same formula (probably encoding)",
+        "url": "https://github.com/KaTeX/KaTeX/issues/69",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "7f1358acfe4caeb9a515969c8c517dbb2d719b99d112d1618341504030be0b41"
+      }
+    },
+    {
+      "id": "K95",
+      "original_latex": "a^b^c",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Expressions like a^b^c not parsed correctly",
+        "url": "https://github.com/KaTeX/KaTeX/issues/95",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue title",
+        "sha256": "3490eb091a5ec42cf92319cb5a89d08ae39f1f570d3c0f1407f1c81a7f5dd395"
+      }
+    },
+    {
+      "id": "K138",
+      "original_latex": "x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Error on converting from text to HTML on server",
+        "url": "https://github.com/KaTeX/KaTeX/issues/138",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "480afb4a1cdedea9ea168e4912e701e479ee9ffd2fe09b3c44105ed30803fde3"
+      }
+    },
+    {
+      "id": "K2319",
+      "original_latex": "T_\\max",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Math operators require braces when used in superscript/subscript",
+        "url": "https://github.com/KaTeX/KaTeX/issues/2319",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "dc67523bfd4f93c8ce6c85949394ea270e401f9456987330c1e073e7b28a6e44"
+      }
+    },
+    {
+      "id": "K2612",
+      "original_latex": "f^{*}'",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Double superscript at position 6: f^{*}'",
+        "url": "https://github.com/KaTeX/KaTeX/issues/2612",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "3c31af28c5f1b764f02e1b87fed6039ed8157389763ca7102170154e8fb4cb54"
+      }
+    },
+    {
+      "id": "K433",
+      "original_latex": "--1",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Parsing --1 fails",
+        "url": "https://github.com/KaTeX/KaTeX/issues/433",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "dd1123929b65167087a5480a1440d420e65b1198083505976b1104ba31847fd2"
+      }
+    },
+    {
+      "id": "K393",
+      "original_latex": "k \\bmod 3",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Support for \\mod, \\bmod, \\pmod, and \\pod",
+        "url": "https://github.com/KaTeX/KaTeX/issues/393",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "reported error diagnostic formula; display-only combining underline U+0332 removed",
+        "sha256": "582a93b7027eb84c7e4a219f260da79b5bc1eaa1641e883071dda7b54ede62d3"
+      }
+    },
+    {
+      "id": "K1676",
+      "original_latex": "\\text{Score} = 2\\times\\text{(Protein_(g))}  -  0.75\\times\\text{(Lipid_Tot_(g))}",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Katex does not parse but MathJax does",
+        "url": "https://github.com/KaTeX/KaTeX/issues/1676",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "df5341614f410fd75a4ea6fadea1055d0c7bc375b8746d7df358c36009317e17"
+      }
+    },
+    {
+      "id": "S15309",
+      "original_latex": "\\pi",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "parse_latex(r'\\pi') produces Symbol('pi')",
+        "url": "https://github.com/sympy/sympy/issues/15309",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "e9d80b2bb3bcba07dc6eeac9ec4a285ec2039aebe20887e89bcacfd5252fdbc5"
+      }
+    },
+    {
+      "id": "S19075",
+      "original_latex": "\\lambda = v\\ T",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "valid latex input is not parsed by ANTLR",
+        "url": "https://github.com/sympy/sympy/issues/19075",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "b0d7c1c42103063300f3b87e1ba7bda65d185b4d28d3fb7fdf784053c431c252"
+      }
+    },
+    {
+      "id": "S21537",
+      "original_latex": "\\frac{\\frac{a^3+b}{c}}{\\frac{1}{c^2}}",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Latex parsing of fractions yields wrong expression due to missing brackets",
+        "url": "https://github.com/sympy/sympy/issues/21537",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "ebd8d0e5e8b0922365de0cce906ca2ebece04912cc542c96c030ce63b43cb575"
+      }
+    },
+    {
+      "id": "S21677",
+      "original_latex": "\\frac{1}{x(y-z)}",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Implicit multiplication for latex parsing",
+        "url": "https://github.com/sympy/sympy/issues/21677",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "2044b73e32992a65cd7b833b08e8867d2d3db26ca7ebf7a627285a7d7917f430"
+      }
+    },
+    {
+      "id": "S26220",
+      "original_latex": "d \\cdot 2",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "parse_latex fails on \"d \\cdot 2\"",
+        "url": "https://github.com/sympy/sympy/issues/26220",
+        "license": "Public issue formula excerpt; original authors retain rights; no new license asserted",
+        "locator": "issue body formula; host string literal escapes decoded when necessary",
+        "sha256": "4e41fdc8225b5804e2be30b6288d52e402c74e8acae3a57c38ea71ba8ed2da71"
+      }
+    },
+    {
+      "id": "T498180",
+      "original_latex": "[i\\delta, 1/2\\sqrt{3}+i(1+2\\delta)/2}]",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Strange error in Latex with curly brackets",
+        "url": "https://tex.stackexchange.com/questions/498180/strange-error-in-latex-with-curly-brackets",
+        "license": "CC BY-SA 4.0",
+        "locator": "first math body in first question code block; only outer dollar delimiters removed",
+        "sha256": "cc1d6804bf7be01842e177d9afa934ea393b459c1e07390eeed9afc788d993ad"
+      }
+    },
+    {
+      "id": "T75331",
+      "original_latex": "\\tau=\\int\\frac{dt}{\\gamma} = \\int\\sqrt{1-\\frac{v(t)^2}{c^2}}dt = \\int\\sqrt{1-\\frac{1}{c^2}\\left(\\left(\\frac{dx}{dt}\\right)^2+\\left(\\frac{dy}{dt}\\right)^2+\\left(\\frac{dz}{dt}\\right)^2 \\right) dt",
+      "case_kind": "original",
+      "review_status": "pending",
+      "source": {
+        "title": "Help me to debug long LaTex equations with errors",
+        "url": "https://tex.stackexchange.com/questions/75331/help-me-to-debug-long-latex-equations-with-errors",
+        "license": "CC BY-SA 4.0",
+        "locator": "first math body in first question code block; only outer dollar delimiters removed",
+        "sha256": "9af7754f04752435d2db54ee3c6cd02cc219ad02eb68a5af587e6a18150459c1"
+      }
+    }
+  ]
+}

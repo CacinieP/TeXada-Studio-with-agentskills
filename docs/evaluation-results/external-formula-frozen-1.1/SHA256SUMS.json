@@ -1,0 +1,12 @@
+{
+  "runtime.json": "6be72c5bbc6e0ce8964588db4fceb7e1c739dbfe489f7c5be97e3749a6e40a97",
+  "provenance.json": "c4b76eea7be0b847a177d5f8bd9f326927b187d66722d94f2547f1d6be424fea",
+  "README.md": "4ca705c52418a9eae9fa168ed1942c09c1516eb55628577a6ad9a3f207234406",
+  "decision.json": "80e3a688ceabbbc08e3a633c243f1cd097569f97314269143196e44a44f4817c",
+  "guarded/results.jsonl": "b2e8807239b5fa467c2083628dbf77ee91fd674f69b67b889da2d76eda7dc2b9",
+  "guarded/blind-review.csv": "969c578edb31979577f007cbc30dcb9448f932324e702dc65f5c7c926e917a49",
+  "guarded/manifest.json": "eb6da98cb9424f96b0bf686abc5fbf5a1439382c70bb52ead96262ff250d3cc2",
+  "guarded/deterministic/state.jsonl": "5b022f4dd2b20f0f16e1129208d884f729808e31aede54cd00e0f9d0ef1f5f8d",
+  "guarded/skill_1_0/state.jsonl": "99909b6126c2695e01d2834d10ba67a372bec5c7b0049a799bc9856d7dda365e",
+  "guarded/skill_1_1/state.jsonl": "e928ed82695ef880e7a4e4ed564c42537a839e384398350deef6bf2a97d93f17"
+}

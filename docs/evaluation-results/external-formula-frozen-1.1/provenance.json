@@ -1,0 +1,164 @@
+[
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/43",
+    "title": "add support for matrices",
+    "created_at": "2014-09-15T21:01:19Z",
+    "updated_at": "2016-11-11T08:15:44Z",
+    "id": "K43",
+    "body_sha256": "987bbc0ad9509a5d8f1883b2a3cbeb1de04495a8a72e28eb9ea5ed677e63aa51",
+    "formula_sha256": "04455ca00f58db3a6e4e3fc5d71ce83b8ad8e3a7329f68450c19e12fc8ce23fd",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/69",
+    "title": "Error with same formula (probably encoding)",
+    "created_at": "2014-09-17T09:09:35Z",
+    "updated_at": "2016-07-31T12:11:42Z",
+    "id": "K69",
+    "body_sha256": "7f1358acfe4caeb9a515969c8c517dbb2d719b99d112d1618341504030be0b41",
+    "formula_sha256": "ae6a223b5d7b984ac0e1584b4b5b1a5c126c79d1426aeb006ed8e0878a741bad",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/95",
+    "title": "Expressions like a^b^c not parsed correctly",
+    "created_at": "2014-09-21T18:32:42Z",
+    "updated_at": "2014-09-21T19:06:32Z",
+    "id": "K95",
+    "body_sha256": "3490eb091a5ec42cf92319cb5a89d08ae39f1f570d3c0f1407f1c81a7f5dd395",
+    "formula_sha256": "6ece0fb5f2c88a2c0471fb0942f1745d6585430b800cd82cb26d2f5ffbc469ae",
+    "normalization": "one source string escape layer decoded or title literal"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/138",
+    "title": "Error on converting from text to HTML on server",
+    "created_at": "2014-09-30T04:33:01Z",
+    "updated_at": "2015-04-04T03:42:57Z",
+    "id": "K138",
+    "body_sha256": "480afb4a1cdedea9ea168e4912e701e479ee9ffd2fe09b3c44105ed30803fde3",
+    "formula_sha256": "a8bc9300c73079637703fa542ea744d1fbca8ea635b14fad45cf5a304b68ebbd",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/2319",
+    "title": "Math operators require braces when used in superscript/subscript",
+    "created_at": "2020-07-17T13:51:14Z",
+    "updated_at": "2020-09-06T08:13:02Z",
+    "id": "K2319",
+    "body_sha256": "dc67523bfd4f93c8ce6c85949394ea270e401f9456987330c1e073e7b28a6e44",
+    "formula_sha256": "f39e9fea6c4a8e0fdf26e00f38e0468b55816cb26f0f502f12755458b2df3956",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/2612",
+    "title": "Double superscript at position 6: f^{*}'",
+    "created_at": "2020-10-27T04:18:21Z",
+    "updated_at": "2020-10-27T16:39:10Z",
+    "id": "K2612",
+    "body_sha256": "3c31af28c5f1b764f02e1b87fed6039ed8157389763ca7102170154e8fb4cb54",
+    "formula_sha256": "09a28960919bf10d70f14d5cb2370985cd97aa660b72bcb965fefa377298097b",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/433",
+    "title": "Parsing --1 fails",
+    "created_at": "2016-02-03T19:36:08Z",
+    "updated_at": "2017-08-12T01:34:01Z",
+    "id": "K433",
+    "body_sha256": "dd1123929b65167087a5480a1440d420e65b1198083505976b1104ba31847fd2",
+    "formula_sha256": "f51aea0352bb03f35ff4e6608ce0a7e587bf5acbb4064dcc86365db934b81366",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/393",
+    "title": "Support for \\mod, \\bmod, \\pmod, and \\pod",
+    "created_at": "2015-11-19T06:19:57Z",
+    "updated_at": "2017-01-10T22:31:51Z",
+    "id": "K393",
+    "body_sha256": "582a93b7027eb84c7e4a219f260da79b5bc1eaa1641e883071dda7b54ede62d3",
+    "formula_sha256": "f98080fc32c418d739c738893f9f1e537a82a20bc9b7c8c2ca0b1c79a6199944",
+    "normalization": "remove U+0332 display-only diagnostic underline; no TeX token changed"
+  },
+  {
+    "url": "https://github.com/KaTeX/KaTeX/issues/1676",
+    "title": "Katex does not parse but MathJax does",
+    "created_at": "2018-08-29T16:52:43Z",
+    "updated_at": "2018-10-29T07:43:19Z",
+    "id": "K1676",
+    "body_sha256": "df5341614f410fd75a4ea6fadea1055d0c7bc375b8746d7df358c36009317e17",
+    "formula_sha256": "a1865d196fb2306423508e9b8866fba742f35c32f3a26f318ceec5565e6714d5",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/sympy/sympy/issues/15309",
+    "title": "parse_latex(r'\\pi') produces Symbol('pi')",
+    "created_at": "2018-09-28T21:15:15Z",
+    "updated_at": "2020-06-14T06:53:46Z",
+    "id": "S15309",
+    "body_sha256": "e9d80b2bb3bcba07dc6eeac9ec4a285ec2039aebe20887e89bcacfd5252fdbc5",
+    "formula_sha256": "f1cf04093d08b6dc0d58a87396405cb9093a22e9ed62a95bb95ed46e5da97097",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/sympy/sympy/issues/19075",
+    "title": "valid latex input is not parsed by ANTLR",
+    "created_at": "2020-04-05T12:30:27Z",
+    "updated_at": "2020-05-28T12:37:43Z",
+    "id": "S19075",
+    "body_sha256": "b0d7c1c42103063300f3b87e1ba7bda65d185b4d28d3fb7fdf784053c431c252",
+    "formula_sha256": "c22c16174ddfcb7a5f6716629bf79b9d1b334b1f50717230eb52456667c9b12e",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/sympy/sympy/issues/21537",
+    "title": "Latex parsing of fractions yields wrong expression due to missing brackets",
+    "created_at": "2021-05-28T09:45:23Z",
+    "updated_at": "2021-06-14T22:36:38Z",
+    "id": "S21537",
+    "body_sha256": "ebd8d0e5e8b0922365de0cce906ca2ebece04912cc542c96c030ce63b43cb575",
+    "formula_sha256": "e8542e3b5585f0d90199dd7823797ec9d2cf14148d3aeca0657f69afa43bc2ed",
+    "normalization": "one source string escape layer decoded or title literal"
+  },
+  {
+    "url": "https://github.com/sympy/sympy/issues/21677",
+    "title": "Implicit multiplication for latex parsing",
+    "created_at": "2021-06-28T16:10:49Z",
+    "updated_at": "2021-06-30T23:46:02Z",
+    "id": "S21677",
+    "body_sha256": "2044b73e32992a65cd7b833b08e8867d2d3db26ca7ebf7a627285a7d7917f430",
+    "formula_sha256": "4a2b7f288c2a0dcb503a72ad880128fb0e892c406a6c4ad866530ad3b28785eb",
+    "normalization": "none"
+  },
+  {
+    "url": "https://github.com/sympy/sympy/issues/26220",
+    "title": "parse_latex fails on \"d \\cdot 2\"",
+    "created_at": "2024-02-11T21:25:14Z",
+    "updated_at": "2024-02-28T09:01:04Z",
+    "id": "S26220",
+    "body_sha256": "4e41fdc8225b5804e2be30b6288d52e402c74e8acae3a57c38ea71ba8ed2da71",
+    "formula_sha256": "9da0235d276bfa1f51ff8ecda5cd157da462edff8b356fb7851a2492ad9b4fc7",
+    "normalization": "none"
+  },
+  {
+    "id": "T498180",
+    "url": "https://tex.stackexchange.com/questions/498180/strange-error-in-latex-with-curly-brackets",
+    "title": "Strange error in Latex with curly brackets",
+    "body_sha256": "cc1d6804bf7be01842e177d9afa934ea393b459c1e07390eeed9afc788d993ad",
+    "formula_sha256": "f8f6a4b99cc48bd5e75db5661a973a67c9f1fdb677872f622581aaee53333eca",
+    "author": "user287546",
+    "author_url": "https://tex.stackexchange.com/users/103765/user287546",
+    "license": "CC BY-SA 4.0",
+    "normalization": "outer dollar delimiters removed only"
+  },
+  {
+    "id": "T75331",
+    "url": "https://tex.stackexchange.com/questions/75331/help-me-to-debug-long-latex-equations-with-errors",
+    "title": "Help me to debug long LaTex equations with errors",
+    "body_sha256": "9af7754f04752435d2db54ee3c6cd02cc219ad02eb68a5af587e6a18150459c1",
+    "formula_sha256": "25e8cdfc8ab9be87fb2e19faee41c0c5b372fcf7b6c88461172f7a6ef48a2ff1",
+    "author": "hhh",
+    "author_url": "https://tex.stackexchange.com/users/2956/hhh",
+    "license": "CC BY-SA 4.0",
+    "normalization": "outer dollar delimiters removed only"
+  }
+]
