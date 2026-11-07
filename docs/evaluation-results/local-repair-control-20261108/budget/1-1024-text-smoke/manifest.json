@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "mode": "model",
+  "created_at": "2026-11-07T23:15:07.108906+00:00",
+  "dataset_id": "synthetic-runner-smoke-v1",
+  "dataset_kind": "synthetic",
+  "catalog_sha256": "3fd4187303493e56381385a06e62a98d291e24ad9ce629fca142b97f16cb323c",
+  "catalog": {
+    "schema_version": 1,
+    "dataset_id": "synthetic-runner-smoke-v1",
+    "dataset_kind": "synthetic",
+    "annotation_status": "pending",
+    "cases": [
+      {
+        "id": "S01",
+        "source": {
+          "title": "TeXada synthetic runner smoke source",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+          "license": "AGPL-3.0-only",
+          "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+          "locator": "smoke-source.txt:L3"
+        },
+        "original_latex": "x+1",
+        "case_kind": "control",
+        "expected_syntax": "OK",
+        "reference_latex": "x+1",
+        "review_status": "pending"
+      },
+      {
+        "id": "S02",
+        "source": {
+          "title": "TeXada synthetic runner smoke source",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+          "license": "AGPL-3.0-only",
+          "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+          "locator": "smoke-source.txt:L4"
+        },
+        "original_latex": "a_+b",
+        "case_kind": "injected",
+        "expected_syntax": "RETRY",
+        "reference_latex": "a_1+b",
+        "review_status": "pending",
+        "injection": "Remove the subscript digit 1 from a_1."
+      },
+      {
+        "id": "S03",
+        "source": {
+          "title": "TeXada synthetic runner smoke source",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/smoke-source.txt",
+          "license": "AGPL-3.0-only",
+          "sha256": "c479866a41c1f4d08e17ea07f8fd005157fd0ac305b879c1f7ac9cfdf49f8385",
+          "locator": "smoke-source.txt:L5"
+        },
+        "original_latex": "x^2+2*x+1=(x+1)^3",
+        "case_kind": "control",
+        "expected_syntax": "OK",
+        "reference_latex": "x^2+2*x+1=(x+1)^3",
+        "review_status": "pending"
+      }
+    ]
+  },
+  "catalog_changed_during_run": false,
+  "configuration": {
+    "seed": 0,
+    "temperature": 0,
+    "max_tokens": 1024,
+    "max_candidates_per_case_per_model_arm": 2,
+    "max_model_calls": 12,
+    "initial_syntax_ok_skips_repair": true
+  },
+  "provider_fingerprints": {
+    "model_without_skill": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "off",
+      "skill_id": null,
+      "skill_sha256": null,
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "0bb43109f7b57524062a911b2947c3c61bb79cfbbb703b094c2d98c5aee8220d",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "1c1e9b3aad0e2a9a5a1863a5157543705c3fe8d03288b00ac84c0299050c13b8"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "b29c4702147c57edebcc35a8e52492fa7a01d6d6c0957d35cac408fc708627a3",
+        "formula_repair": "35399e0df428afebc2d98ac91a1465064e5e3d2a030714a6997d4a6825a85ae0",
+        "tex_context": "e60fbae341877b39e009542be0f959ee8cc73164df353bc7e2ca4f44b4ce03da"
+      }
+    },
+    "model_with_skill": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "on",
+      "skill_id": "doc-formula-verify",
+      "skill_sha256": "3e4c9a15d9b49d714032139ecfa2da0ea62c9380aa5ea09cf3db69cee776dab4",
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "2c6d684a259178a5d2e549d589a146a2991730cc2de1f605e1002a7683da7fdb",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "1c1e9b3aad0e2a9a5a1863a5157543705c3fe8d03288b00ac84c0299050c13b8"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "b29c4702147c57edebcc35a8e52492fa7a01d6d6c0957d35cac408fc708627a3",
+        "formula_repair": "35399e0df428afebc2d98ac91a1465064e5e3d2a030714a6997d4a6825a85ae0",
+        "tex_context": "e60fbae341877b39e009542be0f959ee8cc73164df353bc7e2ca4f44b4ce03da"
+      }
+    }
+  },
+  "controlled_configuration_verified": true,
+  "program_sha256": {
+    "scripts/evaluate_skills.py": "c6a5aef9977a5e993a9ba53706cfe07bacc5445c12623df25fcf469f3909fe55",
+    "harness/docforensics/vlm.py": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+    "harness/docforensics/pipeline.py": "8c8295d9f035bfc894e27596c0ad11ec87b62a811929a47acafb79c849e09c93",
+    "skills/doc-formula-verify/scripts/verify.py": "1c1e9b3aad0e2a9a5a1863a5157543705c3fe8d03288b00ac84c0299050c13b8"
+  },
+  "code_changed_during_run": false,
+  "environment": {
+    "python": "3.13.13",
+    "dependencies": {
+      "sympy": "1.14.0",
+      "antlr4-python3-runtime": "4.11.0"
+    }
+  },
+  "elapsed_seconds": 8.104536,
+  "execution_order": [
+    {
+      "case_id": "S01",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "S01",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "S01",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "S02",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "S02",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "S02",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "S03",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "S03",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "S03",
+      "group": "model_without_skill"
+    }
+  ],
+  "summary": {
+    "by_group": {
+      "checker_only": {
+        "cases": 3,
+        "model_calls": 0,
+        "fixture_calls": 0,
+        "output_changed": 0,
+        "candidate_syntax_ok": 0,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 2,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 1,
+            "output_changed": 0
+          }
+        },
+        "outcomes": {
+          "initial_syntax_ok_no_repair": 2,
+          "checker_only_no_repair": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      },
+      "model_without_skill": {
+        "cases": 3,
+        "model_calls": 2,
+        "fixture_calls": 0,
+        "output_changed": 0,
+        "candidate_syntax_ok": 0,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 2,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 1,
+            "output_changed": 0
+          }
+        },
+        "outcomes": {
+          "initial_syntax_ok_no_repair": 2,
+          "unresolved": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      },
+      "model_with_skill": {
+        "cases": 3,
+        "model_calls": 2,
+        "fixture_calls": 0,
+        "output_changed": 0,
+        "candidate_syntax_ok": 0,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 2,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 1,
+            "output_changed": 0
+          }
+        },
+        "outcomes": {
+          "initial_syntax_ok_no_repair": 2,
+          "unresolved": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      }
+    },
+    "paired_output_differences": 0,
+    "semantic_accuracy": null,
+    "human_time_savings": null
+  },
+  "files": {
+    "results.jsonl": "ceb8a9b46b3f61ad26011d93a45a2b8895ae331163a1c9af2658678c69ff233f",
+    "blind-review.csv": "aecd3f59f6ab37f1a12c42b27a2da41781aaf04e5466d0095e4e2e3f8bb6609a",
+    "report.md": "cf6e80cb734093e2869743b341dbd0831a4e3d5cba52db7833610cc46c524f96"
+  }
+}

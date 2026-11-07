@@ -1,0 +1,27 @@
+{
+  "model": "minicpm-v4.7-35b-a3b-q4",
+  "model_sha256": "9ecf91e814d7e9adc64325b1b65f8628a9b1bb8da4f61a92869ca7489bfd888e",
+  "model_bytes": 21166255008,
+  "backend_version": "llama.cpp 0.7.0 build 11669 commit 620d2225c",
+  "base": "http://127.0.0.1:18149",
+  "reasoning_configuration": "server reasoning off; enable_thinking=false",
+  "hardware_note": "Mac Studio 64GB; inspect server.log for actual Metal/offload",
+  "phase": "budget",
+  "repeats": 3,
+  "request_concurrency": 1,
+  "cold_load_seconds": null,
+  "cold_load_status": "measure separately from server startup logs",
+  "ttft_seconds": null,
+  "ttft_status": "not measured by nonstreaming runner",
+  "schema_enforcement": "requested only; validate backend implementation/logs separately",
+  "semantic_accuracy": null,
+  "default_switch_approved": false,
+  "frozen_files": {
+    "scripts/run_local_repair_control.py": "c21836eda2085588e2f2fc779b70c974c962752b4a3345cbea9c1ec8dba26b90",
+    "scripts/evaluate_skills.py": "c6a5aef9977a5e993a9ba53706cfe07bacc5445c12623df25fcf469f3909fe55",
+    "harness/docforensics/vlm.py": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+    "samples/research/smoke_cases.json": "3fd4187303493e56381385a06e62a98d291e24ad9ce629fca142b97f16cb323c",
+    "samples/research/active_calculus_cases.json": "69b92aea3e5873d997a06fe7e99079d85a377758bd4ec8d0ded71fbb5f7b75c8"
+  },
+  "status": "complete"
+}

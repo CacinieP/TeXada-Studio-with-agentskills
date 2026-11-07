@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "model_without_skill": {
+      "repair_inputs": 1,
+      "syntax_accepted": 0,
+      "source_preservation_allowed": 0,
+      "syntax_accepted_but_blocked": 0,
+      "blocked_reasons": {},
+      "semantic_accuracy": null
+    },
+    "model_with_skill": {
+      "repair_inputs": 1,
+      "syntax_accepted": 0,
+      "source_preservation_allowed": 0,
+      "syntax_accepted_but_blocked": 0,
+      "blocked_reasons": {},
+      "semantic_accuracy": null
+    }
+  },
+  "accepted_output_policy_audit": [],
+  "review_kind": "deterministic source-preservation policy; not independent semantic review"
+}

@@ -1,0 +1,21 @@
+{
+  "cpu": "Apple M5 Max",
+  "memory_bytes": 68719476736,
+  "device_enumeration": "Available devices:\n  BLAS: Accelerate (0 MiB, 0 MiB free)\n  MTL0: Apple M5 Max (53084 MiB, 53083 MiB free)\n",
+  "backend_build": "b11669-620d2225c",
+  "model_ftype": "Q4_K - Medium",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "total_slots": 1,
+  "context": 8192,
+  "chat_template_sha256": "36815ccc219dc5173ed85203d7bfc709139f6343260d0e39b3161f550e294a48",
+  "requested_gpu_layers": 99,
+  "actual_offload_layers": null,
+  "actual_offload_note": "not present in captured startup log; device enumeration is not offload proof",
+  "startup_until_model_loaded_seconds": 14.11,
+  "startup_note": "one observation from process-relative startup log; not cold-cache disk benchmark",
+  "projector_loaded": false
+}

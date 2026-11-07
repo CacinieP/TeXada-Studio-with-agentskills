@@ -1,0 +1,638 @@
+[
+  {
+    "run": "1-1024-text-smoke",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 1,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.815506,
+        "repair_seconds_p95": 1.815506,
+        "repair_seconds_p99": 1.815506,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.847189,
+        "repair_seconds_p95": 1.847189,
+        "repair_seconds_p99": 1.847189,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "1-1024-text-active_calculus",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 1,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.184673,
+        "repair_seconds_p95": 2.426721,
+        "repair_seconds_p99": 2.426721,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.167179,
+        "repair_seconds_p95": 2.602307,
+        "repair_seconds_p99": 2.602307,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "1-1024-json_schema-smoke",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 1,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.774436,
+        "repair_seconds_p95": 1.774436,
+        "repair_seconds_p99": 1.774436,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.869294,
+        "repair_seconds_p95": 1.869294,
+        "repair_seconds_p99": 1.869294,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "1-1024-json_schema-active_calculus",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 1,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.183364,
+        "repair_seconds_p95": 2.645328,
+        "repair_seconds_p99": 2.645328,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.221742,
+        "repair_seconds_p95": 2.663263,
+        "repair_seconds_p99": 2.663263,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "2-1024-json_schema-smoke",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 2,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.693636,
+        "repair_seconds_p95": 1.693636,
+        "repair_seconds_p99": 1.693636,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.834101,
+        "repair_seconds_p95": 1.834101,
+        "repair_seconds_p99": 1.834101,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "2-1024-json_schema-active_calculus",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 2,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.194431,
+        "repair_seconds_p95": 3.101223,
+        "repair_seconds_p99": 3.101223,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.213272,
+        "repair_seconds_p95": 2.675912,
+        "repair_seconds_p99": 2.675912,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "2-1024-text-smoke",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 2,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.783047,
+        "repair_seconds_p95": 1.783047,
+        "repair_seconds_p99": 1.783047,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.788902,
+        "repair_seconds_p95": 1.788902,
+        "repair_seconds_p99": 1.788902,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "2-1024-text-active_calculus",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 2,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.219567,
+        "repair_seconds_p95": 2.637765,
+        "repair_seconds_p99": 2.637765,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.222337,
+        "repair_seconds_p95": 2.737297,
+        "repair_seconds_p99": 2.737297,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "3-1024-text-smoke",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 3,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.61576,
+        "repair_seconds_p95": 1.61576,
+        "repair_seconds_p99": 1.61576,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.760096,
+        "repair_seconds_p95": 1.760096,
+        "repair_seconds_p99": 1.760096,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "3-1024-text-active_calculus",
+    "budget": 1024,
+    "format": "text",
+    "repeat": 3,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.237285,
+        "repair_seconds_p95": 2.453414,
+        "repair_seconds_p99": 2.453414,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.267875,
+        "repair_seconds_p95": 2.827153,
+        "repair_seconds_p99": 2.827153,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "3-1024-json_schema-smoke",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 3,
+    "catalog": "smoke",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.775644,
+        "repair_seconds_p95": 1.775644,
+        "repair_seconds_p99": 1.775644,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 1,
+        "http_attempts": 2,
+        "initial_ok_skipped": 2,
+        "strict_contract_candidates": 2,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 0,
+        "checker_rate_all_retry_inputs": 0.0,
+        "failure_reasons": {
+          "ok": 2
+        },
+        "finish_reasons": {
+          "stop": 2
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.741463,
+        "repair_seconds_p95": 1.741463,
+        "repair_seconds_p99": 1.741463,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  },
+  {
+    "run": "3-1024-json_schema-active_calculus",
+    "budget": 1024,
+    "format": "json_schema",
+    "repeat": 3,
+    "catalog": "active_calculus",
+    "metrics": {
+      "model_without_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.222185,
+        "repair_seconds_p95": 2.409021,
+        "repair_seconds_p99": 2.409021,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      },
+      "model_with_skill": {
+        "repair_inputs": 7,
+        "http_attempts": 9,
+        "initial_ok_skipped": 5,
+        "strict_contract_candidates": 9,
+        "strict_contract_rate_all_http_attempts": 1.0,
+        "checker_accepted_inputs": 5,
+        "checker_rate_all_retry_inputs": 0.7142857142857143,
+        "failure_reasons": {
+          "ok": 9
+        },
+        "finish_reasons": {
+          "stop": 9
+        },
+        "reasoning_characters": 0,
+        "repair_seconds_p50": 1.232853,
+        "repair_seconds_p95": 2.545419,
+        "repair_seconds_p99": 2.545419,
+        "semantic_accuracy": null,
+        "default_switch_approved": false,
+        "gate_status": "pending independent semantic review, eligibility adjudication and larger sample"
+      }
+    }
+  }
+]

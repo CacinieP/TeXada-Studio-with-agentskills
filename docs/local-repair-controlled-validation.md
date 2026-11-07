@@ -116,6 +116,19 @@ and separately verify the current editor's preservation/delivery decisions.
 Use `evaluate_skills.py review` to import completed independent reviews. A
 configured default and an evidence-qualified default are different statuses.
 
-Current session: loopback model endpoints 11434, 8080, 18147 and 18148 were not
-reachable; no new model measurement was executed. Offline tests only verify
-request serialization, failure accounting and evidence validation.
+## Completed local follow-up
+
+The earlier unavailable-endpoint observation was resolved by starting an
+isolated temporary llama.cpp service on loopback port 18149 through the
+authorized Mac Studio device. The completed measurements and explicit adoption
+decision are in [the controlled follow-up](evaluation-results/local-repair-control-20261108/README.md).
+The text-only repair experiment deliberately does not load the vision projector;
+it is not an OCR measurement. Existing user services and model defaults are not
+modified by these experiments.
+
+Use `scripts/audit_repair_delivery.py --run-dir RUN --out NEW_JSON` to audit
+syntax-accepted research outputs against the current source-preservation policy.
+This validates the original evidence digests first, and does not rewrite it.
+The policy audit is neither an independent semantic review nor a replay of the
+whole editor workflow. In particular, a plausible restoration may be rejected
+because its placement is underdetermined by the supplied source.
