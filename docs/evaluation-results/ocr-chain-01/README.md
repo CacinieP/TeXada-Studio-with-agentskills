@@ -32,4 +32,9 @@ Tectonic + pdftoppm 150dpi 生成，`scripts/make_ocr_samples.py` 可复现）�
 - 本次运行只证明链路与候选质量样例，不证明 OCR 对任意版面/字体的正确率；
 - 样例图为原创合成材料（AGPL-3.0-only），不含第三方内容；
 - 与占位 crop（无文字）的早期探测不同，本图为真实文字渲染，作为正式链路的第一张证据图；
+- **传输统一记录（issue #30）**：同一张样例图经 OpenAI 兼容 `/v1/chat/completions`
+  传输再次运行成功（[inlines-01-run-openai.json](inlines-01-run-openai.json)，6 行、
+  `completion_tokens=174`，URL、请求体与响应形状见 `tests/test_ocr_extract.py`）；
+  Ollama 原生 `/api/chat` 保留为 `--transport ollama` 回退（6 行、`eval_count=175`）。
+  两种传输候选契约一致，默认 openai 与修复线共用同一协议面；
 - 后续（#24 后续段）：候选行转 layout.json 节点、Studio 图片上传与采纳 UI、多图批处理与低置信转人工清单。

@@ -32,6 +32,9 @@ EXIT_OK = 0
 RESPONSE_EXCERPT_LIMIT = 1024
 DEFAULT_BASE = os.environ.get("OCR_BASE", "http://127.0.0.1:11434").rstrip("/")
 DEFAULT_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
+# 统一协议面：默认走 OpenAI 兼容 /v1/chat/completions（与修复线一致），
+# Ollama 原生 /api/chat 保留为显式回退。
+DEFAULT_TRANSPORT = os.environ.get("OCR_TRANSPORT", "openai")
 DEFAULT_PROMPT = ("Extract the text lines (including formulas as plain text) "
                   "from this image. Return only the extracted text, one line "
                   "per source line. Do not translate, repair or comment.")
@@ -42,15 +45,32 @@ def _excerpt(text: str):
     return text[:RESPONSE_EXCERPT_LIMIT], len(text) > RESPONSE_EXCERPT_LIMIT
 
 
-def extract(image_bytes: bytes, *, model: str, base: str, prompt: str, timeout: int = 180):
-    """请求一次 vision 模型。返回 (status, reason, payload)。"""
+def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
+            transport: str = DEFAULT_TRANSPORT, timeout: int = 180):
+    """请求一次 vision 模型。返回 (status, reason, payload)。
+
+    transport="openai" 走 /v1/chat/completions + image_url(data URL)，
+    transport="ollama" 走原生 /api/chat + images。两者候选契约一致，
+    默认 openai 与修复线统一在同一协议面上。
+    """
     try:
         encoded = base64.b64encode(image_bytes).decode("ascii")
     except (TypeError, ValueError):
         return "NEEDS_ENV", "bad_image", {}
-    payload = {"model": model, "stream": False,
-               "messages": [{"role": "user", "content": prompt, "images": [encoded]}]}
-    request = urllib.request.Request(base + "/api/chat",
+    if transport == "openai":
+        payload = {"model": model, "stream": False, "max_tokens": 2048,
+                   "messages": [{"role": "user", "content": [
+                       {"type": "text", "text": prompt},
+                       {"type": "image_url",
+                        "image_url": {"url": "data:image/png;base64," + encoded}}]}]}
+        path = "/v1/chat/completions"
+    elif transport == "ollama":
+        payload = {"model": model, "stream": False,
+                   "messages": [{"role": "user", "content": prompt, "images": [encoded]}]}
+        path = "/api/chat"
+    else:
+        return "NEEDS_ENV", "bad_transport", {}
+    request = urllib.request.Request(base + path,
                                      data=json.dumps(payload).encode("utf-8"),
                                      headers={"Content-Type": "application/json"})
     started = time.monotonic()
@@ -69,22 +89,30 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str, timeout: 
     except Exception:
         return "NEEDS_ENV", "provider_error", {}
 
-    content = (body.get("message") or {}).get("content")
+    if transport == "openai":
+        try:
+            content = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            return "NEEDS_ENV", "bad_response_shape", {}
+        counter = (body.get("usage") or {}).get("completion_tokens")
+    else:
+        content = (body.get("message") or {}).get("content")
+        counter = body.get("eval_count")
     if not isinstance(content, str):
         return "NEEDS_ENV", "bad_response_shape", {}
     lines = [line.strip() for line in content.splitlines() if line.strip()]
     if not lines:
         return "NEEDS_HUMAN", "no_text", {"raw_response": "", "response_truncated": False,
-                                          "model": model,
-                                          "eval_count": body.get("eval_count"),
+                                          "model": model, "eval_count": counter,
                                           "elapsed_seconds": round(time.monotonic() - started, 6)}
     excerpt, truncated = _excerpt(content)
     return "OK", "", {"lines": lines, "raw_response": excerpt, "response_truncated": truncated,
-                      "model": model, "eval_count": body.get("eval_count"),
+                      "model": model, "eval_count": counter,
                       "elapsed_seconds": round(time.monotonic() - started, 6)}
 
 
-def run_record(record, *, model: str, base: str, prompt: str) -> int:
+def run_record(record, *, model: str, base: str, prompt: str,
+               transport: str = DEFAULT_TRANSPORT) -> int:
     """处理一条 {id, image|image_path} 记录，返回该条的退出码贡献。"""
     record_id = record.get("id") if isinstance(record.get("id"), str) else None
     image, path = record.get("image"), record.get("image_path")
@@ -109,7 +137,8 @@ def run_record(record, *, model: str, base: str, prompt: str) -> int:
         sys.stdout.write(json.dumps({"id": record_id, "status": "NEEDS_HUMAN",
                                     "reason": "bad_input"}, ensure_ascii=False) + "\n")
         return 1
-    status, reason, payload = extract(image_bytes, model=model, base=base, prompt=prompt)
+    status, reason, payload = extract(image_bytes, model=model, base=base, prompt=prompt,
+                                      transport=transport)
     sys.stdout.write(json.dumps({"id": record_id, "status": status, "reason": reason, **payload},
                                 ensure_ascii=False) + "\n")
     return {"OK": 0}.get(status, {"NEEDS_HUMAN": 1}.get(status, 2))
@@ -120,13 +149,17 @@ def main() -> int:
     parser.add_argument("image", nargs="?", help="input image path (omit to read JSONL on stdin)")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--base", default=DEFAULT_BASE)
+    parser.add_argument("--transport", choices=["openai", "ollama"], default=DEFAULT_TRANSPORT,
+                        help="openai: /v1/chat/completions (default, unified with the repair "
+                             "line); ollama: native /api/chat fallback")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
     parser.add_argument("--id", default="argv")
     args = parser.parse_args()
     code = EXIT_OK
     if args.image:
         code = run_record({"id": args.id, "image_path": args.image},
-                          model=args.model, base=args.base, prompt=args.prompt)
+                          model=args.model, base=args.base, prompt=args.prompt,
+                          transport=args.transport)
     else:
         for line in sys.stdin:
             line = line.strip()
@@ -144,7 +177,8 @@ def main() -> int:
                                             "reason": "bad_input"}) + "\n")
                 code = max(code, 1)
                 continue
-            code = max(code, run_record(record, model=args.model, base=args.base, prompt=args.prompt))
+            code = max(code, run_record(record, model=args.model, base=args.base,
+                                        prompt=args.prompt, transport=args.transport))
     return code
 
 

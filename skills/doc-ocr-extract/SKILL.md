@@ -8,10 +8,10 @@ description: Turn a page image into plain-text candidate lines with a local visi
 ## Workflow
 
 1. Take an original, authorized page image. `samples/ocr/` records how the synthetic sample is regenerated from its `.tex` source with Tectonic + pdftoppm.
-2. Run `scripts/ocr_extract.py` with the image path as one argument, or feed JSONL records `{"id", "image"|, "image_path"}` on stdin. The script sends raw bytes (color-preserving) to the configured local vision model via Ollama `POST /api/chat`. Binarization/upscaling preprocessing was shown to lose content in ablation and is intentionally NOT applied.
-3. Output is one JSONL record per input: `status`, `lines` (candidate text lines), a bounded `raw_response` excerpt with an explicit truncation flag, `model`, `eval_count` and `elapsed_seconds`. `OK` means lines exist for review; it does not certify correctness.
+2. Run `scripts/ocr_extract.py` with the image path as one argument, or feed JSONL records `{"id", "image"|"image_path"}` on stdin. The default transport is the OpenAI-compatible `/v1/chat/completions` with `image_url` data URLs — the same protocol face as the formula-repair line; `--transport ollama` keeps the native `/api/chat`+`images` call as an explicit fallback. `OCR_TRANSPORT` selects the default. Raw bytes are sent color-preserving; binarization/upscaling preprocessing was shown to lose content in ablation and is intentionally NOT applied.
+3. Output is one JSONL record per input: `status`, `lines` (candidate text lines), a bounded `raw_response` excerpt with an explicit truncation flag, `model`, `eval_count` (ollama) or `completion_tokens` surfaced as the same counter (openai), and `elapsed_seconds`. `OK` means lines exist for review; it does not certify correctness.
 4. Reviewers compare `lines` against the image. Low-fidelity lines shape a human-review list and must not be silently adopted. The next integration turns reviewed lines into layout nodes and `.tex` candidates for the Studio adopt workflow; this script never writes those states.
-5. Model selection is environment-driven: `OCR_MODEL` (default `minicpm-ocr:latest`) and `OCR_BASE` (default `http://127.0.0.1:11434`). A generic vision model tag can replace the OCR-specialized one; pipeline guarantees stay the same.
+5. Model and endpoint are environment-driven: `OCR_MODEL` (default `minicpm-ocr:latest`) and `OCR_BASE` (default `http://127.0.0.1:11434`). Any OpenAI-compatible local server (Ollama, vLLM, llama.cpp) can serve the model; cloud endpoints are protocol-compatible but never the default.
 
 ## Boundaries
 

@@ -12,6 +12,7 @@
 - Chinese and English setup guides, troubleshooting, contribution guidance and release materials.
 - `doc-ocr-extract` Skill: image → text candidate lines via a local vision OCR model (`OCR_MODEL`, default `minicpm-ocr:latest`), with raw-bytes input, the checker-family status contract (OK / NEEDS_HUMAN / NEEDS_ENV), bounded response excerpts and ten contract tests under a fake endpoint.
 - A reproducible real-text OCR sample: `samples/ocr/source-inlines-01.tex` rendered to `inlines-01.png` via `scripts/make_ocr_samples.py` (Tectonic + pdftoppm), plus the first real-run evidence under `docs/evaluation-results/ocr-chain-01/` including candidate defects that justify mandatory human adoption.
+- OpenAI-compatible transport for the OCR chain (issue #30): `ocr_extract.py` defaults to `/v1/chat/completions` with `image_url` data URLs — the same protocol face as the formula-repair provider — while `--transport ollama` keeps the native `/api/chat` fallback; `OCR_TRANSPORT` selects the default and both paths share the status/limits contract.
 
 ### Changed
 
