@@ -6,7 +6,7 @@
 
 输入来自 Active Calculus Single Variable 第二版：按固定提交下三个章节的源码顺序，各取最早两个符合词法条件的唯一公式，得到6条原文。每条另生成一个注入版本：删除最后一个右花括号，或在无右花括号时追加 `+`。共12条输入，来源位置、字节摘要与 CC-BY-SA-4.0 署名见[来源声明](../samples/research/ACTIVE_CALCULUS_NOTICE.md)。
 
-模型实际标签为 `qwen3.8:27b-q4_K_M`，[运行环境](evaluation-results/skills-pilot/model-environment.json)保存 digest 和服务版本。检查器在本机执行，文本请求经 SSH 转发到 Spark；本实验不运行 OCR 或 TeX 编译。两模型组均为 temperature=0、seed=0、max_tokens=1024，每例最多两次候选，逐例轮换组顺序。
+模型实际标签为 `qwen3.8:27b-q4_K_M`，[运行环境](evaluation-results/skills-pilot/model-environment.json)保存 digest 和服务版本。检查器在本机执行，文本请求经 SSH 转发到 Ollama 服务；本实验不运行 OCR 或 TeX 编译。两模型组均为 temperature=0、seed=0、max_tokens=1024，每例最多两次候选，逐例轮换组顺序。
 
 计划内的指令差异只有系统消息是否加载完整公式 Skill。基础提示、检查器和输出预算相同，Skill 内容额外消耗输入 token。仅初检 `RETRY` 请求模型；参考公式、预期和注入标签不进入请求。初检共5条 `OK`、7条 `RETRY`，其中原文1条、注入6条进入候选流程。
 

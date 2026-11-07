@@ -1,8 +1,6 @@
 # 从候选到确认：用 Agent Skills 组织 LaTeX 修复
 
-投稿方向：第三届 NVIDIA DGX Spark Hackathon · Agent Skills
-
-本文保留投稿与所引演示版本的技术说明；模型请求次数、当时的公式提取范围和“重试尚无反馈”等描述均是历史记录。当前本地启动、图片/PDF 转写和保存流程见[本地使用指南](local-studio.md)；确定性优先、候选保真与重试反馈的后续实现见[公式修复质量记录](formula-repair-quality.md)，外部 Agent 的操作入口见[AgentSkills 使用指南](agent-skills.md)。历史结果不替代当前版本验证。
+本文保留所引演示版本的技术说明；模型请求次数、当时的公式提取范围和“重试尚无反馈”等描述均是历史记录。当前本地启动、图片/PDF 转写和保存流程见[本地使用指南](local-studio.md)；确定性优先、候选保真与重试反馈的后续实现见[公式修复质量记录](formula-repair-quality.md)，外部 Agent 的操作入口见[AgentSkills 使用指南](agent-skills.md)。历史结果不替代当前版本验证。
 
 [项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)
 

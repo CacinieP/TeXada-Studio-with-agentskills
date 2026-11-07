@@ -49,7 +49,6 @@ Tectonic 编译结果作为独立诊断展示；界面允许审阅、采用仍�
 | [doc-report](../skills/doc-report/SKILL.md) | CLI `write_report()`；Studio 导出 | 终态、候选差异、失败原因和调用记录 |
 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | CLI 读取现有 `layout.json` | 输入准备约定；自动 PDF/OCR 提取待实现 |
 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 独立脚本和测试 | LaTeX 整理、编译和验证；Studio 直接调用 Tectonic |
-| [spark-ops](../skills/spark-ops/SKILL.md) | 操作者执行部署说明 | 用户级环境配置和节点检查 |
 
 只有公式 Skill 正文接入了上述模型请求宿主。其他包按表中方式使用，包结构遵循 [Agent Skills 规范](https://agentskills.io/specification)。
 
