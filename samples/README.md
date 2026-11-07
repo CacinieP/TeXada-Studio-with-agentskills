@@ -4,7 +4,7 @@
 
 | 输入 | 用途 | 运行方式 |
 | --- | --- | --- |
-| [`docs/*.tex`](docs/)：13份文档 | Studio 编辑、分析、候选审阅 | [启动 Studio](../README.md#2-打开-studio) |
+| [`docs/*.tex`](docs/)：14份文档 | Studio 编辑、分析、候选审阅 | [启动 Studio](../README.md#2-打开-studio) |
 | `paper-01/`、`exam-01/`、`report-01/` 的 `layout.json` | CLI 检查与续跑 | 下方 fixture 命令 |
 | [`evaluation/cases.json`](evaluation/cases.json)：27例 | 检查器契约回归 | [检查案例](evaluation/README.md) |
 | [`research/`](research/README.md) | 同模型有 / 无 Skill 对照 | [研究协议](research/README.md) |
@@ -25,19 +25,20 @@ Studio 的 `.tex` 和 CLI 的 layout 是各自独立的输入；CLI 只扫描含
 | S11 | [math-semantics.tex](docs/math-semantics.tex) | 3 / 0 | 积分值故意写错，语法仍合法 |
 | S12 | [math-align-boundary.tex](docs/math-align-boundary.tex) | 0 / 0 | 损坏的多行 `align*`，展示提取范围 |
 | S13 | [math-references.tex](docs/math-references.tex) | 0 / 0 | `equation`、交叉引用和文献引用边界 |
+| S14 | [math-context.tex](docs/math-context.tex) | 5 / 1 | 注释、verbatim/listings 体与同行 `$$` 显示区不进候选 |
 
-这8份英文数学讲义为原创合成材料，无需中文字体。另5份原有文档及逐例操作见[案例手册](../docs/casebook.md)。
+这9份英文数学讲义为原创合成材料，无需中文字体。另5份原有文档及逐例操作见[案例手册](../docs/casebook.md)。
 
-当前分析器按行提取 `$...$`。因此 S12、S13 的零问题表示未提取到公式；S11 的零问题表示语法接受，数学结论需另外核对。
+当前分析器先经 TeX 上下文过滤再按行提取 `$...$`：未转义注释、verbatim/verbatim*/lstlisting/minted 环境体和同行 `$$` 显示区不产生候选（正反例见 S14）。因此 S12、S13 的零问题表示未提取到公式；S11 的零问题表示语法接受，数学结论需另外核对。
 
-[studio-cases.json](studio-cases.json) 记录预期检查结果、原文保持要求和4个作者参考修复。参考修复用于离线回归；真实模型候选另行记录。
+[studio-cases.json](studio-cases.json) 记录预期检查结果、原文保持要求和5个作者参考修复。参考修复用于离线回归；真实模型候选另行记录。
 
 ```bash
 python -m pip install -r webui/requirements-test.txt
 python -m unittest discover -s webui -p 'test_samples.py' -v
 ```
 
-此命令验证提取与修复契约。8份原稿和4份参考修订的独立编译入口见 [12次编译核验](../docs/evaluation-results/studio-latex/README.md)。
+此命令验证提取与修复契约。9份原稿和5份参考修订的独立编译入口见 [12次编译核验](../docs/evaluation-results/studio-latex/README.md)（已保存结果基于当时的8份原稿与4份参考修订）。
 
 ## CLI 样本
 

@@ -128,7 +128,7 @@ python scripts/evaluate_skills.py run \
 
 ## 支持范围与数据
 
-Studio 接收单个 `.tex`，目前按行提取 `$...$` 公式并检查简单表格；CLI 接收已有 `layout.json`，运行公式和表格检查。Studio 可按规则重算简单合计，CLI 真实模型模式只修复公式。PDF 预览显示第一页。完整项目上传、OCR、多行公式提取和多用户隔离在[路线图](docs/roadmap.md)中。
+Studio 接收单个 `.tex`，按 TeX 上下文提取行内 `$...$` 公式（注释、verbatim 原样区和同行 `$$` 显示区不进候选）并检查简单表格；CLI 接收已有 `layout.json`，运行公式和表格检查。Studio 可按规则重算简单合计，CLI 真实模型模式只修复公式。PDF 预览显示第一页。完整项目上传、OCR、多行公式提取和多用户隔离在[路线图](docs/roadmap.md)中。
 
 语法通过、编译通过和数学结论正确是不同判断。例如 `∫₀¹ x dx = 1` 可通过前两项，正确值仍是 `1/2`。候选需对照原意审阅。
 

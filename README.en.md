@@ -128,7 +128,7 @@ Evaluation and compilation runners require a new output directory. Dry-run valid
 
 ## Scope and data
 
-Studio accepts a single `.tex`, extracts same-line `$...$` formulas, and checks simple tables. The CLI accepts existing `layout.json` inputs and runs formula and table checks. Studio can recompute simple totals; the CLI's real-model provider repairs formulas only. PDF preview shows the first page. Project uploads, OCR, multiline formula extraction, and multi-user isolation are on the [roadmap](docs/roadmap.md).
+Studio accepts a single `.tex`, extracts same-line `$...$` formulas with TeX context awareness (comments, verbatim-style bodies and same-line `$$` display regions yield no candidates), and checks simple tables. The CLI accepts existing `layout.json` inputs and runs formula and table checks. Studio can recompute simple totals; the CLI's real-model provider repairs formulas only. PDF preview shows the first page. Project uploads, OCR, multiline formula extraction, and multi-user isolation are on the [roadmap](docs/roadmap.md).
 
 Syntax acceptance, successful compilation, and mathematical correctness are separate judgments. For example, `∫₀¹ x dx = 1` can pass the first two checks although the correct value is `1/2`. Review candidates against the intended meaning.
 

@@ -7,7 +7,7 @@
 | 要验证什么 | 输入 | 入口 |
 | --- | --- | --- |
 | 检查器的已定义行为 | 27例，F01–F10、T01–T17 | `scripts/evaluate_cases.py` |
-| 编辑、候选和人工采用 | `samples/docs/` 中13份 `.tex` | Studio 文件列表 |
+| 编辑、候选和人工采用 | `samples/docs/` 中14份 `.tex` | Studio 文件列表 |
 | 节点状态、报告和续跑 | exam/paper/report 的8个布局节点 | `python -m docforensics run` |
 | Skill 指令对照 | 研究 catalog | `scripts/evaluate_skills.py` |
 | 故障和恢复 | 隔离测试 | 本页末尾测试命令 |
@@ -33,7 +33,7 @@ CLI 首次预期为 `exam-01 OK=3`、`paper-01 OK=2 NEEDS_HUMAN=1`、`report-01 
 
 从文件列表选择样本，点击分析并查看定位；需要修复时生成候选，检查 diff、编译结果和剩余问题。点击采用只更新编辑器，关闭页面前导出 `.tex` 和报告。
 
-当前公式提取限于同一行的 `$...$`；注释或 verbatim 中的美元内容可能被误提取，多行数学环境及引用需另查。阅读结果时同时看抽取数和问题数。语法与编译结果用于判断结构，数学含义结合原文人工核对。
+当前扫描先过 TeX 上下文：未转义 `%` 之后的注释（`\%` 保持原样）、verbatim/verbatim*/lstlisting/minted 环境体与同行 `$$` 显示区不进候选；行内提取仍限于同一行的 `$...$`，多行数学环境及引用需另查。表格检查保持单元格原文，`20%` 类格式仍需人工。阅读结果时同时看抽取数和问题数。语法与编译结果用于判断结构，数学含义结合原文人工核对。
 
 | ID | 文件与输入 | 预期及审阅重点 |
 | --- | --- | --- |
@@ -50,8 +50,9 @@ CLI 首次预期为 `exam-01 OK=3`、`paper-01 OK=2 NEEDS_HUMAN=1`、`report-01 
 | S11 | [math-semantics.tex](../samples/docs/math-semantics.tex)：从0到1的 x 积分写成1 | 抽取3式均 `OK`，可编译；正确积分值为1/2 |
 | S12 | [math-align-boundary.tex](../samples/docs/math-align-boundary.tex)：`align*` 内定界符错误 | 抽取0式、0问题，编译失败；抽取范围外案例 |
 | S13 | [math-references.tex](../samples/docs/math-references.tex)：缺失标签和文献键 | 抽取0式、0问题，编译退出0；日志有未定义引用提示 |
+| S14 | [math-context.tex](../samples/docs/math-context.tex)：注释、verbatim 与显示公式共存 | 抽取5式，1个 `RETRY`；注释镜像、原样环境和 `$$` 显示区均不进候选 |
 
-[机器可读清单](../samples/studio-cases.json)记录 S06–S13 的原文、抽取结果和作者参考修订。新增8份共抽取15个公式、报告4个语法问题。参考修订用于离线回判和未改区域测试。
+[机器可读清单](../samples/studio-cases.json)记录 S06–S14 的原文、抽取结果和作者参考修订。数学样本共9份，抽取20个公式、报告5个语法问题；S14 把注释镜像、verbatim 体和显示区误检保存为可复现反例。参考修订用于离线回判和未改区域测试。
 
 最新真实演示选择 S06：1次模型请求只补 `\right)`，形成1处编辑，编译失败转通过；使用者采用并下载 PDF、TeX 和报告。[动态演示及事件](dynamic-demo.md)另有正常讲义、积分反例和代表样本操作。S02 的一次下标候选失败保存在[历史记录](evaluation-results/studio-earlier/README.md)。
 
@@ -64,7 +65,7 @@ python -m unittest discover -s webui -p 'test_samples.py' -v
 
 样本测试使用真实检查器、预设提供方，模型请求数为0，也不调用编译器。检查内容包括清单与文件一致、实际抽取与状态、声明区间外文本不变，以及无候选时的调用预算和原文保留。
 
-编译单独复现，准备 Tectonic 后按[编译记录与步骤](evaluation-results/studio-latex/README.md)执行。该入口验证8份原稿与4份作者参考修订，逐份保存日志、PDF 和报告。已保存的12次结果均符合预期：7次生成 PDF，5次预期失败。S11 的错误等式仍可生成 PDF，S13 则需要进一步阅读引用警告。
+编译单独复现，准备 Tectonic 后按[编译记录与步骤](evaluation-results/studio-latex/README.md)执行。该入口随清单扩展覆盖9份原稿与5份作者参考修订；已保存的12次结果基于当时的8份原稿与4份参考修订，7次生成 PDF、5次预期失败。S11 的错误等式仍可生成 PDF，S13 则需要进一步阅读引用警告。
 
 ## 验证 Skill 对照与人工复核
 
@@ -101,4 +102,4 @@ python -m unittest discover -s scripts -p 'test_evaluate_*.py' -v
 python -m unittest discover -s webui -p 'test_*.py' -v
 ```
 
-新增案例请保留稳定 ID、来源与许可、原始输入、预期和判断理由，并同时加入正常对照。发现缺陷先保存失败输入和报告，再修实现。下一批优先增加自然发生的公式错误与 TeX 上下文提取案例，按来源划分开发集和评测集，保留人工复核及分歧。
+新增案例请保留稳定 ID、来源与许可、原始输入、预期和判断理由，并同时加入正常对照。发现缺陷先保存失败输入和报告，再修实现。下一批优先增加自然发生的公式错误，按来源划分开发集和评测集，保留人工复核及分歧。
