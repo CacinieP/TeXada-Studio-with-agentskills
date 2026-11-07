@@ -46,6 +46,7 @@ Tectonic 编译结果作为独立诊断展示；界面允许审阅、采用仍�
 | [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI `audit_table.py`；Studio `_table_problems()` | 结构化网格检查；Studio 另行解析简单 TeX 表格并重算 |
 | [doc-report](../skills/doc-report/SKILL.md) | CLI `write_report()`；Studio 导出 | 终态、候选差异、失败原因和调用记录 |
 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | CLI 读取现有 `layout.json` | 输入准备约定；自动 PDF/OCR 提取待实现 |
+| [doc-ocr-extract](../skills/doc-ocr-extract/SKILL.md) | `scripts/ocr_extract.py`（连接本机 vision 模型） | 图片 → 文本候选行；分治边界：不修复、不写状态、人工采纳后入文 |
 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 独立脚本和测试 | LaTeX 整理、编译和验证；Studio 直接调用 Tectonic |
 | [spark-ops](../skills/spark-ops/SKILL.md) | 操作者执行部署说明 | 用户级环境配置和节点检查 |
 

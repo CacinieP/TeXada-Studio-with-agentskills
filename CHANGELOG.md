@@ -10,6 +10,8 @@
 - A continuous browser demo with real model waiting, candidate review, adoption, downloads and sample navigation; all narration uses one synthetic voice reference.
 - `scripts/compile_studio_cases.py` to reproduce twelve archived compilation cases in a fresh output directory.
 - Chinese and English setup guides, troubleshooting, contribution guidance and release materials.
+- `doc-ocr-extract` Skill: image → text candidate lines via a local vision OCR model (`OCR_MODEL`, default `minicpm-ocr:latest`), with raw-bytes input, the checker-family status contract (OK / NEEDS_HUMAN / NEEDS_ENV), bounded response excerpts and ten contract tests under a fake endpoint.
+- A reproducible real-text OCR sample: `samples/ocr/source-inlines-01.tex` rendered to `inlines-01.png` via `scripts/make_ocr_samples.py` (Tectonic + pdftoppm), plus the first real-run evidence under `docs/evaluation-results/ocr-chain-01/` including candidate defects that justify mandatory human adoption.
 
 ### Changed
 
