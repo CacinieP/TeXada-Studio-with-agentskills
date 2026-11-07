@@ -222,7 +222,11 @@ class OpenAICompatibleProvider:
     name = "openai-compatible"
 
     def __init__(self, base="http://127.0.0.1:18147/v1", model="minicpm-v4.7-35b-a3b-q4", *,
-                 skill_mode="off", skill_root=None, seed=0, max_tokens=300):
+                 skill_mode="off", skill_root=None, seed=0, max_tokens=300,
+                 formula_response_format="text"):
+        if formula_response_format not in {"text", "json_schema"}:
+            raise ValueError("invalid_formula_response_format")
+        self.formula_response_format = formula_response_format
         if skill_mode not in {"on", "off"}:
             raise ValueError("invalid_skill_mode")
         if not isinstance(base, str) or not base.strip() or not isinstance(model, str) or not model.strip():
@@ -268,6 +272,7 @@ class OpenAICompatibleProvider:
                 "tool_sha256": {"doc-formula-verify": self.checker_sha256},
                 "parameters": {"temperature": 0, "seed": self.seed, "max_tokens": self.max_tokens,
                                "timeout_seconds": 120,
+                               "formula_response_format": self.formula_response_format,
                                **({"enable_thinking": False} if self.disable_thinking else {})},
                 "implementation_sha256": _implementation_hashes()}
 
@@ -294,6 +299,15 @@ class OpenAICompatibleProvider:
                    "stream": False}
         if self.disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
+        # Formula-only experiment: planner/selection calls use their own schemas.
+        if (self.formula_response_format == "json_schema"
+                and self.last_trace.get("operation") == "repair_formula"):
+            payload["response_format"] = {
+                "type": "json_schema", "json_schema": {
+                    "name": "formula_repair", "strict": True,
+                    "schema": {"type": "object", "properties": {
+                        "latex": {"type": "string", "minLength": 1}},
+                        "required": ["latex"], "additionalProperties": False}}}
         self.last_trace["prompt_sha256"] = _hash(_canonical(payload["messages"]))
         headers = {"Content-Type": "application/json"}
         if self._api_key:
@@ -378,6 +392,10 @@ class OpenAICompatibleProvider:
             if not isinstance(message, dict):
                 trace["reason"] = "bad_response_shape"
                 return None
+            trace["finish_reason"] = choice.get("finish_reason")
+            # Length only: do not persist private reasoning text.
+            reasoning = message.get("reasoning_content", message.get("reasoning", ""))
+            trace["reasoning_characters"] = len(reasoning) if isinstance(reasoning, str) else 0
             if message.get("refusal") or choice.get("finish_reason") == "content_filter":
                 trace["reason"] = "refused_response"
                 return None
@@ -495,3 +513,4 @@ class _ResponseTooLarge(Exception):
 
 # Keep existing CLI, evaluation scripts, and integrations source-compatible.
 OllamaProvider = OpenAICompatibleProvider
+

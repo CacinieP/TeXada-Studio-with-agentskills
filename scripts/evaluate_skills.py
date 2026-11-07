@@ -291,7 +291,8 @@ def run(args):
     providers = {}
     if args.mode == "model":
         providers = {group: OllamaProvider(base=args.base, model=args.model, skill_mode=skill,
-                                           seed=args.seed, max_tokens=args.max_tokens)
+                                           seed=args.seed, max_tokens=args.max_tokens,
+                                           formula_response_format=getattr(args, "formula_response_format", "text"))
                      for group, skill in zip(GROUPS[1:], ("off", "on"))}
     elif args.mode == "fixture":
         repairs = read_fixtures(args.fixture_repairs)
@@ -472,6 +473,8 @@ def main(argv=None):
     run_parser.add_argument("--model")
     run_parser.add_argument("--seed", type=int, default=0)
     run_parser.add_argument("--max-tokens", type=int, default=300)
+    run_parser.add_argument("--formula-response-format", choices=("text", "json_schema"), default="text",
+                            help="opt-in formula schema request; backend support must be verified separately")
     run_parser.add_argument("--fixture-repairs", type=Path)
     review_parser = commands.add_parser("review", help="validate and summarize independently completed review rows")
     review_parser.add_argument("--run-dir", type=Path, required=True)
@@ -486,3 +489,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
