@@ -1,0 +1,10 @@
+{
+  "filename": "TeXada-Studio-macOS27-arm64-preview-79677da.zip",
+  "bytes": 108233806,
+  "sha256": "67b294727013f1e712ea7763acc2c146af2fa827e559f18c46af7ce846eb5263",
+  "source_commit": "79677daffd61a8ee5edf10e1ca23ab80c31b265b",
+  "status": "local development preview; not a GitHub Release",
+  "minimum_macos": "27.0",
+  "architecture": "arm64",
+  "signature": "ad-hoc; not notarized"
+}

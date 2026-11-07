@@ -28,8 +28,8 @@ import uuid
 import zlib
 
 
-DEFAULT_BASE = "http://127.0.0.1:11434/v1"
-DEFAULT_MODEL = "MiniCPM-V-4.7-1B"
+DEFAULT_BASE = "http://127.0.0.1:18147/v1"
+DEFAULT_MODEL = "minicpm-v4.7-35b-a3b-q4"
 MAX_FILE_BYTES = 12 * 1024 * 1024
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
@@ -445,7 +445,7 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
             self.base, self.model = base, model
             self.endpoint = base + "/chat/completions"
             self._api_key = ""
-            self.disable_thinking = model.casefold().startswith("minicpm-v-4.7")
+            self.disable_thinking = model.casefold().startswith(("minicpm-v-4.7", "minicpm-v4.7"))
             self.skill_mode, self.seed, self.max_tokens = skill_mode, seed, max_tokens
             self.skill = load_skill(skill_root=skill_root) if skill_mode == "on" else None
             self.last_trace = {}

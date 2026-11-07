@@ -221,7 +221,7 @@ class OpenAICompatibleProvider:
 
     name = "openai-compatible"
 
-    def __init__(self, base="http://127.0.0.1:11434", model="MiniCPM-V-4.7-1B", *,
+    def __init__(self, base="http://127.0.0.1:18147/v1", model="minicpm-v4.7-35b-a3b-q4", *,
                  skill_mode="off", skill_root=None, seed=0, max_tokens=300):
         if skill_mode not in {"on", "off"}:
             raise ValueError("invalid_skill_mode")
@@ -237,7 +237,7 @@ class OpenAICompatibleProvider:
         if "\r" in self._api_key or "\n" in self._api_key:
             raise ValueError("invalid_provider_config")
         self.model = model.strip()
-        self.disable_thinking = self.model.casefold().startswith("minicpm-v-4.7")
+        self.disable_thinking = self.model.casefold().startswith(("minicpm-v-4.7", "minicpm-v4.7"))
         self.skill_mode = skill_mode
         self.seed = seed
         self.max_tokens = max_tokens

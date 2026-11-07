@@ -56,7 +56,7 @@ Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/
    ```bash
    .venv/bin/python scripts/run-local-studio.py \
      --base-url http://127.0.0.1:11434/v1 \
-     --model minicpm-v4.7-1b:latest --no-auto-model
+     --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
    ```
 
    The model name must exactly match an id returned by your service's `/v1/models`; on exit the launcher stops only model processes it started itself.
@@ -64,12 +64,14 @@ Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/
 
 Image/PDF transcription requires an endpoint that actually supports `image_url` — appearing in the model list is not verification. Deterministic syntax repairs need no model. See the [model guide](docs/local-studio.md#本机模型连接) for downloads, default paths, and optional parameters.
 
+The default is **35B-A3B Q4_K_M** (`minicpm-v4.7-35b-a3b-q4`) at `http://127.0.0.1:18147/v1`; saved explicit settings are preserved and there is no automatic downgrade to 1B. Weights plus projector total about 22.3GB before runtime/system memory: 16GB is not a supported target, 24GB is not recommended, 32GB is an untested planning starting point, and 64GB Mac was tested. 1B F16 remains manually selectable. See [comparison and evidence limits](docs/evaluation-results/v47-local-comparison-01/README.md).
+
 ### Optional tools and TeX resources
 
 | Feature | Additional requirements |
 | --- | --- |
 | Editing and deterministic checks | Python dependencies above; editor assets are bundled |
-| Model candidates and image transcription | A local MiniCPM-V 4.7 1B service; automatic startup also needs `llama-server`, GGUF and projector. Deterministic repairs need no model |
+| Model candidates and image transcription | A local MiniCPM-V 4.7 35B-A3B Q4 service; automatic startup also needs `llama-server`, GGUF and projector. Deterministic repairs need no model |
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
@@ -119,3 +121,15 @@ The legacy `run-minicpm-v47-studio.sh` explicitly selects a cloud API workflow. 
 Original code, documentation, and synthetic fixtures use **AGPL-3.0-only**. Third-party notices remain in [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
 
 Maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Detailed technical guides are currently in Chinese.
+
+### Local model profiles: 1B and 35B Q4
+
+Both sizes remain supported; **35B Q4 is the default**, with **1B F16** and 1B Q4 explicitly selectable. The UI connection settings also accept either model's actual service alias.
+
+```bash
+.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
+```
+
+Default local files: 35B Q4 under `~/.texada/models/`, 1B F16/Q4 under `~/.texada/models/1b/`; each uses the matching variant's `mmproj-model-f16.gguf` in its own directory. Existing files elsewhere can be selected with `--gguf` and `--mmproj`. No weights are downloaded automatically, and no size switch is made silently.

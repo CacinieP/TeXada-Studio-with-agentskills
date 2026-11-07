@@ -201,6 +201,27 @@ class LocalLauncherTest(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, "端口已被占用"):
             launcher.run(args)
 
+    def test_default_owned_weights_are_35b_q4(self):
+        args = self.args()
+        with patch.object(launcher.Path, "home", return_value=self.directory):
+            _, gguf, projector = launcher.find_model_files(args)
+        self.assertEqual(gguf.name, "MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf")
+        self.assertEqual(projector.name, "mmproj-model-f16.gguf")
+        self.assertEqual(launcher.DEFAULT_MODEL, "minicpm-v4.7-35b-a3b-q4")
+
+    def test_1b_profiles_use_matching_weights_and_separate_projector_directory(self):
+        for profile, filename in (("1b-f16", "MiniCPM-V-4_7-1B-F16.gguf"),
+                                  ("1b-q4", "MiniCPM-V-4_7-1B-Q4_K_M.gguf")):
+            args = self.args("--model-profile", profile)
+            with patch.object(launcher.Path, "home", return_value=self.directory):
+                _, gguf, projector = launcher.find_model_files(args)
+            self.assertEqual(gguf.name, filename)
+            self.assertEqual(gguf.parent.name, "1b")
+            self.assertEqual(projector.parent, gguf.parent)
+        args = self.args("--model-profile", "1b-f16", "--model", "wrong-model")
+        with self.assertRaisesRegex(RuntimeError, "不匹配"):
+            launcher.run(args)
+
     def test_model_launch_is_local_bounded_and_shutdown_only_touches_owned_handle(self):
         gguf, mmproj = self.directory / "model.gguf", self.directory / "projector.gguf"
         gguf.write_bytes(b"test weight")

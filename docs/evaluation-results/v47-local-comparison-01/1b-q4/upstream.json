@@ -1,0 +1,36 @@
+{
+  "repository": "openbmb/MiniCPM-V-4.7-1B-gguf",
+  "revision": "345adbfa02c4a4671e61b7c75502dc9bf24fa93d",
+  "files": [
+    {
+      "rfilename": "MiniCPM-V-4_7-1B-F16.gguf",
+      "blobId": "5ece6d26661319b4f15fcf3d2a2c30cf1ec0d11f",
+      "size": 2024372320,
+      "lfs": {
+        "sha256": "71bc942bf5e07b839a7e73e4c9faa2fa27f97993cddd124c63b5dcd66a432ee1",
+        "size": 2024372320,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+      "blobId": "2687260fac33b178ad7856a73ee01a90a00d7cff",
+      "size": 672003680,
+      "lfs": {
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d",
+        "size": 672003680,
+        "pointerSize": 134
+      }
+    },
+    {
+      "rfilename": "mmproj-model-f16.gguf",
+      "blobId": "99a2563a4729f9523713bd18f0fc18b8c2d4991c",
+      "size": 1110117984,
+      "lfs": {
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900",
+        "size": 1110117984,
+        "pointerSize": 135
+      }
+    }
+  ]
+}

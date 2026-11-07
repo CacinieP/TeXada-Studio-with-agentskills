@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 检查器的已定义行为 | 27例，F01–F10、T01–T17 | `scripts/evaluate_cases.py` |
 | 编辑、候选和人工采用 | `samples/docs/` 中13份 `.tex` | Studio 文件列表 |
+| 图片到文本候选（OCR 链路第一段） | `samples/ocr/` 真实文字合成图 | `skills/doc-ocr-extract/scripts/ocr_extract.py` |
 | 节点状态、报告和续跑 | exam/paper/report 的8个布局节点 | `python -m docforensics run` |
 | Skill 指令对照 | 研究 catalog | `scripts/evaluate_skills.py` |
 | 故障和恢复 | 隔离测试 | 本页末尾测试命令 |

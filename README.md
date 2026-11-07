@@ -61,7 +61,7 @@ macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic�
    ```bash
    .venv/bin/python scripts/run-local-studio.py \
      --base-url http://127.0.0.1:11434/v1 \
-     --model minicpm-v4.7-1b:latest --no-auto-model
+     --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
    ```
 
    模型名称须与本机服务 `/v1/models` 返回的名称完全一致；退出时只停止启动器自己启动的进程，不影响已有服务。
@@ -69,12 +69,14 @@ macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic�
 
 图片/PDF 识别要求端点真实支持 `image_url`，出现在模型列表不代表已验证；确定性语法修复候选不需要模型。模型下载、默认路径与可选参数见[本机模型连接](docs/local-studio.md#本机模型连接)。
 
+默认使用 **35B-A3B Q4_K_M**（`minicpm-v4.7-35b-a3b-q4`），本地服务默认 `http://127.0.0.1:18147/v1`，保留已保存的手动配置；不自动降级到 1B。权重与视觉投影器约 22.3GB，另需运行缓存与系统内存：16GB 不作为支持目标，24GB 不建议；32GB 是未实测的容量起点，64GB Mac 已实测。1B F16 仍可手动配置。[模型对照与证据边界](docs/evaluation-results/v47-local-comparison-01/README.md)。
+
 ### 可选工具与 TeX 资源
 
 | 想使用的功能 | 还需准备 |
 | --- | --- |
 | 编辑、语法检查、简单表格检查 | 上述 Python 依赖；编辑器资源已随源码提供 |
-| 模型候选与图片识别 | 本机 MiniCPM-V 4.7 1B 服务；自动启动还需 `llama-server`、GGUF 和 projector；确定性语法候选不需要模型 |
+| 模型候选与图片识别 | 本机 MiniCPM-V 4.7 35B-A3B Q4 服务；自动启动还需 `llama-server`、GGUF 和 projector；确定性语法候选不需要模型 |
 | PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
 | PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
@@ -124,3 +126,15 @@ Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中�
 原创代码、文档和合成样本采用 **AGPL-3.0-only**；第三方组件保留各自归属，见 [LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)，求助见 [SUPPORT.md](SUPPORT.md)。
 
 维护者 [@CacinieP](https://github.com/CacinieP)。引用信息见 [CITATION.cff](CITATION.cff)。
+
+### 两种模型均支持：1B 与 35B Q4
+
+两种尺寸都支持：**35B Q4 默认，1B F16 与 1B Q4 可显式选择**。界面连接设置也可填写对应服务的真实模型别名。
+
+```bash
+.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
+```
+
+默认权重路径：35B Q4 位于 `~/.texada/models/`；1B F16/Q4 位于 `~/.texada/models/1b/`，各自目录放对应变体的 `mmproj-model-f16.gguf`，避免混用 projector。其他位置的现有文件可用 `--gguf`、`--mmproj` 指定。不会自动下载或静默切换尺寸。

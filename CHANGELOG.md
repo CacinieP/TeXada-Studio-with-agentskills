@@ -51,3 +51,11 @@
 - Remove embedded deployment credentials, private paths and an unlicensed textbook extract from distributed source and reachable history.
 
 Historical runtime results remain in [validation records](docs/validation.md); previous media are listed in the [demo archive](docs/demo.md).
+
+## Local 35B profile and experiment archive (2026-11-08)
+
+- Keep the current mainline editor, guarded OCR importer and revision-bound review flow; do not restore the obsolete Cline UI.
+- Default local profile to verified MiniCPM-V 4.7 35B-A3B Q4_K_M, loopback port 18147; preserve saved/manual settings. Update auto-launch weight selection and document memory requirements.
+- Preserve standalone MiniCPM-OCR candidate CLI, OpenAI-compatible transport, original synthetic OCR samples and historical three-variant evidence. Old-branch results do not validate the newer mainline repair implementation.
+
+- Support explicit local profiles for both model sizes: default 35b-q4, optional 1b-f16 / 1b-q4, with variant-specific GGUF selection and isolated projector directories; preserve explicit server settings. Launcher regression: 20 tests passed.

@@ -55,7 +55,7 @@ state/quickstart/
 ```bash
 env -u VLM_API_KEY PYTHONPATH=harness .venv/bin/python -m docforensics run samples \
   --state state/model-local-01 \
-  --vlm http://127.0.0.1:18081/v1 --vlm-model MiniCPM-V-4.7-1B \
+  --vlm http://127.0.0.1:18147/v1 --vlm-model minicpm-v4.7-35b-a3b-q4 \
   --skill-mode on --seed 0 --max-tokens 300
 ```
 
@@ -66,7 +66,7 @@ env -u VLM_API_KEY PYTHONPATH=harness .venv/bin/python -m docforensics run sampl
 | 参数 | 默认值 | 用途 |
 | --- | --- | --- |
 | `--state` | `state/run1` | 事件和报告目录 |
-| `--vlm-model` | `MiniCPM-V-4.7-1B` | 本机服务使用实际标签，可显式覆盖 |
+| `--vlm-model` | `minicpm-v4.7-35b-a3b-q4` | 本机服务使用实际标签，可显式覆盖 |
 | `--skill-mode` | `on` | 加载公式 Skill；`off` 用于对照 |
 | `--seed` | `0` | 传给模型服务的 seed |
 | `--max-tokens` | `300` | 每次响应的 token 上限 |

@@ -39,7 +39,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或从项目目录运行�
 ```bash
 .venv/bin/python scripts/run-local-studio.py \
   --base-url http://127.0.0.1:18081/v1 \
-  --model MiniCPM-V-4.7-1B --no-auto-model
+  --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
 ```
 
 只接受 `http://localhost`、`127.0.0.1` 或 `[::1]` 的 OpenAI-compatible `/v1` 服务，模型名必须与该服务实际标签一致。本地请求绕过代理、拒绝重定向，不读取或发送云 API Key，也不自动回退到其他服务。指定模型不可用时，保留配置并提示连接问题；不要据此切换成云服务。

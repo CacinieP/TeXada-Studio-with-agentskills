@@ -1,0 +1,17 @@
+{
+  "source_commit": "79677daffd61a8ee5edf10e1ca23ab80c31b265b",
+  "minimum_macos": "27.0",
+  "architecture": "arm64",
+  "signing": "ad-hoc; not Developer ID, not notarized",
+  "bundled_macho_files": 108,
+  "codesign_deep_verify": true,
+  "tectonic": "Tectonic 0.17.0",
+  "pdfinfo": "pdfinfo version 26.10.0",
+  "pdftoppm": "pdftoppm version 26.10.0",
+  "isolated_chinese_math_table_two_page_pdf": true,
+  "bundled_app_backend_starts": true,
+  "both_model_sizes_configurable": true,
+  "create_read_save": true,
+  "bundled_api_compile_and_pdf_export": true,
+  "external_homebrew_or_user_dylib_references": []
+}

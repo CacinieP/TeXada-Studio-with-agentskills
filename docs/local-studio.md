@@ -127,7 +127,7 @@ macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口�
 ```bash
 .venv/bin/python scripts/run-local-studio.py \
   --base-url http://127.0.0.1:18081/v1 \
-  --model MiniCPM-V-4.7-1B --no-auto-model
+  --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
 ```
 
 模型名称必须是本机服务真实使用的名称。Ollama 用户应使用自己已安装并支持所需能力的完整标签，例如本机已拉取 `minicpm-v4.7-1b` 时：
@@ -145,11 +145,11 @@ macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口�
 启动器可以查找：
 
 ```text
-~/.texada/models/MiniCPM-V-4_7-1B-Q4_K_M.gguf
+~/.texada/models/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
 ~/.texada/models/mmproj-model-f16.gguf
 ```
 
-同时需要 `PATH` 中的 `llama-server`，或已有的 `~/.texada/bin/llama-server`、`~/.texada/runtime/llama-server`。这些文件不会随 Studio 自动下载。官方模型来源：[1B checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B)、[1B GGUF](https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf)。
+同时需要 `PATH` 中的 `llama-server`，或已有的 `~/.texada/bin/llama-server`、`~/.texada/runtime/llama-server`。这些文件不会随 Studio 自动下载。默认官方来源：[35B-A3B GGUF](https://huggingface.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf)。需配套同一 35B 变体的 projector，不得混用 1B projector；1B F16 仍可通过显式路径与模型名选择。35B 权重加 projector 约 22.3GB，64GB Mac 已验证，32GB 是未实测容量起点，16GB 不作为默认支持目标。
 
 也可以明确指定已有文件，避免重复保存权重：
 

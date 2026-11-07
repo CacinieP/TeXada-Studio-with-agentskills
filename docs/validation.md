@@ -59,6 +59,7 @@ python scripts/compile_studio_cases.py \
 | 确定性检查器 | 27/27符合预期 | [检查案例](../samples/evaluation/README.md) |
 | 三组评测流程 | dry-run和fixture运行完成，模型HTTP请求0次 | [研究协议](../samples/research/README.md) |
 | Studio样本编译 | 12/12符合预期：7份PDF、5份预期失败 | [编译命令与判定](evaluation-results/studio-latex/README.md) |
+| OCR候选链路首跑 | 真实合成图6行候选，公式与表格数字正确恢复；段落并行与 `\geq` 文本差异按人工清单处理（issue #24 第一段） | [首跑证据](evaluation-results/ocr-chain-01/README.md) |
 | 编译输出保护 | 已有目录被拒绝且内容不变；缺编译器时不创建输出目录 | `scripts/compile_studio_cases.py` |
 | 文档一致性 | 中英文命令、本地链接和锚点通过核对，`git diff --check`通过 | [文档导航](index.md) |
 

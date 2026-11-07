@@ -1,0 +1,86 @@
+{
+  "model": "minicpm-v4.7-35b-a3b-q4",
+  "base": "http://127.0.0.1:18147/v1",
+  "probe": {
+    "base_url": "http://127.0.0.1:18147/v1",
+    "model": "minicpm-v4.7-35b-a3b-q4",
+    "local_mode": true,
+    "offline": true,
+    "model_available": true,
+    "tools": {
+      "tectonic": true,
+      "pdftoppm": true,
+      "pdfinfo": true
+    },
+    "limits": {
+      "file_bytes": 12582912,
+      "pdf_pages": 5,
+      "image_pixels": 20000000
+    },
+    "models": [
+      "minicpm-v4.7-35b-a3b-q4"
+    ],
+    "error": null,
+    "message": "本机模型已连接。"
+  },
+  "api_status": 200,
+  "ocr_elapsed_seconds": 4.556929833022878,
+  "requires_review": true,
+  "documents_not_auto_created": true,
+  "ocr_content": "% TeXada Studio local OCR candidate — compare with the original before use.\n\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb,graphicx,booktabs}\n\\begin{document}\n% Source page 1 — OCR candidate; review against original\n# Physics Course Notes: Synthetic OCR Source\n\nThe kinetic energy of a body with mass $m$ and velocity $v$ is $E = \\frac{1}{2}mv^2$. The identity $a^2 - b^2 = (a - b)(a + b)$ holds for all real numbers. A definite integral for review is $\\int_0^1 x^2 dx = \\frac{1}{3}$. The sequence rule can be written as $a_{n+1} = q a_n$ for $n \\ge 1$. **Totals for the table below.** Alpha stands for 45 units and Beta stands for 60 units, so the sum is 105 units.\n\n<table><tr><td>Item</td><td>Value</td></tr><tr><td>Alpha</td><td>45</td></tr><tr><td>Beta</td><td>60</td></tr><tr><td>Sum</td><td>105</td></tr></table>\n\\end{document}\n",
+  "ocr_content_sha256": "e0a54d20fafa372460ecb4bf1ac6f2dd37cd8065889ae2416d2d942514ed1883",
+  "ocr_source_sha256": "4c380178c69bbec7cbada571bc2a64bfa5351e2c2880506193f100af69e6b77c",
+  "provider_fingerprint": {
+    "schema_version": 1,
+    "provider": "local-openai-compatible",
+    "model": "minicpm-v4.7-35b-a3b-q4",
+    "skill_mode": "on",
+    "skill_id": "doc-formula-verify",
+    "skill_sha256": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+    "endpoint_sha256": "6954f5f38e6fa1e4a731c3bd9381d692cbcd564adfbcd3ed19ad272f4f2a09e7",
+    "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+    "system_prompt_sha256": "590b360e07958c709b8c99b53f1f148c42ef73e169f53e83029fd7e83ad63769",
+    "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+    "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+    "tool_sha256": {
+      "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+    },
+    "parameters": {
+      "temperature": 0,
+      "seed": 0,
+      "max_tokens": 300,
+      "timeout_seconds": 120,
+      "enable_thinking": false
+    },
+    "implementation_sha256": {
+      "provider": "84dc7f996ad391a68b311859a696fa1bd0766abbe112d323ef93cdfb5ffade2e",
+      "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+      "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+      "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+    },
+    "local_runtime_sha256": "a2b7a16a24496e5e8e3c71c29b61487a57e12084eb690b43dfecc57abe3f6eb3"
+  },
+  "repair_candidate": "\\frac{x}{2}",
+  "repair_trace": {
+    "schema_version": 1,
+    "provider": "local-openai-compatible",
+    "operation": "repair_formula",
+    "skill_mode": "on",
+    "skill_loaded": true,
+    "skill_id": "doc-formula-verify",
+    "skill_name": "doc-formula-verify",
+    "skill_sha256": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+    "prompt_sha256": "70220e6f62059bcdc656064386fbcba1c7c7f522f81b65f2cb1ddac8173a4145",
+    "model_called": true,
+    "model_calls": 1,
+    "reason": "ok",
+    "raw_candidate_response": "{\"latex\":\"\\\\frac{x}{2}\"}",
+    "response_truncated": false,
+    "usage": {
+      "prompt_tokens": 1693,
+      "completion_tokens": 11,
+      "total_tokens": 1704
+    },
+    "elapsed_seconds": 0.460736
+  }
+}

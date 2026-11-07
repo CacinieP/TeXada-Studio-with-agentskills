@@ -32,3 +32,7 @@
 - 历史 Chrome 与本机 1B 转写记录保留其日期和提交，见[本地验收](local-studio-acceptance.md)、[视觉验收](texada-visual-implementation.md)与[历史验证](validation.md)。
 
 源码 ZIP 只含已提交的 Git tree，附完整提交与文件摘要，不包含 `.git` 历史、CI 配置、运行文档、模型、虚拟环境或本机工具。仓库维护使用完整 checkout；普通源码包使用者按 README 准备运行环境。
+
+## 2026-11-08：最新主分支整合与 35B 默认配置
+
+保留现有完整编辑器、OCR 与版本审阅保护，整合本地 35B-A3B Q4 默认值及自动权重选择。473 项 Python 与四组 JS 回归通过；真实模型连接、原生 OCR 候选不自动入文、当前修复 provider 均实测。新 provider 的 12-case 对照仍为每组 5/7 语法候选通过，语义复核待完成。完整证据见 [本次验收](evaluation-results/v47-mainline-integration-01/README.md)。历史 1B/35B 数据与当前实现分开保存；本次未打包 DMG 或发布正式版本。

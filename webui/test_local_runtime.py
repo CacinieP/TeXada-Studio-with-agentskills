@@ -164,7 +164,7 @@ class LocalRuntimeTest(unittest.TestCase):
         self.assertEqual(request["path"], "/v1/chat/completions")
         self.assertNotIn("Authorization", request["headers"])
         body = request["body"]
-        self.assertEqual(body["model"], "MiniCPM-V-4.7-1B")
+        self.assertEqual(body["model"], "minicpm-v4.7-35b-a3b-q4")
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
         image = body["messages"][1]["content"][1]
         self.assertEqual(image["type"], "image_url")

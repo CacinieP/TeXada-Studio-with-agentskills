@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
-from local_runtime import LocalRuntime, LocalRuntimeError, make_local_provider
+from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, LocalRuntime, LocalRuntimeError, make_local_provider
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -33,8 +33,8 @@ if not TOKEN.strip():
     raise RuntimeError("DEMO_TOKEN must be set to a non-empty secret before starting the server")
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
-VLM_MODEL = os.environ.get("VLM_MODEL", "MiniCPM-V-4.7-1B")
-VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://127.0.0.1:11434")
+VLM_MODEL = os.environ.get("VLM_MODEL", DEFAULT_MODEL)
+VLM_BASE_URL = os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE") or DEFAULT_BASE
 
 
 def _tectonic_command():
@@ -311,7 +311,7 @@ def _new_provider(*, skill_selection=False):
 
 
 def _local_runtime():
-    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL"), model=os.environ.get("VLM_MODEL"))
+    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"), model=os.environ.get("VLM_MODEL"))
 
 
 try:

@@ -24,7 +24,8 @@ concurrency:
 
 jobs:
   bundle:
-    runs-on: macos-14
+    # macOS 14 was retired; keep the existing ARM signing/notarization pipeline.
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

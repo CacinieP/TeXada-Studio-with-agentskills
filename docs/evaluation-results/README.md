@@ -8,3 +8,7 @@
 | [早前录屏任务](studio-earlier/README.md) | 报表与试卷的历史候选和失败记录 | [当前演示](../dynamic-demo.md) |
 
 存档保留原始结果。复跑使用新的输出目录，并核对报告中的输入、代码及依赖摘要。检查器报告只测规则行为；模型对照另列于先导实验。
+
+- [MiniCPM-V 4.7 local comparison: 35B Q4 / 1B Q4 / 1B F16](v47-local-comparison-01/README.md) — actual local inference, syntax candidates and OCR observations; semantic accuracy unmeasured.
+
+- [2026-11-08 current-mainline integration acceptance](v47-mainline-integration-01/README.md): 473 Python tests, four JS suites, native local OCR/review boundary and fresh 35B provider measurements.

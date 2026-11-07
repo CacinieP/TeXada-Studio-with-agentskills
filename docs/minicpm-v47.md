@@ -1,5 +1,8 @@
 # MiniCPM-V 4.7：Studio 单模型适配
 
+> 本页保留旧的显式 1B API profile 用法。当前默认本地配置已经改为 35B-A3B Q4_K_M，见 [本地指南](local-studio.md) 与 [实测](evaluation-results/v47-local-comparison-01/README.md)。旧 profile 仍需显式选择。
+
+
 真实协议、合成候选与编译边界见[本次验收](minicpm-v47-evidence.md)。
 
 TeXada Studio 与 [TeXada Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) 共用 MiniCPM-V-4.7-1B，分别承担文档编辑和数学表达工作流。Studio 的模型只提议公式语法修复；Python 保留确定性校验、至多两次尝试、审阅差异和人工确认。表格合计仍由本地精确计算处理。
@@ -24,7 +27,7 @@ export TEXADA_STUDIO_PYTHON="$PWD/.venv/bin/python"
 
 `.env.example` 中的密钥与端点都是注释占位。复制并加载它只设置非敏感默认值，不会清空已经导出的 `DEMO_TOKEN`、`VLM_API_KEY` 或覆盖专用启动器的默认端点。密钥通过进程环境提供，启动器本身不读取 `.env` 文件。
 
-直接启动 WebUI、调用 provider 或使用 CLI 时，模型默认值也统一为 `MiniCPM-V-4.7-1B`，端点仍默认本机 loopback。ModelBest 端点由专用启动器选择。设置 `VLM_BASE_URL` 与 `VLM_MODEL`（CLI 使用 `--vlm` 与 `--vlm-model`）可显式选择其他 OpenAI 兼容端点和模型；主机地址和以 `/v1` 结尾的 API 根地址均可使用。
+直接启动本地 WebUI、调用 provider 或使用 CLI 时，当前模型默认值为 `minicpm-v4.7-35b-a3b-q4`，默认端点为本机 `http://127.0.0.1:18147/v1`。ModelBest 端点由专用启动器选择。设置 `VLM_BASE_URL` 与 `VLM_MODEL`（CLI 使用 `--vlm` 与 `--vlm-model`）可显式选择其他 OpenAI 兼容端点和模型；主机地址和以 `/v1` 结尾的 API 根地址均可使用。
 
 ## 模型契约与验证边界
 

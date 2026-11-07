@@ -88,7 +88,7 @@ class AppTest(unittest.TestCase):
         self.assertEqual(unknown.status_code, 400)
 
     def test_default_model_is_minicpm_and_explicit_environment_override_still_works(self):
-        for extra, model, base in (({}, "MiniCPM-V-4.7-1B", "http://127.0.0.1:11434"),
+        for extra, model, base in (({}, "minicpm-v4.7-35b-a3b-q4", "http://127.0.0.1:18147/v1"),
                                    ({"VLM_MODEL": "other-model", "VLM_BASE_URL": "http://localhost:9000/v1"},
                                     "other-model", "http://localhost:9000/v1")):
             with self.subTest(model=model), patch.dict(os.environ, {"DEMO_TOKEN": "test-only-demo-token", **extra}, clear=True):

@@ -72,3 +72,11 @@ brew install poppler
 ```
 
 覆盖会话读取(回环/凭据校验)、存活判定、PATH 前置、TeX 缓存种子、命令行与环境组装、两种包结构生成;不启动 GUI、不联网。
+
+### 构建解释器
+
+自包含包请使用 Homebrew 或 python.org 的 macOS framework Python 创建 `.venv`。部分 uv standalone Python 将 zlib 静态内置，py2app 会报 `zlib has no attribute __file__`；打包脚本现会在收集资源前拒绝此环境并给出提示。本地运行 Studio 不受此打包限制。
+
+### 当前公证构建的系统目标
+
+GitHub 公证流水线使用 macOS 15 ARM runner；分发包明确声明 macOS 15+ / Apple Silicon，避免旧的 macOS 11 声明低于捆绑工具的实际平台要求。本机 Homebrew Python 若要求更高系统版本，所得本地测试包需按实际二进制提高最低版本，不用来证明较旧 macOS 的兼容性。

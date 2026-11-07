@@ -27,7 +27,7 @@ class ProviderRuntimeTest(unittest.TestCase):
 
     def test_legacy_ollama_alias_keeps_unauthenticated_host_contract(self):
         self.assertIs(vlm.OllamaProvider, vlm.OpenAICompatibleProvider)
-        provider = vlm.OllamaProvider(model="qwen2.5vl:7b")
+        provider = vlm.OllamaProvider(base="http://127.0.0.1:11434", model="qwen2.5vl:7b")
         with patch.object(vlm.urllib.request, "urlopen", return_value=response()) as network:
             self.assertEqual(provider.repair_formula({"data": {"latex": "a_"}}), "a_1")
         request = network.call_args.args[0]
@@ -62,10 +62,10 @@ class ProviderRuntimeTest(unittest.TestCase):
 
     def test_default_provider_and_cli_model_are_minicpm_with_explicit_override_supported(self):
         provider = vlm.OpenAICompatibleProvider()
-        self.assertEqual(provider.model, "MiniCPM-V-4.7-1B")
-        self.assertEqual(provider.endpoint, "http://127.0.0.1:11434/v1/chat/completions")
+        self.assertEqual(provider.model, "minicpm-v4.7-35b-a3b-q4")
+        self.assertEqual(provider.endpoint, "http://127.0.0.1:18147/v1/chat/completions")
         self.assertTrue(provider.disable_thinking)
-        for extra, expected in (([], "MiniCPM-V-4.7-1B"), (["--vlm-model", "other-model"], "other-model")):
+        for extra, expected in (([], "minicpm-v4.7-35b-a3b-q4"), (["--vlm-model", "other-model"], "other-model")):
             with self.subTest(expected=expected), patch.object(cli, "cmd_run", return_value=0) as run:
                 self.assertEqual(cli.main(["run", "samples", "--vlm", "http://127.0.0.1:11434", *extra]), 0)
                 self.assertEqual(run.call_args.args[0].vlm_model, expected)
