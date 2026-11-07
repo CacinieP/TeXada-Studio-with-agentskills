@@ -121,3 +121,15 @@ The legacy `run-minicpm-v47-studio.sh` explicitly selects a cloud API workflow. 
 Original code, documentation, and synthetic fixtures use **AGPL-3.0-only**. Third-party notices remain in [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
 
 Maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Detailed technical guides are currently in Chinese.
+
+### Local model profiles: 1B and 35B Q4
+
+Both sizes remain supported; **35B Q4 is the default**, with **1B F16** and 1B Q4 explicitly selectable. The UI connection settings also accept either model's actual service alias.
+
+```bash
+.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
+```
+
+Default local files: 35B Q4 under `~/.texada/models/`, 1B F16/Q4 under `~/.texada/models/1b/`; each uses the matching variant's `mmproj-model-f16.gguf` in its own directory. Existing files elsewhere can be selected with `--gguf` and `--mmproj`. No weights are downloaded automatically, and no size switch is made silently.

@@ -126,3 +126,15 @@ Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中�
 原创代码、文档和合成样本采用 **AGPL-3.0-only**；第三方组件保留各自归属，见 [LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)，求助见 [SUPPORT.md](SUPPORT.md)。
 
 维护者 [@CacinieP](https://github.com/CacinieP)。引用信息见 [CITATION.cff](CITATION.cff)。
+
+### 两种模型均支持：1B 与 35B Q4
+
+两种尺寸都支持：**35B Q4 默认，1B F16 与 1B Q4 可显式选择**。界面连接设置也可填写对应服务的真实模型别名。
+
+```bash
+.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
+.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
+```
+
+默认权重路径：35B Q4 位于 `~/.texada/models/`；1B F16/Q4 位于 `~/.texada/models/1b/`，各自目录放对应变体的 `mmproj-model-f16.gguf`，避免混用 projector。其他位置的现有文件可用 `--gguf`、`--mmproj` 指定。不会自动下载或静默切换尺寸。

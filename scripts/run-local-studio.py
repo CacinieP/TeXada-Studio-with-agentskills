@@ -35,6 +35,21 @@ def default_state_dir():
     return Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "texada-studio"
 
 
+MODEL_PROFILES = {
+    "35b-q4": {"model": DEFAULT_MODEL, "directory": "", "gguf": "MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf"},
+    "1b-f16": {"model": "minicpm-v4.7-1b-f16", "directory": "1b", "gguf": "MiniCPM-V-4_7-1B-F16.gguf"},
+    "1b-q4": {"model": "minicpm-v4.7-1b-q4_k_m", "directory": "1b", "gguf": "MiniCPM-V-4_7-1B-Q4_K_M.gguf"},
+}
+
+
+def model_profile(args):
+    name = getattr(args, "model_profile", None)
+    if name:
+        return MODEL_PROFILES[name]
+    model = getattr(args, "model", None) or DEFAULT_MODEL
+    return next((profile for profile in MODEL_PROFILES.values() if profile["model"] == model), None)
+
+
 def parser():
     result = argparse.ArgumentParser(description="启动 TeXada Studio 本地版。不会下载模型或自动安装依赖。")
     result.add_argument("--no-browser", action="store_true", help="不自动打开浏览器；私密入口保存在数据目录 session.json")
@@ -44,6 +59,7 @@ def parser():
     result.add_argument("--state-dir", type=Path, help="用户数据目录，默认系统应用数据目录")
     result.add_argument("--base-url", help="本机 OpenAI 兼容模型地址")
     result.add_argument("--model", help=f"模型名称（默认 {DEFAULT_MODEL}，或保留已保存设置）")
+    result.add_argument("--model-profile", choices=tuple(MODEL_PROFILES), help="显式选择 35b-q4、1b-f16 或 1b-q4 本地权重配置")
     result.add_argument("--gguf", type=Path, help="本机 GGUF 权重路径")
     result.add_argument("--mmproj", type=Path, help="本机视觉 projector 路径")
     result.add_argument("--check", action="store_true", help="只检查本机依赖与配置，不联网、不启动服务、不写会话")
@@ -142,8 +158,9 @@ def acquire_lock(state):
 
 
 def find_model_files(args):
-    models = Path.home() / ".texada" / "models"
-    gguf = args.gguf.expanduser() if args.gguf else models / "MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf"
+    profile = model_profile(args) or MODEL_PROFILES["35b-q4"]
+    models = Path.home() / ".texada" / "models" / profile["directory"]
+    gguf = args.gguf.expanduser() if args.gguf else models / profile["gguf"]
     mmproj = args.mmproj.expanduser() if args.mmproj else models / "mmproj-model-f16.gguf"
     executable = shutil.which("llama-server")
     if not executable:
@@ -184,12 +201,13 @@ def select_service(config, args):
 
 
 def launch_owned_model(args, config, state, environment):
-    if args.gguf is None and config["model"] != DEFAULT_MODEL:
+    profile_args = argparse.Namespace(**{**vars(args), "model": config["model"]})
+    if args.gguf is None and model_profile(profile_args) is None:
         print("当前模型名称与默认 MiniCPM 权重不同；未自动加载或重命名权重。请连接对应模型服务，或用 --gguf 明确指定权重。", flush=True)
         return None
-    executable, gguf, mmproj = find_model_files(args)
+    executable, gguf, mmproj = find_model_files(profile_args)
     if not executable or not gguf.is_file() or not mmproj.is_file():
-        print("本机模型尚未连接，且未找到完整的 llama-server/35B Q4 GGUF/projector。可先使用编辑与检查，之后在连接设置中配置。", flush=True)
+        print("本机模型尚未连接，且未找到完整的 llama-server/所选 GGUF/projector。可先使用编辑与检查，之后在连接设置中配置。", flush=True)
         return None
     if not _listen_available(args.model_port):
         print("模型端口已被其他进程占用；没有停止或替换它。可在连接设置中选择已有服务。", flush=True)
@@ -208,7 +226,7 @@ def launch_owned_model(args, config, state, environment):
         print("本机模型进程无法启动；请检查 llama-server 与权重文件。", flush=True)
         return None
     stream.close()
-    print("正在加载本机 35B Q4 视觉模型…", flush=True)
+    print(f"正在加载本机模型 {config['model']}…", flush=True)
     return process
 
 
@@ -280,6 +298,11 @@ def watch_parent_exit(server):
 
 
 def run(args):
+    if getattr(args, "model_profile", None):
+        selected = MODEL_PROFILES[args.model_profile]["model"]
+        if args.model and args.model != selected:
+            raise RuntimeError("--model 与 --model-profile 不匹配；请使用对应别名或仅指定 profile。")
+        args.model = selected
     if not 1 <= args.port <= 65535 or not 1 <= args.model_port <= 65535 or args.port == args.model_port:
         raise RuntimeError("Studio 与模型端口必须是 1–65535 内不同的端口。")
     os.environ["PATH"] = prepend_local_bin(os.environ.get("PATH", ""))
