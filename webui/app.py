@@ -379,17 +379,95 @@ def _verify_formula(latex: str):
         return {"status": "NEEDS_ENV", "reason": "公式检查器不可用，请检查 SymPy / antlr 依赖与服务日志"}
 
 
+_VERBATIM_ENV = r"(?:verbatim\*?|lstlisting|minted)"
+_BEGIN_VERBATIM = _re.compile(r"\\begin\{" + _VERBATIM_ENV + r"\}")
+_END_VERBATIM = _re.compile(r"\\end\{" + _VERBATIM_ENV + r"\}")
+_INLINE_MATH = _re.compile(r"(?<!\\)\$(.+?)(?<!\\)\$")
+
+
+def _tex_unescaped(text: str, i: int) -> bool:
+    r"""text[i] 前的反斜杠个数为偶数（含0）时视为未被转义。
+
+    `\\%`（换行宏后接注释）里 % 前有偶数个反斜杠，仍算注释起点；
+    `\%`（单反斜杠转义）前是奇数个，保持原样。
+    """
+    back = 0
+    j = i - 1
+    while j >= 0 and text[j] == "\\":
+        back += 1
+        j -= 1
+    return back % 2 == 0
+
+
+def _code_before_comment(line: str) -> str:
+    """返回首个未转义 % 之前的代码部分；没有注释时返回整行。"""
+    for i, ch in enumerate(line):
+        if ch == "%" and _tex_unescaped(line, i):
+            return line[:i]
+    return line
+
+
+def _tex_code_lines(content: str, *, strip_inline_comments: bool = True):
+    r"""产出 (0基行号, 可扫描代码段)，按 TeX 上下文过滤。
+
+    verbatim / verbatim* / lstlisting / minted 环境体整段不产出，
+    `\end{...}` 之后的同一行剩余内容恢复扫描。strip_inline_comments 为 True
+    时截去未转义 % 之后的注释；表格路径显式传 False，避免 `20%` 类单元格
+    被截成纯数字而改变语义（该类格式保持需人工核对）。
+    """
+    in_env = False
+    for idx, line in enumerate(content.splitlines()):
+        code = line
+        if in_env:
+            end = _END_VERBATIM.search(code)
+            if not end:
+                continue
+            code, in_env = code[end.end():], False
+        if strip_inline_comments:
+            code = _code_before_comment(code)
+        begin = _BEGIN_VERBATIM.search(code)
+        if begin:
+            code, in_env = code[:begin.start()], True
+        if code:
+            yield idx, code
+
+
+def _strip_display_math(code: str) -> str:
+    """把同行 `$$...$$` 显示区域替换为等长空格，供行内公式扫描使用。
+
+    未闭合的 `$$` 将该行剩余部分整体排除，不再从显示区里拼出行内候选。
+    """
+    out = list(code)
+    i, n = 0, len(code)
+    while i < n:
+        if code[i] == "$" and code[i + 1:i + 2] == "$" and _tex_unescaped(code, i):
+            close = -1
+            j = i + 2
+            while j < n:
+                if code[j] == "$" and code[j + 1:j + 2] == "$" and _tex_unescaped(code, j):
+                    close = j
+                    break
+                j += 1
+            end = close + 2 if close >= 0 else n
+            out[i:end] = [" "] * (end - i)
+            i = end
+        else:
+            i += 1
+    return "".join(out)
+
+
 def _formula_problems(content: str, emit=None):
     problems, nid = [], 0
-    for i, line in enumerate(content.splitlines(), 1):
-        for m in _re.finditer(r"(?<!\\)\$(.+?)(?<!\\)\$", line):
+    for idx, code in _tex_code_lines(content):
+        line_no = idx + 1
+        for m in _INLINE_MATH.finditer(_strip_display_math(code)):
             nid += 1
             vj = _verify_formula(m.group(1))
             if emit:
-                emit("CHECK", node_id=f"f-{i:03d}-{nid}", line=i, original=m.group(1),
+                emit("CHECK", node_id=f"f-{line_no:03d}-{nid}", line=line_no, original=m.group(1),
                      checker="doc-formula-verify", check=vj)
             if vj.get("status") != "OK":
-                problems.append({"id": f"f-{i:03d}-{nid}", "type": "formula", "line": i,
+                problems.append({"id": f"f-{line_no:03d}-{nid}", "type": "formula", "line": line_no,
                                  "latex": m.group(1), "status": vj["status"],
                                  "reason": vj.get("reason", "")})
     return problems
@@ -405,6 +483,8 @@ def _table_problems(content: str):
 
     TeX macros, accounting notation, percentages and unit-bearing values need a
     human. Taking the first digit sequence from those cells changes their meaning.
+    Verbatim-style environment bodies are skipped, but inline comments are NOT
+    stripped: a `20%` cell stays a percent-like format that needs human review.
     """
     problems, rows, in_tab, width, shape_reason = [], [], False, None, ""
 
@@ -449,7 +529,7 @@ def _table_problems(content: str):
                     problems.append({**item, "right": right, "status": "RETRY",
                                      "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
 
-    for i, line in enumerate(content.splitlines()):
+    for i, line in _tex_code_lines(content, strip_inline_comments=False):
         stripped = line.strip()
         if stripped.startswith("%"):
             continue
@@ -540,8 +620,12 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
                  candidate=cand, reason="checker_rejected", check=vj)
         if ok and fixed != latex:
             old = f"${latex}$"
-            if old in lines[li]:
-                lines[li] = lines[li].replace(old, f"${fixed}$", 1)
+            # 只在可扫描区段内定位替换：注释与同行显示区域即使出现相同
+            # 文本也不被改写；strip_display 空格替换保持列位置与原行对齐。
+            scannable = _strip_display_math(_code_before_comment(lines[li]))
+            pos = scannable.find(old)
+            if pos != -1:
+                lines[li] = lines[li][:pos] + f"${fixed}$" + lines[li][pos + len(old):]
                 edits.append({"line": p["line"], "before": latex, "after": fixed, "skill": "doc-formula-verify"})
                 emit("CANDIDATE_EDIT", node_id=p["id"], line=p["line"], before=latex, after=fixed)
     content = "".join(lines)

@@ -3,7 +3,7 @@
   "title": "Original Studio mathematics teaching cases",
   "synthetic": true,
   "license": "AGPL-3.0-only",
-  "scope": "Eight new ASCII LaTeX documents for Studio extraction, syntax and review boundaries. Existing legacy samples remain separate.",
+  "scope": "Nine original ASCII LaTeX documents for Studio extraction, syntax and context boundaries. Existing legacy samples remain separate.",
   "validation_scope": {
     "analysis": "real local checker; expectations verified per case",
     "model": "not called by catalog validation",
@@ -338,6 +338,69 @@
         "The equation environment is not extracted.",
         "Equation labels and bibliography keys are not audited.",
         "Zero reported problems is not complete document validation."
+      ],
+      "compile_status": "not_run"
+    },
+    {
+      "case_id": "S14",
+      "file": "docs/math-context.tex",
+      "category": "extraction_boundary",
+      "title": "Comments, verbatim and display math context boundaries",
+      "source": "original synthetic teaching sample",
+      "license": "AGPL-3.0-only",
+      "intent": "Auditable inline formulas coexist with comments, verbatim and lstlisting bodies and same-line display math that must not become candidates.",
+      "expected_analysis": {
+        "formula_checks": [
+          {
+            "latex": "a^2-b^2=(a-b)(a+b)",
+            "status": "OK"
+          },
+          {
+            "latex": "s=\\frac{x}{x+y}",
+            "status": "OK"
+          },
+          {
+            "latex": "x+y",
+            "status": "OK"
+          },
+          {
+            "latex": "\\displaystyle \\frac{3x}{2x+1",
+            "status": "RETRY"
+          },
+          {
+            "latex": "a_{n+1}=q\\,a_n",
+            "status": "OK"
+          }
+        ],
+        "problem_count": 1,
+        "status_counts": {
+          "RETRY": 1
+        },
+        "problem_types": {
+          "formula": 1
+        }
+      },
+      "repair_expectation": {
+        "model_success_not_guaranteed": true,
+        "model_provider_calls_without_candidates": 2,
+        "edits_without_candidates": 0,
+        "preserve_original_without_candidates": true,
+        "deterministic_edits": 0
+      },
+      "reference_edits": [
+        {
+          "original": "\\displaystyle \\frac{3x}{2x+1",
+          "candidate": "\\displaystyle \\frac{3x}{2x+1}",
+          "expected_status": "OK",
+          "origin": "author_supplied_not_model_output"
+        }
+      ],
+      "semantic_boundary": "The one RETRY formula is a missing grouping brace; accepting the reference closure does not assert the surrounding mathematics. Defects inside comments, verbatim bodies or display math need human review.",
+      "extraction_boundary": [
+        "Dollar pairs inside unescaped comments, including the mirrored identity, never become candidates.",
+        "Verbatim and lstlisting bodies stay literal; scanning resumes on the same line after \\end{verbatim}.",
+        "Same-line $$ display regions are not inline candidates, so the unclosed \\left( inside display math is not reported automatically.",
+        "The escaped \\% inside the share line does not end the code part; later inline formulas on that line stay scannable."
       ],
       "compile_status": "not_run"
     }

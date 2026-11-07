@@ -1,0 +1,37 @@
+% Original synthetic teaching sample for TeXada; AGPL-3.0-only.
+% No copied textbook content or real personal data.
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage[margin=2.2cm]{geometry}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+% Teaching focus: TeX context decides what counts as math source.
+% A dollar pair inside a comment, like $1+1=3$, never becomes a candidate.
+% This commented mirror identity $a^2-b^2=(a-b)(a+b)$ is never re-checked.
+\title{Context Notes: Comments, Verbatim and Display Math}
+\author{LinguistsWantTech --- synthetic teaching sample}
+\date{}
+\begin{document}
+\maketitle
+\section*{1. Audited inline formulas}
+The identity below is real math source:
+$a^2-b^2=(a-b)(a+b)$.
+A share line stays scannable across an escaped percent: the fraction
+$s=\frac{x}{x+y}$ reaches 30\% of the sum $x+y$.
+\section*{2. Deliberate syntax gap in real text}
+One fraction below deliberately misses its closing brace:
+$\displaystyle \frac{3x}{2x+1$.
+\section*{3. Verbatim and listings bodies are literal}
+\begin{verbatim}
+Raw snippet: $1+1=3$ and \left( stay literal here.
+\end{verbatim} Scanning resumes on this line: $a_{n+1}=q\,a_n$.
+\begin{lstlisting}[language=Python]
+rate = "$1+1=3$"  # dollar pairs stay code, not math
+\end{lstlisting}
+\section*{4. Same-line display math stays outside inline candidates}
+$$\displaystyle g(t)=\left(\frac{2t}{1+t}$$
+The sized parenthesis above is deliberately unclosed. Display math and
+verbatim defects therefore need manual review, exactly like the align and
+label defects recorded in the earlier boundary samples.
+\end{document}
