@@ -72,3 +72,7 @@ brew install poppler
 ```
 
 覆盖会话读取(回环/凭据校验)、存活判定、PATH 前置、TeX 缓存种子、命令行与环境组装、两种包结构生成;不启动 GUI、不联网。
+
+### 构建解释器
+
+自包含包请使用 Homebrew 或 python.org 的 macOS framework Python 创建 `.venv`。部分 uv standalone Python 将 zlib 静态内置，py2app 会报 `zlib has no attribute __file__`；打包脚本现会在收集资源前拒绝此环境并给出提示。本地运行 Studio 不受此打包限制。

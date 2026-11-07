@@ -210,6 +210,11 @@ def main(argv=None) -> int:
         probe = subprocess.run([str(venv_python), "-c", f"import {module}"], capture_output=True)
         require(probe.returncode == 0, f".venv 缺少 {module};pip install -r desktop/requirements.txt 与 py2app")
 
+    probe = subprocess.run([str(venv_python), "-c",
+                            "import zlib; assert getattr(zlib, '__file__', None)"], capture_output=True)
+    require(probe.returncode == 0,
+            "当前 Python 的 zlib 是内置模块,与 py2app 不兼容;请用 Homebrew/官方 framework Python 创建 .venv 后重试")
+
     workdir = args.output / ".bundle-work"
     if workdir.exists():
         shutil.rmtree(workdir)
