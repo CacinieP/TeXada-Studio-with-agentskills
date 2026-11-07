@@ -1,6 +1,6 @@
 # 开源发布清单
 
-项目源码按 AGPL-3.0-only 开源，[B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/)已发布；尚未创建 tag 或 GitHub Release。比赛材料见[提交清单](submission-checklist.md)，准备状态见[开源审查](open-source-readiness.md)。
+项目源码按 AGPL-3.0-only 开源，[B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/)已发布；尚未创建 tag 或 GitHub Release。准备状态见[开源审查](open-source-readiness.md)。
 
 ## 已完成
 
