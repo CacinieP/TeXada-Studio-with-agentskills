@@ -99,6 +99,8 @@
     <button class="act ghost" id="btnZoomOut" title="缩小字号">A−</button>
     <button class="act ghost" id="btnZoomIn" title="放大字号">A+</button>
     <button class="act ghost" id="btnUpload">⬆ 上传 .tex</button>
+    <button class="act ghost" id="btnOcr">图片 OCR</button>
+    <input type="file" id="ocrInput" accept="image/png" style="display:none">
     <button class="act ghost" id="btnExport">⬇ 导出 .tex</button>
     <button class="act ghost hide" id="btnPdf">⬇ 导出 PDF</button>
     <input type="file" id="fileInput" accept=".tex" style="display:none">
@@ -108,7 +110,7 @@
       <h4>资源管理器 · 文档</h4>
       <div id="files"></div>
       <h4 style="margin-top:12px">工作流与 Skills</h4>
-      <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>工作流说明 · 尚未接入 OCR</i></div></div>
+      <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>布局节点说明 · OCR 文本需人工采纳</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>doc-table-audit</b><i>表格合计交叉验算</i></div></div>
       <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>工具集 · Studio 调用 Tectonic</i></div></div>
@@ -145,6 +147,12 @@
       <button class="sep-btn right" id="sepBtnR" title="折叠/展开右栏">▶</button>
     </div>
     <div id="rightpanel">
+      <div class="panel"><h4>图片 OCR · 待审阅</h4>
+        <p class="hint" id="ocrStatus" role="status">上传 PNG，逐行核对后采纳。公式分隔符需自行检查。</p>
+        <textarea id="ocrCandidate" aria-label="OCR 候选文本" rows="7" style="width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line)"></textarea>
+        <button class="act" id="btnOcrAccept" disabled>审阅后插入光标处</button>
+        <button class="act ghost" id="btnOcrLayout" disabled>导出待审 layout.json</button>
+      </div>
       <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
       <div class="panel"><h4>修复候选</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。修复后请查看对比，再决定是否采用。</div>
         <button class="act" id="btnAccept" disabled>采用候选到编辑器</button>
@@ -410,6 +418,53 @@ $("fileInput").onchange = async (ev) => {
   ev.target.value = "";
   await loadFiles();
   loadFile(f.name);
+};
+
+let ocrResult = null;
+$("btnOcr").onclick = () => $("ocrInput").click();
+$("ocrInput").onchange = async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  ocrResult = null;
+  $("ocrCandidate").value = "";
+  $("btnOcrAccept").disabled = $("btnOcrLayout").disabled = true;
+  $("btnOcr").disabled = true;
+  $("ocrStatus").textContent = "正在识别，原文不会自动修改…";
+  try {
+    if (file.size > 8 * 1024 * 1024) throw new Error("图片上限为 8 MiB");
+    const response = await fetch(`/api/studio/ocr?token=${encodeURIComponent(T)}`, {
+      method: "POST", headers: {"Content-Type": "image/png"}, body: file
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "OCR 请求失败");
+    if (result.status !== "OK") throw new Error(`${result.status}: ${result.reason}`);
+    ocrResult = result;
+    $("ocrCandidate").value = result.lines.join("\n");
+    $("ocrStatus").textContent = `${result.lines.length} 行候选 · ${result.model} · 待人工核对`;
+    $("btnOcrAccept").disabled = $("btnOcrLayout").disabled = false;
+  } catch (e) { $("ocrStatus").textContent = e.message; }
+  finally { $("btnOcr").disabled = false; ev.target.value = ""; }
+};
+$("btnOcrAccept").onclick = () => {
+  if (!ocrResult || !editor || !curName || busy || diffShown) {
+    return alert("请先打开文档，并结束修复或对比，再采纳 OCR 候选。");
+  }
+  const text = $("ocrCandidate").value;
+  if (!text.trim()) return;
+  editor.pushUndoStop();
+  editor.executeEdits("ocr-human-adoption", [{range: editor.getSelection(), text, forceMoveMarkers: true}]);
+  editor.pushUndoStop();
+  $("btnOcrAccept").disabled = true;
+  $("ocrStatus").textContent = "已人工采纳到当前文档，可撤销；尚未保存或编译。";
+};
+$("btnOcrLayout").onclick = () => {
+  if (!ocrResult) return;
+  const nodes = $("ocrCandidate").value.split(/\r?\n/).filter(line => line.trim()).map((text, i) => ({
+    id: `ocr-${i + 1}`, type: "text", page: 1, data: {text}, review_status: "pending"
+  }));
+  download("layout.json", new Blob([JSON.stringify({doc: "ocr-import", source: "local PNG OCR",
+    source_sha256: ocrResult.source_sha256, model: ocrResult.model, review_status: "pending", nodes}, null, 2)],
+    {type: "application/json"}));
 };
 
 let lastPreviewTag = null;

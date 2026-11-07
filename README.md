@@ -10,6 +10,8 @@ TeXada 将 Monaco 编辑器、规则检查、本地模型和 Tectonic 预览放�
 
 ![Studio 源码、预览与候选审阅](docs/images/studio-overview.png)
 
+Studio 支持 PNG → OCR 候选审阅 → 人工插入编辑器，并导出待审文本节点；见 [OCR 使用说明](docs/studio-ocr.md)。
+
 ## 演示与参赛材料
 
 第三届 NVIDIA DGX Spark 黑客松 · Agent Skills 开发挑战赛参赛项目。

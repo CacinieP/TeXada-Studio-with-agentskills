@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Studio PNG OCR upload, editable candidate review, explicit undoable adoption, and pending text-node layout export; see [usage](docs/studio-ocr.md).
+- Archive the completed v4.7 pilot and correct the 35B/1B model identity and unsupported Mac/CUDA conclusions; see [evidence](docs/evaluation-results/v47-pilot-01/README.md).
+
 ### Added
 
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.

@@ -6,6 +6,7 @@
 """
 
 import hashlib
+import importlib.util
 import hmac
 import json
 import os
@@ -17,6 +18,7 @@ import time
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -323,6 +325,34 @@ def studio_preview_live(token: str = Query(""), body: dict = None):
     tag = "live-" + hashlib.sha1(content.encode()).hexdigest()[:12]
     res = _studio_compile(content, name, tag)
     return {"ok": res["ok"], "png": res["png"], "log": res["log"]}
+
+
+# Reuse the CLI transport contract; model/endpoint are server configuration only.
+_ocr_spec = importlib.util.spec_from_file_location(
+    "studio_ocr", os.path.join(REPO, "skills", "doc-ocr-extract", "scripts", "ocr_extract.py"))
+OCR = importlib.util.module_from_spec(_ocr_spec)
+_ocr_spec.loader.exec_module(OCR)
+OCR_IMAGE_LIMIT = 8 * 1024 * 1024
+
+
+@app.post("/api/studio/ocr")
+async def studio_ocr(request: Request, token: str = Query("")):
+    """PNG bytes → review candidates. Never writes or adopts document content."""
+    _guard(token)
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "image/png":
+        raise HTTPException(status_code=415, detail="仅支持 PNG 图片")
+    image = bytearray()
+    async for chunk in request.stream():
+        if len(image) + len(chunk) > OCR_IMAGE_LIMIT:
+            raise HTTPException(status_code=413, detail="图片上限为 8 MiB")
+        image.extend(chunk)
+    if not image.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(status_code=400, detail="无效的 PNG 文件头")
+    status, reason, payload = await run_in_threadpool(
+        OCR.extract, bytes(image), model=OCR.DEFAULT_MODEL, base=OCR.DEFAULT_BASE,
+        prompt=OCR.DEFAULT_PROMPT, transport=OCR.DEFAULT_TRANSPORT)
+    return {**payload, "status": status, "reason": reason,
+            "source_sha256": hashlib.sha256(image).hexdigest(), "review_status": "pending"}
 
 
 @app.post("/api/studio/upload")

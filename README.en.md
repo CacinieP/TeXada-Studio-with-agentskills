@@ -10,6 +10,8 @@ This is a reproducible experimental prototype under AGPL-3.0-only, with no forma
 
 ![Source, preview, and candidate review](docs/images/studio-overview.png)
 
+Studio supports PNG upload, editable OCR candidates, explicit adoption into the editor, and pending text-node export; see [OCR usage](docs/studio-ocr.md).
+
 ## Demo and project materials
 
 An entry in the third NVIDIA DGX Spark Hackathon, Agent Skills Development Challenge.
