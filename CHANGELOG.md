@@ -7,6 +7,8 @@
 
 ### Added
 
+- Verified local MiniCPM-V 4.7 35B Q4, 1B Q4 and non-quantized 1B F16 probes, with real repair/OCR traces, official weight hashes, and reproducible server configuration ([report](docs/evaluation-results/v47-local-comparison-01/README.md)).
+
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
 - Twenty-seven checker cases, a casebook and reproducible evaluation reports.
 - Formula Skill instruction loading, on/off comparison runs, per-candidate events and context-bound CLI resume.

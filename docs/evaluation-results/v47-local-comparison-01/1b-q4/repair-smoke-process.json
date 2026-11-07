@@ -1,0 +1,5 @@
+{
+  "exit_code": 0,
+  "stdout": "{\"mode\": \"model\", \"cases\": 3, \"entries\": 9, \"model_calls\": 3, \"semantic_accuracy\": null, \"outdir\": \"/Users/caciniep/Documents/Codex/2026-11-08/ji/work/texada-studio/state/v47-1b-q4_k_m-01/repair-smoke\"}\n",
+  "stderr": ""
+}

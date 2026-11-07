@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-08 Asia/Shanghai",
+  "backend": "llama.cpp 0.7.0, build 11669, commit 620d2225c",
+  "context": 8192,
+  "parallel_slots": 1,
+  "gpu_layers": 99,
+  "backend_device_enumeration": "MTL0 Apple M5 Max; BLAS Accelerate",
+  "model_request_concurrency": 1,
+  "temperature": 0,
+  "seed": 0,
+  "repair_max_tokens": 4096,
+  "repair_http_timeout_seconds": 120,
+  "ocr_max_tokens": 2048,
+  "reasoning": "disabled; 35B enable_thinking=false template kwarg, 1B --reasoning off and official root non-thinking GGUF",
+  "model_order": [
+    "35b-q4",
+    "1b-q4",
+    "1b-f16"
+  ],
+  "existing_services": "Existing Ollama/TeXada services were left running; this is not an isolated hardware speed benchmark. Our model requests were sequential.",
+  "artifacts": "Weights/projectors and raw host logs are excluded. SHA256 files match the official HF metadata.",
+  "reproduce": "Start llama-server -m MODEL --mmproj PROJECTOR --host 127.0.0.1 --port PORT -c 8192 -np 1 -ngl 99 --reasoning off --alias ALIAS, then run scripts/probe_local_v47.py --base http://127.0.0.1:PORT --model ALIAS --model-file MODEL --projector PROJECTOR --outdir NEW_DIR"
+}

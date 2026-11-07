@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "model": "minicpm-v4.7-1b-f16",
+  "model_file": "MiniCPM-V-4_7-1B-F16.gguf",
+  "model_sha256": "71bc942bf5e07b839a7e73e4c9faa2fa27f97993cddd124c63b5dcd66a432ee1",
+  "model_bytes": 2024372320,
+  "projector_file": "mmproj-model-f16.gguf",
+  "projector_sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900",
+  "base": "http://127.0.0.1:18148",
+  "created_at_unix": 1794074947.513655,
+  "protocol": "OpenAI-compatible",
+  "max_tokens": 4096,
+  "purpose": "deployment and candidate contract probe, semantic accuracy unmeasured",
+  "health": {
+    "status": "ok"
+  },
+  "v1/models": {
+    "models": [
+      {
+        "name": "minicpm-v4.7-1b-f16",
+        "model": "minicpm-v4.7-1b-f16",
+        "modified_at": "",
+        "size": "",
+        "digest": "",
+        "type": "model",
+        "description": "",
+        "tags": [
+          ""
+        ],
+        "capabilities": [
+          "completion",
+          "multimodal"
+        ],
+        "parameters": "",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "",
+          "families": [
+            ""
+          ],
+          "parameter_size": "",
+          "quantization_level": ""
+        }
+      }
+    ],
+    "object": "list",
+    "data": [
+      {
+        "id": "minicpm-v4.7-1b-f16",
+        "aliases": [
+          "minicpm-v4.7-1b-f16"
+        ],
+        "tags": [],
+        "object": "model",
+        "architecture": {
+          "input_modalities": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output_modalities": [
+            "text"
+          ]
+        },
+        "created": 1794074947,
+        "owned_by": "llamacpp",
+        "meta": {
+          "vocab_type": 2,
+          "n_vocab": 248094,
+          "n_ctx": 8192,
+          "n_ctx_train": 262144,
+          "n_embd": 1024,
+          "n_params": 1006209856,
+          "size": 2013416704,
+          "ftype": "F16"
+        }
+      }
+    ]
+  }
+}

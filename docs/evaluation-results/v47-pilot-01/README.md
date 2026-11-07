@@ -39,3 +39,9 @@ Keep the repair default unchanged until a correctly identified checkpoint has
 fresh candidate and checker evidence. Rerun with explicit variant-qualified
 names and capture model metadata, model digest and backend/offload alongside
 the existing prompt/configuration fingerprints.
+
+## Follow-up
+
+The completed [local three-variant comparison](../v47-local-comparison-01/README.md)
+now includes a fresh Ollama retest and successful independent-server inference
+for the verified local 35B, official 1B Q4 and non-quantized 1B F16.

@@ -1,0 +1,5 @@
+{
+  "exit_code": 0,
+  "stdout": "{\"mode\": \"model\", \"cases\": 12, \"entries\": 36, \"model_calls\": 18, \"semantic_accuracy\": null, \"outdir\": \"/Users/caciniep/Documents/Codex/2026-11-08/ji/work/texada-studio/state/v47-35b-llama-01/repair-calculus\"}\n",
+  "stderr": ""
+}

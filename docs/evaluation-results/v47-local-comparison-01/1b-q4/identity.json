@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "model": "minicpm-v4.7-1b-q4_k_m",
+  "model_file": "MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+  "model_sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d",
+  "model_bytes": 672003680,
+  "projector_file": "mmproj-model-f16.gguf",
+  "projector_sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900",
+  "base": "http://127.0.0.1:18148",
+  "created_at_unix": 1794074876.128427,
+  "protocol": "OpenAI-compatible",
+  "max_tokens": 4096,
+  "purpose": "deployment and candidate contract probe, semantic accuracy unmeasured",
+  "health": {
+    "status": "ok"
+  },
+  "v1/models": {
+    "models": [
+      {
+        "name": "minicpm-v4.7-1b-q4_k_m",
+        "model": "minicpm-v4.7-1b-q4_k_m",
+        "modified_at": "",
+        "size": "",
+        "digest": "",
+        "type": "model",
+        "description": "",
+        "tags": [
+          ""
+        ],
+        "capabilities": [
+          "completion",
+          "multimodal"
+        ],
+        "parameters": "",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "",
+          "families": [
+            ""
+          ],
+          "parameter_size": "",
+          "quantization_level": ""
+        }
+      }
+    ],
+    "object": "list",
+    "data": [
+      {
+        "id": "minicpm-v4.7-1b-q4_k_m",
+        "aliases": [
+          "minicpm-v4.7-1b-q4_k_m"
+        ],
+        "tags": [],
+        "object": "model",
+        "architecture": {
+          "input_modalities": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output_modalities": [
+            "text"
+          ]
+        },
+        "created": 1794074876,
+        "owned_by": "llamacpp",
+        "meta": {
+          "vocab_type": 2,
+          "n_vocab": 248094,
+          "n_ctx": 8192,
+          "n_ctx_train": 262144,
+          "n_embd": 1024,
+          "n_params": 1006209856,
+          "size": 661048048,
+          "ftype": "Q4_K - Medium"
+        }
+      }
+    ]
+  }
+}

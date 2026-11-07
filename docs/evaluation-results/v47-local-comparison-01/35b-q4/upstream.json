@@ -1,0 +1,26 @@
+{
+  "repository": "openbmb/MiniCPM-V-4.7-35B-A3B-gguf",
+  "revision": "cf943fbe32f840b20ca05ccc146e7dc72baf9a9b",
+  "files": [
+    {
+      "rfilename": "MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf",
+      "blobId": "27e350131ec32ff84821fc675f2a4ac9fd433b93",
+      "size": 21166255008,
+      "lfs": {
+        "sha256": "9ecf91e814d7e9adc64325b1b65f8628a9b1bb8da4f61a92869ca7489bfd888e",
+        "size": 21166255008,
+        "pointerSize": 136
+      }
+    },
+    {
+      "rfilename": "mmproj-model-f16.gguf",
+      "blobId": "f85d0a101e3eee7d57c37956561715480da0cf0f",
+      "size": 1119575840,
+      "lfs": {
+        "sha256": "bff3b688e14c300eca273092c37c50a0ddfcc2054e079af1a0480edeed5d20f1",
+        "size": 1119575840,
+        "pointerSize": 135
+      }
+    }
+  ]
+}
