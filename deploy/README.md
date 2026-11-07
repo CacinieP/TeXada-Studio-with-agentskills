@@ -31,7 +31,7 @@ pdftoppm -v
 ollama list
 ```
 
-`TECTONIC` 可指向用户目录中的编译器。Studio 请求本机 `127.0.0.1:11434`，`VLM_MODEL` 应选 `ollama list` 中的完整标签。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。
+`TECTONIC` 可指向用户目录中的编译器。Studio 请求本机 `127.0.0.1:11434`，`REPAIR_MODEL` 应选 `ollama list` 中的完整标签（未设置时回退 `VLM_MODEL`，默认 `qwen3.8:27b-q4_K_M`）；`OCR_MODEL` 预留给图片输入链路（需 vision 标签，如 `minicpm-ocr:latest`）。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。
 
 ## 配置和启动
 

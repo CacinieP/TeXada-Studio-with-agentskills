@@ -25,6 +25,10 @@ if not TOKEN.strip():
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen3.8:27b-q4_K_M")
+# REPAIR_MODEL 优先（空白视为未设置），未设置时回退 VLM_MODEL（兼容旧部署）。
+REPAIR_MODEL = (os.environ.get("REPAIR_MODEL") or "").strip() or VLM_MODEL
+# OCR_MODEL 预留给图片输入链路（issue #24）：需 ollama list 中带 vision 能力的标签。
+OCR_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest").strip() or "minicpm-ocr:latest"
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
 app = FastAPI(title="TeXada Studio with Agent Skills demo")
@@ -82,7 +86,7 @@ def _run_pipeline(fresh: bool):
     if fresh and os.path.exists(STATE):
         shutil.rmtree(STATE)
     command = [sys.executable, "-m", "docforensics", "run", "samples", "--state", STATE,
-               "--vlm", "http://127.0.0.1:11434", "--vlm-model", VLM_MODEL]
+               "--vlm", "http://127.0.0.1:11434", "--vlm-model", REPAIR_MODEL]
     env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
     try:
         p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
@@ -200,7 +204,7 @@ def nodeinfo(token: str = Query("")):
     mem = mem_lines[1] if len(mem_lines) > 1 else ""
     models = output(["ollama", "list"])
     return {"gpu": gpu, "mem": mem, "models": models, "host": os.uname().nodename,
-            "model": VLM_MODEL}
+            "model": REPAIR_MODEL, "ocr_model": OCR_MODEL}
 
 
 @app.post("/api/run")
@@ -277,7 +281,7 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
 def _new_provider():
-    return OllamaProvider("http://127.0.0.1:11434", VLM_MODEL, skill_mode=SKILL_MODE)
+    return OllamaProvider("http://127.0.0.1:11434", REPAIR_MODEL, skill_mode=SKILL_MODE)
 
 
 PROVIDER = _new_provider()
@@ -671,8 +675,8 @@ def _studio_job(name: str, content: str, job_id: str):
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
                          "problems_after": _analyze(fixed),
-                         "model": VLM_MODEL if model_calls else None,
-                         "configured_model": VLM_MODEL, "model_calls": model_calls,
+                         "model": REPAIR_MODEL if model_calls else None,
+                         "configured_model": REPAIR_MODEL, "model_calls": model_calls,
                          "provider": "local-model-text" if model_calls else "deterministic-checks",
                          "skill_mode": SKILL_MODE, "trace": trace, "job_id": job_id,
                          "elapsed_seconds": round(time.monotonic() - started, 2),

@@ -80,13 +80,14 @@ Prepare a local Ollama-compatible service and select an installed model tag:
 ```bash
 ollama list
 curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='REPLACE_WITH_AN_INSTALLED_MODEL_TAG'
+export REPAIR_MODEL='REPLACE_WITH_AN_INSTALLED_MODEL_TAG'   # e.g. texada-minicpm5-1b:baseline
+export OCR_MODEL='minicpm-ocr:latest'                       # reserved: image input chain (roadmap P2)
 export SKILL_MODE=on
 ```
 
-Start or restart Studio from that terminal. Its model endpoint is fixed at `127.0.0.1:11434`. It sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode. Defaults differ between entry points, so set the model explicitly.
+`REPAIR_MODEL` is the formula-repair model; when unset it falls back to the legacy `VLM_MODEL` (default `qwen3.8:27b-q4_K_M`), so existing deployments keep working. `OCR_MODEL` is reserved for the image input chain and must name a vision-capable tag. Start or restart Studio from that terminal. Its model endpoint is fixed at `127.0.0.1:11434`. It sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode.
 
-To use the same model from the CLI:
+To use the same model from the CLI (the background CLI launched from Studio also uses `REPAIR_MODEL`):
 
 ```bash
 PYTHONPATH=harness python -m docforensics run samples \

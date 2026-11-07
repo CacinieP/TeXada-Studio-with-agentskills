@@ -471,7 +471,7 @@ def main(argv=None):
     run_parser.add_argument("--base")
     run_parser.add_argument("--model")
     run_parser.add_argument("--seed", type=int, default=0)
-    run_parser.add_argument("--max-tokens", type=int, default=300)
+    run_parser.add_argument("--max-tokens", type=int, default=8192)
     run_parser.add_argument("--fixture-repairs", type=Path)
     review_parser = commands.add_parser("review", help="validate and summarize independently completed review rows")
     review_parser.add_argument("--run-dir", type=Path, required=True)

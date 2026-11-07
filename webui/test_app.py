@@ -14,6 +14,36 @@ from fastapi.testclient import TestClient
 from test_static_assets import ROOT, studio
 
 
+class ModelRoutingTest(unittest.TestCase):
+    """REPAIR_MODEL takes precedence, VLM_MODEL stays the fallback, OCR has a MiniCPM default."""
+
+    def load_app(self, env):
+        with patch.dict(os.environ, env, clear=True):
+            spec = importlib.util.spec_from_file_location("model_routing_app", ROOT / "webui" / "app.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+    def test_repair_model_takes_precedence_and_routes_to_provider(self):
+        app = self.load_app({"DEMO_TOKEN": "routing-token",
+                             "REPAIR_MODEL": "texada-minicpm5-1b:baseline",
+                             "VLM_MODEL": "qwen3.8:27b-q4_K_M",
+                             "OCR_MODEL": "minicpm-ocr:latest"})
+        self.assertEqual(app.REPAIR_MODEL, "texada-minicpm5-1b:baseline")
+        self.assertEqual(app.PROVIDER.model, "texada-minicpm5-1b:baseline")
+        self.assertEqual(app.OCR_MODEL, "minicpm-ocr:latest")
+
+    def test_repair_model_falls_back_to_vlm_model(self):
+        app = self.load_app({"DEMO_TOKEN": "routing-token", "VLM_MODEL": "qwen2.5vl:7b"})
+        self.assertEqual(app.REPAIR_MODEL, "qwen2.5vl:7b")
+        self.assertEqual(app.PROVIDER.model, "qwen2.5vl:7b")
+
+    def test_blank_repair_model_falls_back_to_the_documented_default(self):
+        app = self.load_app({"DEMO_TOKEN": "routing-token", "REPAIR_MODEL": "  "})
+        self.assertEqual(app.REPAIR_MODEL, "qwen3.8:27b-q4_K_M")  # blank falls back to legacy default
+        self.assertEqual(app.OCR_MODEL, "minicpm-ocr:latest")
+
+
 class AppTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -95,12 +125,13 @@ class AppTest(unittest.TestCase):
             response = self.client.get("/api/nodeinfo", params=self.auth)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["gpu"], "")
-        self.assertEqual(response.json()["model"], studio.VLM_MODEL)
+        self.assertEqual(response.json()["model"], studio.REPAIR_MODEL)
+        self.assertEqual(response.json()["ocr_model"], studio.OCR_MODEL)
 
     def test_pipeline_uses_current_python_no_shell_and_keeps_exit_code(self):
         model = "model name; this must stay one argument"
         process = SimpleNamespace(stdout=["failed\n"], returncode=7, wait=lambda: 7)
-        with patch.object(studio, "VLM_MODEL", model), patch.dict(studio._run, clear=True), \
+        with patch.object(studio, "REPAIR_MODEL", model), patch.dict(studio._run, clear=True), \
                 patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(studio.threading, "Thread") as thread:
             studio._run_pipeline(fresh=False)

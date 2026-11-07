@@ -40,10 +40,11 @@ Studio 只上传单个 `.tex` 并显示第一页。依赖外部图片、宏文�
 ```bash
 ollama list
 curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='替换为已安装的完整模型标签'
+export REPAIR_MODEL='替换为已安装的完整模型标签'
+export OCR_MODEL='minicpm-ocr:latest'
 ```
 
-在同一终端重启 Studio。Studio 固定请求本机接口；CLI 用 `--vlm` 指定兼容服务根地址。默认模型标签只来自开发环境，显式选择已安装模型更可靠。
+在同一终端重启 Studio。Studio 固定请求本机接口；CLI 用 `--vlm` 指定兼容服务根地址。`REPAIR_MODEL` 优先于旧的 `VLM_MODEL`，未设置时回退旧值；`OCR_MODEL` 需带 vision 能力。默认模型标签只来自开发环境，显式选择已安装模型更可靠。
 
 ## Skill 配置错误或看不到模型请求
 

@@ -47,7 +47,7 @@ export VLM_MODEL='替换为已安装的完整模型标签'
 PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
   --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" \
-  --skill-mode on --seed 0 --max-tokens 300
+  --skill-mode on --seed 0 --max-tokens 8192
 ```
 
 | 参数 | 默认值 | 用途 |
@@ -56,7 +56,7 @@ PYTHONPATH=harness python -m docforensics run samples \
 | `--vlm-model` | `qwen2.5vl:7b` | 模型标签，建议显式指定已安装标签 |
 | `--skill-mode` | `on` | 加载公式 Skill；`off` 用于对照 |
 | `--seed` | `0` | 传给模型服务的 seed |
-| `--max-tokens` | `300` | 每次响应的 token 上限 |
+| `--max-tokens` | `2048` | 每次响应的 token 上限；thinking 模型需要为推理过程预留预算，非 thinking 模型生成更早结束不受影响 |
 
 完整参数：`PYTHONPATH=harness python -m docforensics run --help`。
 

@@ -225,7 +225,7 @@ def main(argv=None):
     r.add_argument("--skill-mode", choices=("on", "off"), default="on",
                    help="模型请求是否加载公式 Skill 正文；off 用于受控对照")
     r.add_argument("--seed", type=int, default=0)
-    r.add_argument("--max-tokens", type=int, default=300)
+    r.add_argument("--max-tokens", type=int, default=8192)
     r.set_defaults(func=cmd_run)
 
     args = ap.parse_args(argv)

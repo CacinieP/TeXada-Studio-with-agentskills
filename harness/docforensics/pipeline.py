@@ -33,7 +33,7 @@ def load_provider(args):
         return OllamaProvider(base=args.vlm, model=args.vlm_model,
                               skill_mode=getattr(args, "skill_mode", "on"),
                               seed=getattr(args, "seed", 0),
-                              max_tokens=getattr(args, "max_tokens", 300))
+                              max_tokens=getattr(args, "max_tokens", 8192))
     return FixtureProvider(args.fixture_repairs)
 
 

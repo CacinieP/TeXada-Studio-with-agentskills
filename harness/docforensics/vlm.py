@@ -118,7 +118,7 @@ class OllamaProvider:
     name = "local-vlm"
 
     def __init__(self, base="http://127.0.0.1:11434", model="qwen2.5vl:7b", *,
-                 skill_mode="off", skill_root=None, seed=0, max_tokens=300):
+                 skill_mode="off", skill_root=None, seed=0, max_tokens=8192):
         if skill_mode not in {"on", "off"}:
             raise ValueError("invalid_skill_mode")
         if not isinstance(base, str) or not base.strip() or not isinstance(model, str) or not model.strip():

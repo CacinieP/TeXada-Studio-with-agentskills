@@ -80,13 +80,14 @@ Tectonic 首次编译可能下载 TeX 包。安装与预览问题见[排错说�
 ```bash
 ollama list
 curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='替换为已安装的完整模型标签'
+export REPAIR_MODEL='替换为已安装的完整模型标签'   # 展示：texada-minicpm5-1b:baseline
+export OCR_MODEL='minicpm-ocr:latest'          # 预留：图片来源链路（roadmap P2）
 export SKILL_MODE=on
 ```
 
-在设置这些变量的终端启动或重启 Studio。模型接口固定为 `127.0.0.1:11434`；程序发送公式文本，最多尝试两次候选。`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。默认模型标签因入口而异，显式设置可避免误用。
+`REPAIR_MODEL` 是公式修复模型，未设置时回退旧的 `VLM_MODEL`（默认 `qwen3.8:27b-q4_K_M`），已部署环境无需改动即可升级。`OCR_MODEL` 预留给图片输入链路，需带 vision 能力的标签。在设置这些变量的终端启动或重启 Studio。模型接口固定为 `127.0.0.1:11434`；程序发送公式文本，最多尝试两次候选。`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。
 
-CLI 使用同一模型时：
+CLI 使用同一模型时（Studio 从界面发起的后台 CLI 也走 `REPAIR_MODEL`）：
 
 ```bash
 PYTHONPATH=harness python -m docforensics run samples \

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "purpose": "vision-capability probe for the reserved OCR_MODEL chain",
+  "model": "minicpm-ocr:latest",
+  "endpoint": "http://127.0.0.1:11434/api/chat",
+  "inputs": "samples/exam-01/crops placeholder images (original synthetic, no text rendered)",
+  "findings": [
+    {
+      "image": "f-101.png",
+      "response_text": "[Non-text]"
+    },
+    {
+      "image": "t-201.png",
+      "response_text": "There is no text in this image."
+    },
+    {
+      "image": "t-202.png",
+      "response_text": "All text:"
+    }
+  ]
+}
