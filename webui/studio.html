@@ -1,180 +1,95 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>TeXada Studio</title>
-<style>
-  :root { --bg:#0b1526; --panel:#101f38; --title:#0a1a33; --line:#1e3a5f; --fg:#d7e3f4;
-          --dim:#7a94b8; --accent:#4da3ff; --ok:#5cc8ff; --warn:#ffd166; --err:#ff7b72; --status:#0d2b52; }
-  * { box-sizing:border-box; margin:0; }
-  .hide { display:none !important; }
-  html,body { height:100%; }
-  body { background:var(--bg); color:var(--fg); font:13.5px/1.55 -apple-system,"PingFang SC",sans-serif;
-         display:flex; flex-direction:column; overflow:hidden; }
-  #titlebar { display:flex; align-items:center; gap:14px; background:var(--title); padding:0 14px; height:38px; flex:none; }
-  #titlebar .logo { width:14px; height:14px; border-radius:4px; background:linear-gradient(135deg,#4da3ff,#2d6cc9); }
-  #titlebar b { font-size:13px; }
-  #titlebar .spacer { flex:1; }
-  button.act { background:#1a4d8f; color:#fff; border:none; border-radius:4px; padding:5px 14px;
-               font-size:12.5px; cursor:pointer; }
-  button.act:hover { background:#2563a8; }
-  button.act[disabled] { opacity:.45; cursor:default; }
-  button.act.star { background:#2d6cc9; }
-  button.act.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
-  #main { flex:1; display:flex; min-height:0; }
-  #sidebar { width:200px; min-width:0; background:var(--panel); border-right:1px solid var(--line); padding:8px 0; flex:none; overflow-y:auto; }
-  .vsep { width:5px; cursor:col-resize; background:transparent; flex:none; position:relative; }
-  .vsep:hover, .vsep.on { background:var(--accent); opacity:.5; }
-  .sep-btn { position:absolute; top:50%; transform:translateY(-50%); width:14px; height:34px;
-             background:var(--panel); border:1px solid var(--line); color:var(--dim);
-             border-radius:0 6px 6px 0; cursor:pointer; font-size:9px; line-height:1; z-index:5;
-             display:flex; align-items:center; justify-content:center; }
-  .sep-btn:hover { color:var(--fg); background:var(--accent); border-color:var(--accent); }
-  #sepBtnE { top:42%; left:auto; right:0; } /* Stay inside the center pane when the preview is collapsed. */
-  #sepE { z-index:6; } /* Keep the handle above Monaco's scrollbars. */
-  .sep-btn.left { left:-1px; border-radius:0 6px 6px 0; }
-  .sep-btn.right { right:-1px; border-radius:6px 0 0 6px; }
-  #sidebar.collapsed { width:0 !important; min-width:0; padding:0; overflow:hidden; border:none; }
-  #rightpanel.collapsed { width:0 !important; min-width:0; overflow:hidden; border:none; }
-  #previewPane.collapsed { width:0 !important; min-width:0; padding:0 !important; overflow:hidden !important; border:none; flex:none; }
-  #bottom.collapsed { height:32px !important; overflow:hidden; }
-  #bottom.collapsed #joblog { visibility:hidden; }
-  .hsep-btn { position:absolute; right:14px; top:-2px; width:34px; height:9px;
-              background:var(--panel); border:1px solid var(--line); border-top:none; color:var(--dim);
-              border-radius:0 0 6px 6px; cursor:pointer; font-size:8px; z-index:5;
-              display:flex; align-items:center; justify-content:center; }
-  .hsep-btn:hover { color:var(--fg); background:var(--accent); }
-  #hsep { position:relative; }
-  #main { position:relative; }
-  #sidebar h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; padding:4px 14px; }
-  .file { padding:5px 14px; cursor:pointer; color:var(--fg); font-family:Menlo,monospace; font-size:12.5px; }
-  .file:hover { background:#16304f; }
-  .file.active { background:#1b3a5e; border-left:2px solid var(--accent); }
-  #center { flex:1; display:flex; flex-direction:column; min-width:0; }
-  #tabs { height:34px; background:var(--panel); display:flex; align-items:stretch; border-bottom:1px solid var(--line); flex:none; }
-  .tab { padding:0 16px; display:flex; align-items:center; font-family:Menlo,monospace; font-size:12.5px;
-         background:var(--bg); border-top:1px solid var(--accent); color:var(--fg); }
-  .tab[aria-disabled="true"] { cursor:not-allowed; }
-  #editor, #diff { flex:1; min-height:0; position:relative; overflow:hidden; }
-  #editor { z-index:0; } /* Contain Monaco's overlay stacking below panel controls. */
-  #duo { position:relative; }
-  #rightpanel { width:300px; min-width:0; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; flex:none; }
-  .panel { border-bottom:1px solid var(--line); padding:10px 12px; }
-  .panel h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
-  .prob { padding:5px 8px; border-radius:4px; cursor:pointer; margin-bottom:4px; font-size:12.5px; }
-  .prob:hover { background:#16304f; }
-  .prob .loc { color:var(--dim); font-family:Menlo,monospace; font-size:11.5px; }
-  .prob.f { border-left:2px solid var(--err); }
-  .prob.t { border-left:2px solid var(--warn); }
-  .prob.fixed { border-left:2px solid var(--ok); opacity:.75; }
-  .kv { font-family:Menlo,monospace; font-size:12px; color:var(--fg); white-space:pre-wrap; }
-  #preview img { width:100%; border:1px solid var(--line); border-radius:4px; background:#fff; }
-  #bottom { height:130px; min-height:0; background:var(--panel); border-top:1px solid var(--line); flex:none;
-            display:flex; flex-direction:column; }
-  #bottom h4 { font-size:11px; color:var(--dim); padding:4px 12px; text-transform:uppercase; letter-spacing:1px; }
-  #joblog { flex:1; overflow-y:auto; font-family:Menlo,monospace; font-size:11.5px; padding:0 12px 8px; color:var(--dim); }
-  #joblog .ok { color:var(--ok); } #joblog .err { color:var(--err); } #joblog .hl { color:var(--accent); }
-  #statusbar { height:24px; background:var(--status); color:#fff; display:flex; align-items:center;
-               gap:18px; padding:0 14px; font-size:11.5px; flex:none; }
-  .spin { display:inline-block; width:12px; height:12px; border:2px solid #fff5; border-top-color:#fff;
-          border-radius:50%; animation:r 0.8s linear infinite; vertical-align:-2px; margin-right:6px; }
-  @keyframes r { to { transform:rotate(360deg); } }
-  .hint { color:var(--dim); font-size:12px; padding:6px 8px; }
-  .skill { display:flex; gap:9px; align-items:flex-start; padding:7px 14px; }
-  .skill .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); margin-top:6px; flex:none;
-                box-shadow:0 0 6px #5cc8ff88; }
-  .skill b { display:block; font-family:Menlo,monospace; font-size:12px; color:var(--fg); font-weight:600; }
-  .skill i { display:block; font-style:normal; font-size:11px; color:var(--dim); }
-</style>
+<title>TeXada Studio · 本地文档工作台</title>
+<link rel="icon" href="/static/brand/texada-favicon.png">
+<link rel="stylesheet" href="/static/editor/studio.css">
 </head>
-<body>
-  <div id="titlebar">
-    <img class="logo" src="data:image/png;base64,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" style="width:22px;height:22px;border-radius:5px"><b>TeXada Studio</b>
-    <span style="color:var(--dim);font-size:12px">文档质检 · Skill 一键修复</span>
-    <div class="spacer"></div>
-    <button class="act ghost" id="btnAnalyze"> ⟲ 质检分析</button>
-    <button class="act star" id="btnFix">✨ Skill 一键修复</button>
-    <button class="act ghost" id="btnDiff" disabled>查看修复对比</button>
-    <button class="act ghost" id="btnZoomOut" title="缩小字号">A−</button>
-    <button class="act ghost" id="btnZoomIn" title="放大字号">A+</button>
-    <button class="act ghost" id="btnUpload">⬆ 上传 .tex</button>
-    <button class="act ghost" id="btnOcr">图片 OCR</button>
-    <input type="file" id="ocrInput" accept="image/png" style="display:none">
-    <button class="act ghost" id="btnExport">⬇ 导出 .tex</button>
-    <button class="act ghost hide" id="btnPdf">⬇ 导出 PDF</button>
-    <input type="file" id="fileInput" accept=".tex" style="display:none">
-  </div>
-  <div id="main">
-    <div id="sidebar">
-      <h4>资源管理器 · 文档</h4>
-      <div id="files"></div>
-      <h4 style="margin-top:12px">工作流与 Skills</h4>
-      <div class="skill"><span class="dot"></span><div><b>doc-layout-parse</b><i>布局节点说明 · OCR 文本需人工采纳</i></div></div>
-      <div class="skill"><span class="dot"></span><div><b>doc-formula-verify</b><i>SymPy 公式回判修复</i></div></div>
-      <div class="skill"><span class="dot"></span><div><b>doc-table-audit</b><i>表格合计交叉验算</i></div></div>
-      <div class="skill"><span class="dot"></span><div><b>latex-cleanup</b><i>工具集 · Studio 调用 Tectonic</i></div></div>
-    </div>
-    <div class="vsep" id="sepL" title="拖拽调整 · 双击折叠">
-      <button class="sep-btn left" id="sepBtnL" title="折叠/展开侧栏">◀</button>
-    </div>
-    <div id="center">
-      <div id="tabs">
-        <div class="tab active" id="tab-edit" onclick="showCenter('edit')"><span id="tabname">—</span></div>
-        <div class="tab" id="tab-diff" onclick="showCenter('diff')" aria-disabled="true" style="color:var(--dim)">修复对比</div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;padding-right:10px">
-          <span id="pvTabStatus" style="font-size:12px"></span>
-        </div>
-      </div>
-      <div id="duo" style="flex:1;display:flex;min-height:0;">
-        <div id="editor" style="flex:1;min-width:0;"></div>
-        <div class="vsep" id="sepE" title="拖拽调整源码/预览分栏"><button class="sep-btn left" id="sepBtnE" title="折叠/展开预览">▶</button></div>
-        <div id="previewPane" style="width:38%;min-width:0;overflow:auto;background:#091223;padding:14px;display:flex;flex-direction:column;">
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex:none">
-            <button class="act" id="btnCompile" style="padding:3px 10px;font-size:11.5px">⟳ 编译预览</button>
-            <span id="pvStatus" style="color:var(--dim);font-size:12px">用 Tectonic 渲染整页</span>
-            <div style="flex:1"></div>
-            <button class="act ghost" id="pvZoomFit" style="padding:2px 8px;font-size:11px">适应</button>
-            <button class="act ghost" id="pvZoom100" style="padding:2px 8px;font-size:11px">100%</button>
-          </div>
-          <div id="pvLog" class="kv hide" style="background:#0e1d36;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px;color:var(--err);flex:none"></div>
-          <div id="pvImgWrap" style="flex:1;display:flex;align-items:flex-start;justify-content:center;"></div>
-        </div>
-      </div>
-      <div id="diff" class="hide" style="flex:1;"></div>
-    </div>
-    <div class="vsep" id="sepR" title="拖拽调整 · 双击折叠">
-      <button class="sep-btn right" id="sepBtnR" title="折叠/展开右栏">▶</button>
-    </div>
-    <div id="rightpanel">
-      <div class="panel"><h4>图片 OCR · 待审阅</h4>
-        <p class="hint" id="ocrStatus" role="status">上传 PNG，逐行核对后采纳。公式分隔符需自行检查。</p>
-        <textarea id="ocrCandidate" aria-label="OCR 候选文本" rows="7" style="width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line)"></textarea>
-        <button class="act" id="btnOcrAccept" disabled>审阅后插入光标处</button>
-        <button class="act ghost" id="btnOcrLayout" disabled>导出待审 layout.json</button>
-      </div>
-      <div class="panel"><h4>问题 · Problems <span id="probCount" class="pill fail" style="margin-left:6px">0</span></h4><div id="problems"><div class="hint">打开文件后自动质检</div></div></div>
-      <div class="panel"><h4>修复候选</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。修复后请查看对比，再决定是否采用。</div>
-        <button class="act" id="btnAccept" disabled>采用候选到编辑器</button>
-        <button class="act ghost" id="btnReport" disabled style="margin-top:8px">导出质检报告</button></div>
-      <div class="panel"><h4>编译 · Tectonic</h4><div id="compile" class="kv hint">修复时自动编译对比</div></div>
-      <div class="panel"><h4>预览 · Preview</h4><div id="preview" class="hint">修复后显示渲染页面</div></div>
-    </div>
-  </div>
-  <div id="hsep" style="height:12px;cursor:row-resize;background:transparent;flex:none" title="拖拽调整 · 双击折叠">
-      <button class="hsep-btn" id="sepBtnH" title="折叠/展开日志">▾ 日志</button>
-    </div>
-  <div id="bottom"><h4 style="cursor:pointer" onclick="document.getElementById('sepBtnH').click()" title="点击折叠/展开">Skill 活动日志 ▴▾</h4><div id="joblog">待命。</div></div>
-  <div id="statusbar">
-    <span id="sb-node">本机</span><span id="sb-model" style="background:#ffffff22;padding:1px 8px;border-radius:9px">模型信息待加载</span>
-    <div style="flex:1"></div><span id="sb-right">TeXada Studio with Agent Skills · Agent Skills</span>
-    <a href="https://github.com/CacinieP/TeXada-Studio-with-agentskills" target="_blank" rel="noopener noreferrer" style="color:inherit">源码 · AGPL-3.0</a>
-  </div>
-
+<body data-theme="dark">
+<header id="titlebar">
+  <div class="brand"><img class="logo" src="/static/brand/texada-agent.png" alt="" width="32" height="32"><b>TeXada Studio</b></div>
+  <div class="workspace-document"><span id="workspaceFilename">未打开文档</span><span class="header-dot">·</span><span class="save-state" id="saveState" role="status">本地工作区</span><button class="icon-button" id="btnSave" title="保存 · ⌘/Ctrl S" aria-label="保存文档"></button></div>
+  <div class="header-actions"><button id="btnCommand" class="command-trigger" title="命令面板 · ⌘/Ctrl Shift P"><span data-icon="search"></span><span class="button-label">命令</span><kbd>⌘⇧P</kbd></button><button class="icon-button" id="btnWorkspaceSettings" aria-label="工作区设置" title="工作区设置" aria-expanded="false" aria-controls="workspaceSettingsMenu"></button></div>
+</header>
+<main id="main">
+  <nav id="activityRail" aria-label="工作区导航"><button id="activityDocuments" class="activity-button active" aria-label="文档与大纲" title="文档与大纲" aria-expanded="true" aria-controls="sidebar"></button><button id="activitySearch" class="activity-button" aria-label="查找和搜索" title="查找和搜索"></button><button id="activityOcr" class="activity-button" aria-label="图片与PDF识别" title="图片与PDF识别"></button><button id="activityAgent" class="activity-button" aria-label="Agent与审阅" title="Agent与审阅" aria-expanded="false" aria-controls="rightpanel"></button><div class="spacer"></div><button id="activitySettings" class="activity-button" aria-label="编辑器设置" title="编辑器设置"></button></nav>
+  <aside id="sidebar" aria-label="文档导航"><section class="navigator-section"><div class="navigator-heading"><h2>本地文档</h2><span id="fileCount" class="count"></span><div class="spacer"></div><button class="icon-button" id="btnNew" title="新建文档" aria-label="新建文档"></button><button class="icon-button" id="btnNewFromTemplate" title="从模板新建" aria-label="从模板新建"></button><button class="icon-button" id="btnUpload" title="打开LaTeX文档" aria-label="打开LaTeX文档"></button></div><input type="file" id="fileInput" accept=".tex" hidden><label class="file-search"><span data-icon="search"></span><input id="fileFilter" placeholder="筛选文档…" aria-label="筛选文档"></label><div id="files"></div><div class="file-tools"><button id="btnRename" class="subtle-button">重命名</button><button id="btnDelete" class="subtle-button danger">删除</button></div></section><section class="navigator-section outline-section"><div class="navigator-heading"><h2>大纲</h2><span id="outlineCount" class="count"></span><div class="spacer"></div><button id="btnOutline" class="icon-button" title="转到章节" aria-label="转到章节"></button></div><div id="outline"><p class="hint">章节标题将显示在这里。</p></div></section></aside>
+  <div class="vsep" id="sepL" title="拖拽调整文档导航"><button class="sep-btn" id="sepBtnL" aria-label="折叠或展开文档导航"></button></div>
+  <section id="center" aria-label="文档工作台">
+    <div class="workbar" role="toolbar" aria-label="文档操作"><div id="tabs" role="tablist" aria-label="文档视图"><button id="tab-edit" class="tab active" role="tab" aria-selected="true" aria-controls="duo" tabindex="0" onclick="showCenter('edit')"><span data-icon="file"></span><span id="tabname">未打开文档</span></button><button id="tab-diff" class="tab" role="tab" aria-selected="false" aria-controls="diff" aria-disabled="true" tabindex="-1" onclick="showCenter('diff')">修复对比</button></div><button class="icon-button" id="btnEditorTools" title="编辑与布局工具" aria-label="编辑与布局工具" aria-expanded="false" aria-controls="editorToolsMenu"></button><div class="spacer"></div><span id="pvTabStatus" class="sr-only"></span><button id="btnAgent" class="agent-switch" aria-expanded="false" aria-controls="rightpanel" title="Agent与审阅"><span data-icon="model"></span><span class="button-label">Agent</span><span class="switch-track" aria-hidden="true"><span></span></span></button><span class="toolbar-divider"></span><button class="toolbar-button" id="btnAnalyze">检查</button><button class="toolbar-button primary" id="btnCompile">编译</button><button class="toolbar-button hide" id="btnCancel">停止</button><button class="toolbar-button" id="btnExportMenu" aria-expanded="false" aria-haspopup="menu" aria-controls="exportMenu" title="导出文档">导出</button><button id="btnDiff" class="hide" disabled>查看修复对比</button></div>
+    <div id="duo" role="tabpanel" aria-labelledby="tab-edit"><div id="editor"></div><div class="vsep" id="sepE" title="拖拽调整源码与预览"><button id="sepBtnE" class="sep-btn" aria-label="折叠或展开PDF预览"></button></div><section id="previewPane" aria-label="PDF预览"><div class="preview-tools"><span class="preview-heading">PDF 预览</span><div class="spacer"></div><button class="icon-button" id="pvPrevious" disabled aria-label="上一页"></button><span id="pvPage">—</span><button class="icon-button" id="pvNext" disabled aria-label="下一页"></button><button class="preview-button" id="pvZoomFit">适应</button><button class="preview-button" id="pvZoom100">100%</button></div><div id="pvStatus" role="status">打开文档后编译预览</div><div id="pvLog" class="kv hide"></div><div id="pvImgWrap" class="fit"><div class="preview-empty"><span data-icon="file"></span><p>文档预览</p><small>编译当前文档，查看完整 PDF。</small></div></div></section></div><div id="diff" class="hide" role="tabpanel" aria-labelledby="tab-diff"></div>
+  </section>
+  <div class="vsep" id="sepR" title="调整Agent面板宽度"><button id="sepBtnR" class="sep-btn" aria-label="关闭Agent面板"></button></div>
+  <aside id="rightpanel" class="closed" aria-label="Agent与候选审阅"><div class="drawer-heading"><span data-icon="model"></span><h2>Agent 与审阅</h2><div class="spacer"></div><button id="btnInspectorClose" class="icon-button" title="关闭Agent面板" aria-label="关闭Agent面板"></button></div><section class="panel agent-intake"><p class="hint">本地 MiniCPM 提出候选，确认差异后再采用。</p><button id="btnFix" class="toolbar-button primary full">生成修复候选</button><button id="btnInspector" class="subtle-button full" aria-expanded="false" aria-controls="rightpanel">查看审阅结果</button></section><details class="card advanced-card" id="workflowPanel"><summary class="card-title"><span class="card-icon" data-icon="workflow"></span><h2>Agent 工作流</h2></summary><label class="sidebar-label"><input type="checkbox" id="plannerMode">受限 Agent 规划</label><label class="sidebar-label"><input type="checkbox" id="skillSelection">自动选择检查 Skill</label><p class="hint">至多 12 步；生成的修改始终先审阅。</p><details><summary class="hint">单公式交接 · 实验</summary><button class="light-button full" id="btnHandoff" disabled>修复当前公式</button><button class="light-button full" id="btnHandoffComplete" disabled style="margin-top:5px">续写当前公式</button><p class="hint" id="handoffHint">未启用单公式交接。</p></details></details><section class="panel"><h4>候选审阅</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。请先核对差异，再决定采用。</div><button class="act" id="btnAccept" disabled>采用候选到编辑器</button><button class="act ghost" id="btnReject" disabled>拒绝候选，保留原文</button><button class="act ghost" id="btnReport" disabled>导出检查报告</button></section><section class="panel"><h4>编译结果</h4><div id="compile" class="kv">尚无编译记录</div></section><section class="panel"><h4>候选预览</h4><div id="preview" class="hint">生成候选后显示。</div></section><section class="panel"><h4>最近运行 <button class="light-button" id="btnRefreshJobs" style="float:right;padding:0 5px">↻</button></h4><div id="jobs"><div class="hint">运行记录保存在本机。</div></div></section></aside>
+</main>
+<div id="hsep" title="拖拽调整底部面板高度"><button id="sepBtnH" class="hsep-btn" aria-label="折叠或展开底部面板"></button></div>
+<section id="bottom" class="collapsed" aria-label="问题与活动记录"><div class="bottom-tabs"><button class="bottom-tab" id="btnProblems" aria-expanded="false" aria-controls="problemsPane"><span data-icon="warning"></span><span>问题</span><span id="probCount">0</span></button><button class="bottom-tab" id="btnLog" aria-expanded="false" aria-controls="logPane"><span data-icon="file"></span><span>日志</span></button><div class="spacer"></div><button class="icon-button" id="btnBottomClose" title="关闭底部面板" aria-label="关闭底部面板"></button></div><div id="problemsPane" class="bottom-content hide"><div id="problems"><p class="hint">支持范围内尚无检查结果。</p></div></div><div id="logPane" class="bottom-content hide"><div id="joblog">工作台已就绪。</div></div></section>
+<footer id="statusbar"><span id="modelIndicator" class="model-indicator" aria-hidden="true"></span><button id="btnModelStatus" class="status-button" title="本地模型设置"><span id="sb-model">MiniCPM</span><span> · 本地</span><span id="modelConnectionStatus"> · 未检查</span></button><span id="localBadge" class="sr-only">连接状态尚未检查</span><span id="sb-node" class="hide"></span><div class="spacer"></div><span id="sb-position">行 1，列 1</span><span id="sb-selection" class="hide"></span><span class="status-divider"></span><span id="sb-count" title="源文件字符数">0 字符</span><span class="status-divider"></span><span>UTF-8</span><span class="status-divider"></span><span>LaTeX</span><button id="btnCommandHint" class="status-command" title="打开命令面板">⌘⇧P</button></footer>
+<div id="inspectorBackdrop" class="workspace-backdrop hide"></div><div id="navigatorBackdrop" class="workspace-backdrop hide"></div>
+<div id="exportMenu" class="workspace-menu hide" role="menu" aria-label="导出文档"><button id="btnExport" role="menuitem">导出 LaTeX (.tex)</button><button id="btnPdf" role="menuitem" disabled>导出 PDF</button></div>
+<div id="workspaceSettingsMenu" class="workspace-menu hide" role="menu" aria-label="工作区设置"><button id="btnEditorSettings" role="menuitem">编辑器设置</button><button id="btnSettings" role="menuitem">本地模型</button><button id="btnHistory" role="menuitem">运行记录</button><button id="btnTheme" role="menuitem">增强对比度</button></div>
+<div id="editorToolsMenu" class="workspace-menu hide" role="menu" aria-label="编辑与布局工具"><button id="btnFind" role="menuitem">查找</button><button id="btnReplace" role="menuitem">查找和替换</button><button id="btnQuickOutline" role="menuitem">转到章节</button><button id="btnTogglePreview" role="menuitem">切换PDF预览</button></div>
+<dialog id="importDialog"><div class="dialog-heading"><h2>图片 / PDF 识别</h2><button id="btnImportClose" class="icon-button" aria-label="关闭识别面板" title="关闭识别面板"></button></div><p class="hint">打开 LaTeX，或从图片和 PDF 生成可编辑候选。</p>
+ <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖入图片和PDF"><div class="drop-symbol">▧</div><div id="ocrFileLabel">拖入 PDF / 图片，或点击选择</div></div><input id="ocrInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
+ <div class="row"><label for="ocrStart" class="hint">起始页</label><input id="ocrStart" type="number" min="1" step="1" value="1" class="light-button" style="width:64px" aria-label="起始页(PDF)"><label for="ocrPages" class="hint">最多页数</label><select id="ocrPages" class="light-button" aria-label="最多识别页数"><option value="1">1 页</option><option value="3">3 页</option><option value="5">5 页</option></select><button class="light-button" id="btnOcr" disabled>开始识别</button></div><p class="local-note" id="ocrHint">仅向配置的本地模型发送。识别结果经你确认后新建文档。</p></dialog>
+<dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="minicpm-v4.7-35b-a3b-q4"></div><div class="field"><label for="btnInstallTools">本地工具</label><button class="light-button" id="btnInstallTools">下载 Tectonic 0.17.0（官方 Release）</button><button class="light-button" id="btnInstallPoppler" style="margin-left:6px">安装 Poppler（brew）</button><p class="hint" id="installToolsHint">仅在点击时执行：Tectonic 从官方 Release 下载并校验 SHA256；Poppler 经 Homebrew 安装（GPL-2+，进程调用）。Linux 请用系统包管理器。</p></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
+<dialog id="ocrDialog"><h2>审阅识别结果</h2><p class="hint">对照原件检查公式和正文。识别结果不会自动覆盖现有文档。</p><div class="field"><label for="ocrName">新文档名称</label><input id="ocrName" value="识别文档.tex"></div><div class="field"><label for="ocrCandidate">LaTeX 候选</label><textarea id="ocrCandidate"></textarea></div><div class="field" id="ocrPageSplitField" hidden><label>分页切割</label><div id="ocrPageList"></div><p class="hint">取消勾选会从候选中剔除该页；「按页拆分」为每个勾选页各建一个文档。手动编辑过候选时以文本框为准，不再自动重组。</p></div><div class="actions"><button class="light-button" id="btnOcrMore" hidden>继续识别后续页</button></div><div class="actions"><button class="light-button" id="btnOcrCancel">取消</button><button class="light-button" id="btnOcrSplit" hidden>按页拆分为多文档</button><button class="act star" id="btnOcrCreate">新建文档</button></div></dialog>
+<dialog id="historyDialog"><h2>运行记录</h2><div id="historyJobs"></div><div class="actions"><button class="light-button" id="btnHistoryClose">关闭</button></div></dialog>
+<dialog id="editorSettingsDialog"><div class="dialog-heading"><h2>编辑器设置</h2><button class="light-button icon-only" id="btnEditorSettingsClose" aria-label="关闭编辑器设置" title="关闭"></button></div><p class="hint">只调整本机编辑体验，修改立即生效。</p><div class="preference-row"><label for="prefFontSize">字体大小</label><div class="row"><button class="light-button icon-only" id="btnZoomOut" aria-label="缩小字号" title="缩小字号">A−</button><input id="prefFontSize" type="number" min="10" max="28" step="1" value="15" aria-label="编辑器字号"><span class="hint">px</span><button class="light-button icon-only" id="btnZoomIn" aria-label="增大字号" title="增大字号">A+</button></div></div><label class="preference-row" for="prefWordWrap"><span>自动换行<small>长行在编辑区域内折行，不改变源文件。</small></span><input id="prefWordWrap" type="checkbox" checked></label><label class="preference-row" for="prefMinimap"><span>代码小地图<small>在右侧展示全文缩略导航。</small></span><input id="prefMinimap" type="checkbox"></label><div class="actions"><button class="light-button" id="btnEditorReset">恢复默认</button><button class="act star" id="btnEditorDone">完成</button></div></dialog>
+<dialog id="commandDialog" class="command-palette" aria-label="命令面板"><div class="command-input-row"><span data-icon="search"></span><input id="commandInput" role="combobox" aria-controls="commandList" aria-expanded="false" aria-autocomplete="list" placeholder="输入命令或操作名称…" autocomplete="off"><kbd>Esc</kbd></div><div id="commandList" role="listbox" aria-label="可用命令"></div><div class="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 执行</span><span>所有操作均在本机执行</span></div></dialog>
+<dialog id="outlineDialog"><div class="dialog-heading"><h2>转到章节</h2><button class="light-button icon-only" id="btnOutlineClose" aria-label="关闭文档大纲" title="关闭"></button></div><div id="outlineDialogList"></div></dialog>
+<dialog id="templateDialog"><div class="dialog-heading"><h2>从模板新建</h2><button id="btnTemplateClose" class="icon-button" aria-label="关闭模板面板" title="关闭模板面板"></button></div><p class="hint">选择内置文档骨架创建本地文档；创建后可自由修改，原有模板不受影响。</p><div id="templateList" class="template-list" role="list" aria-label="内置文档模板"></div></dialog>
+<div id="toast" role="status" aria-live="polite" class="hide"></div>
+<script src="/static/editor/latex.js"></script>
+<script src="/static/editor/templates.js"></script>
 <script src="/static/monaco/0.52.2/min/vs/loader.js"></script>
 <script>
 const P = new URLSearchParams(location.search); const T = P.get("token") || "";
 const $ = id => document.getElementById(id);
+const getPreference = (key, fallback) => { try { return localStorage.getItem("texada." + key) ?? fallback; } catch (_) { return fallback; } };
+const setPreference = (key, value) => { try { localStorage.setItem("texada." + key, String(value)); } catch (_) {} };
+let toastTimer;
+function toast(message, error = false) {
+  const el = $("toast"); el.textContent = message; el.classList.toggle("error", error); el.classList.remove("hide");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add("hide"), 5500);
+}
+function warn(error) { toast(error.message || String(error), true); }
+function authUrl(url) {
+  const value = new URL(url, location.origin || "http://localhost");
+  if (value.origin !== (location.origin || "http://localhost")) throw new Error("预览地址必须来自本地工作台。");
+  value.searchParams.set("token", T); return value.pathname + value.search;
+}
+function openDialog(id) { const el = $(id); if (el.showModal) el.showModal(); }
+function closeDialog(id) { const el = $(id); if (el.close) el.close(); }
+let savedContent = "", savedHash = null, documentOrigin = "", loadingDocument = false;
+function isDirty() { return !!curName && !!editor && editor.getValue() !== savedContent; }
+function updateSaveState() {
+  $("saveState").textContent = !curName ? "未打开文档" : savingDocument ? "保存中…" : isDirty() ? "未保存修改" : documentOrigin === "sample" ? "已保存 · 示例" : "已保存";
+  $("saveState").classList.toggle("dirty", isDirty());
+  $("btnSave").disabled = !curName || busy || savingDocument;
+  $("tabname").textContent = curName ? curName + (isDirty() ? " •" : "") : "未打开文档";
+  $("workspaceFilename").textContent=curName||"未打开文档";
+  document.title=(curName?curName+" · ":"")+"TeXada Studio";
+}
+function discardAllowed() { return !isDirty() || typeof confirm !== "function" || confirm("当前文档有未保存修改。放弃修改并继续？"); }
+function invalidatePreview(message = "内容已变化，请重新编译预览。") {
+  ++previewEpoch; lastPreviewTag = null; previewBinding = null; previewPages = []; previewPage = 0;
+  setPdfAvailable(false); $("pvPrevious").disabled = true; $("pvNext").disabled = true;
+  $("pvPage").textContent = "—"; $("pvTabStatus").textContent = ""; $("pvStatus").textContent = message;
+  $("pvImgWrap").innerHTML = '<div class="preview-empty"><p>请编译当前文档，查看此版本的 PDF。</p></div>';
+  $("pvLog").textContent = ""; $("pvLog").classList.add("hide");
+}
+function applyTheme(theme) {
+  const contrast=theme === 'midnight'?'midnight':'dark';
+  if(document.documentElement)document.documentElement.dataset.theme=contrast;
+  setPreference('contrast',contrast);$('btnTheme').setAttribute('aria-pressed',String(contrast==='midnight'));
+}
+// Approved dark workspace supersedes the old light/glass preference.
+applyTheme(getPreference('contrast','dark'));
+$('btnTheme').onclick=()=>applyTheme(getPreference('contrast','dark')==='midnight'?'dark':'midnight');
 
 // ---- 面板拖拽调整（侧栏宽 / 右栏宽 / 日志高）----
 function dragSep(sep, apply) {
@@ -189,69 +104,37 @@ function dragSep(sep, apply) {
     document.addEventListener("mouseup", up);
   });
 }
-window.addEventListener("resize", () => { if (editor) editor.layout(); if (diffEditor) diffEditor.layout(); });
-window.addEventListener("load", () => {
-  // Monaco 测高兜底：容器尺寸变化时强制重排
-  const ro = new ResizeObserver(() => { if (editor) editor.layout(); if (diffEditor) diffEditor.layout(); });
-  ro.observe($("editor")); ro.observe($("diff"));
-  // 记住拖拽前的宽度，折叠/展开互逆
-  const saved = {};
-  dragSep($("sepL"), (ev) => { $("sidebar").classList.remove("collapsed");
-    $("sidebar").style.width = ev.clientX + "px"; });
-  dragSep($("sepR"), (ev) => { $("rightpanel").classList.remove("collapsed");
-    $("rightpanel").style.width = (window.innerWidth - ev.clientX) + "px"; });
-  dragSep($("hsep"), (ev) => { $("bottom").classList.remove("collapsed");
-    $("bottom").style.height = Math.max(0, window.innerHeight - ev.clientY) + "px"; });
-
-  const toggle = (panel, cls="collapsed") => {
-    const el = $(panel);
-    const isCollapsed = el.classList.toggle(cls);
-    if (!isCollapsed) { if (saved[panel]) el.style[panel === "bottom" ? "height" : "width"] = saved[panel]; }
-    else { saved[panel] = el.style[panel === "bottom" ? "height" : "width"] || ""; }
-    if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
-    return isCollapsed;
-  };
-  // 双击分隔条折叠/展开
-  $("sepL").ondblclick = () => toggle("sidebar");
-  $("sepR").ondblclick = () => toggle("rightpanel");
-  $("hsep").ondblclick = () => toggle("bottom");
-  // 手柄上的箭头按钮（单击折叠/展开）
-  $("sepBtnL").onclick = () => toggle("sidebar");
-  dragSep($("sepE"), (ev) => {
-    const duo = $("duo"); const r = duo.getBoundingClientRect();
-    const pct = Math.min(98, Math.max(2, ((ev.clientX - r.left) / duo.offsetWidth) * 100));
-    $("editor").style.width = pct + "%";
-    $("previewPane").classList.remove("collapsed");
-    $("previewPane").style.overflow = "auto";
-    $("previewPane").style.width = (100 - pct) + "%";
-    if (editor) editor.layout();
-  });
-  $("sepBtnE").onclick = () => {
-    const pp = $("previewPane");
-    const collapsed = pp.classList.contains("collapsed") || pp.style.width === "0px";
-    if (collapsed) { pp.classList.remove("collapsed"); pp.style.width = saved["previewPane"] || "38%"; pp.style.border = ""; pp.style.overflow = "auto"; }
-    else { saved["previewPane"] = pp.style.width; pp.classList.add("collapsed"); pp.style.width = "0"; pp.style.minWidth = "0"; pp.style.overflow = "hidden"; }
-    if (editor) editor.layout();
-  };
-  $("sepBtnR").onclick = () => toggle("rightpanel");
-  $("sepBtnH").onclick = () => toggle("bottom");
-  for (const id of ["sepBtnL", "sepBtnR", "sepBtnE", "sepBtnH"]) {
-    $(id).ondblclick = e => e.stopPropagation();
-  }
-  // 折叠后点 tab 也自动展开右栏对应的面板
-  const origShow = showCenter;
-  showCenter = (mode) => { origShow(mode);
-    if (mode === "preview" && $("rightpanel").classList.contains("collapsed")) toggle("rightpanel"); };
+window.addEventListener('load',()=>{
+  const ro=new ResizeObserver(layoutWorkspace);ro.observe($('editor'));ro.observe($('diff'));
+  initializeWorkspace();
+  dragSep($('sepL'),event=>{toggleNavigator(true,null,false);$('sidebar').style.width=Math.max(180,Math.min(330,event.clientX-42))+'px';layoutWorkspace();});
+  dragSep($('sepR'),event=>{toggleAgentDrawer(true,null,false);$('rightpanel').style.width=Math.max(260,Math.min(430,(window.innerWidth||1440)-event.clientX))+'px';layoutWorkspace();});
+  dragSep($('hsep'),event=>{toggleBottomPanel(bottomPanelKind,true);$('bottom').style.height=Math.max(130,Math.min(380,(window.innerHeight||900)-event.clientY-26))+'px';layoutWorkspace();});
+  dragSep($('sepE'),event=>{const duo=$('duo'),rect=duo.getBoundingClientRect(),ratio=Math.max(20,Math.min(80,((event.clientX-rect.left)/duo.offsetWidth)*100));$('previewPane').classList.remove('collapsed');$('previewPane').style.overflow='';$('previewPane').style.width=(100-ratio)+'%';previewExpandedWidth=$('previewPane').style.width;$('btnTogglePreview').setAttribute('aria-pressed','true');layoutWorkspace();});
+  $('sepBtnL').onclick=()=>toggleNavigator(!navigatorOpen,$('sepBtnL'));
+  $('sepBtnR').onclick=()=>toggleAgentDrawer(false);
+  $('sepBtnE').onclick=togglePreviewPane;
+  $('sepBtnH').onclick=()=>toggleBottomPanel(bottomPanelKind);
+  $('sepL').ondblclick=()=>toggleNavigator(!navigatorOpen,$('activityDocuments'));
+  $('sepR').ondblclick=()=>toggleAgentDrawer(false);
+  $('hsep').ondblclick=()=>toggleBottomPanel(bottomPanelKind);
+  for(const id of ['sepBtnL','sepBtnR','sepBtnE','sepBtnH'])$(id).ondblclick=event=>event.stopPropagation();
+});
+let wasMobileWorkspace=false,wasNarrowWorkspace=false;
+window.addEventListener('resize',()=>{
+  const mobile=isMobileWorkspace(),narrow=isNarrowWorkspace();
+  if(mobile!==wasMobileWorkspace)toggleNavigator(!mobile,null,false);
+  if(narrow!==wasNarrowWorkspace&&agentDrawerOpen)toggleAgentDrawer(true,null,false);
+  wasMobileWorkspace=mobile;wasNarrowWorkspace=narrow;layoutWorkspace();
 });
 
 // ---- 编辑器字号缩放 ----
-let editorFontSize = 14;
+let editorFontSize = Math.min(28,Math.max(10,Number(getPreference("fontSize", "15")) || 15));
+const editorPreferences={wordWrap:getPreference("wordWrap","on") === "off"?"off":"on",minimap:getPreference("minimap","false") === "true"};
 function setFontSize(delta) {
-  editorFontSize = Math.min(28, Math.max(10, editorFontSize + delta));
-  if (editor) editor.updateOptions({ fontSize: editorFontSize });
-  if (diffEditor) { diffEditor.getOriginalEditor().updateOptions({ fontSize: editorFontSize });
-                    diffEditor.getModifiedEditor().updateOptions({ fontSize: editorFontSize }); }
+  editorFontSize=Math.min(28,Math.max(10,editorFontSize+delta));applyEditorPreferences();
 }
+
 $("btnZoomIn").onclick = () => setFontSize(1);
 $("btnZoomOut").onclick = () => setFontSize(-1);
 let editor, diffEditor, origModel, modModel, curName = "", preFix = null, diffShown = false, busy = false;
@@ -259,11 +142,16 @@ let editor, diffEditor, origModel, modModel, curName = "", preFix = null, diffSh
 require.config({ paths: { vs: "/static/monaco/0.52.2/min/vs" }});
 
 require(["vs/editor/editor.main"], () => {
+  window.TeXadaLatex?.install(monaco);
   monaco.editor.defineTheme("texada-blue", {
     base: "vs-dark",
     inherit: true,
     rules: [
       { token: "keyword", foreground: "7ab8ff" },
+      { token: "keyword.section", foreground: "a9d8ff", fontStyle: "bold" },
+      { token: "keyword.directive", foreground: "c0aaff" },
+      { token: "keyword.reference", foreground: "7fe0d0" },
+      { token: "string.reference", foreground: "9fd8cc" },
       { token: "string", foreground: "9ad1ff" },
       { token: "comment", foreground: "5c7aa3", fontStyle: "italic" },
       { token: "number", foreground: "a8d4ff" },
@@ -271,75 +159,92 @@ require(["vs/editor/editor.main"], () => {
       { token: "attribute.name", foreground: "8fc6ff" },
     ],
     colors: {
-      "editor.background": "#0b1526",
+      "editor.background": "#061225",
       "editor.foreground": "#d7e3f4",
       "editorLineNumber.foreground": "#3d5a85",
       "editorLineNumber.activeForeground": "#8fc6ff",
       "editor.selectionBackground": "#1b3a5e",
       "editor.lineHighlightBackground": "#101f38",
-      "editorGutter.background": "#0b1526",
+      "editorGutter.background": "#061225",
       "diffEditor.insertedTextBackground": "#1a4d8f33",
       "diffEditor.removedTextBackground": "#5f1e2e33",
     }
   });
   editor = monaco.editor.create($("editor"), {
     value: "", language: "latex", theme: "texada-blue", automaticLayout: true,
-    fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: true, scrollBeyondLastLinePercent: 0, renderWhitespace: "none", verticalScrollbarSize: 10
+    unicodeHighlight: { ambiguousCharacters: false, nonBasicASCII: false },
+    fontSize: editorFontSize, wordWrap:editorPreferences.wordWrap, minimap: { enabled: editorPreferences.minimap }, scrollBeyondLastLine: true, scrollBeyondLastLinePercent: 0, renderWhitespace: "none", verticalScrollbarSize: 10
   });
-  loadFile(P.get("file") || "report-01.tex"); if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
+  editor.onDidChangeModelContent(() => {
+    if (lastCandidateSource && !sourceMatches(lastCandidateSource)) invalidateCandidate("原文已编辑，候选已过期；请重新生成。");
+    if (!loadingDocument) invalidatePreview();
+    updateSaveState(); scheduleEditorContext();
+  });
+  editor.onDidChangeCursorPosition?.(updateEditorStatus);editor.onDidChangeCursorSelection?.(updateEditorStatus);
+  loadFile(P.get("file") || getPreference("lastFile", "welcome.tex")).catch(warn);
+  if (P.get("view") === "preview") setTimeout(() => { showCenter("preview"); compilePreview(currentContent()); }, 600);
 });
 
-async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); }
-
-async function loadFiles() {
-  const d = await j(`/api/studio/files?token=${T}`);
-  $("files").innerHTML = d.files.map(f =>
-    `<div class="file${f === curName ? " active" : ""}" onclick="loadFile('${f}')">${f}</div>`).join("");
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  if (!r.ok) { let message; try { const d = await r.json(); message = d.detail || d.error; } catch (_) {} throw new Error(typeof message === "string" ? message : `请求失败（${r.status}），请检查服务或重试。`); }
+  return r.json();
 }
+function post(url, body) { return j(`/api/studio/${url}?token=${encodeURIComponent(T)}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); }
 
-let fileEpoch = 0, previewEpoch = 0, lastResult = null;
-async function loadFile(name) {
-  if (busy) return;
+let documentNames=[],documentMetadata=[];
+function renderDocumentFiles() {
+  const query=String($('fileFilter').value||'').toLocaleLowerCase(),matching=documentNames.filter(name=>name.toLocaleLowerCase().includes(query));
+  const origins=new Map(documentMetadata.map(document=>[document.name,document.origin]));
+  const primary=matching.filter(name=>name===curName||origins.get(name)!=='sample').sort((a,b)=>a===curName?-1:b===curName?1:a.localeCompare(b));
+  const samples=matching.filter(name=>name!==curName&&origins.get(name)==='sample');
+  const render=names=>names.map(name=>`<button class="file${name===curName?' active':''}" data-file="${esc(name)}" title="${esc(name)}">${toolIcon('file')}<span class="file-name">${esc(name)}</span></button>`).join('');
+  const expanded=query||$('sampleDocuments')?.open;
+  $('files').innerHTML=render(primary)+(samples.length?`<details id="sampleDocuments" class="sample-group"${expanded?' open':''}><summary>示例文档 <span>${samples.length}</span></summary>${render(samples)}</details>`:'')+(!matching.length?'<div class="empty">'+(query?'没有匹配文档。':'还没有文档，创建第一份吧。')+'</div>':'');
+  $('fileCount').textContent=query?`${matching.length}/${documentNames.length}`:primary.length;
+}
+async function loadFiles(){const data=await j(`/api/studio/files?token=${encodeURIComponent(T)}`);documentNames=data.files||[];documentMetadata=data.documents||[];renderDocumentFiles();}
+$("fileFilter").addEventListener("input",renderDocumentFiles);
+$("files").addEventListener("click", e => { const name = e.target.closest?.("[data-file]")?.dataset.file; if (name) loadFile(name).catch(warn); });
+
+let fileEpoch = 0, previewEpoch = 0, lastResult = null, lastCandidateSource = null, handoffEnabled = false;
+async function loadFile(name, force = false) {
+  if (busy || (!force && !discardAllowed())) return;
   const epoch = ++fileEpoch;
-  ++previewEpoch; lastResult = null; lastPreviewTag = null;
-  $("btnAccept").disabled = true; $("btnReport").disabled = true;
-  $("btnPdf").classList.add("hide");
+  ++previewEpoch; lastResult = null; lastCandidateSource = null; lastPreviewTag = null;
+  $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true;
+  setPdfAvailable(false);
   $("preview").textContent = "修复后显示候选预览";
   $("compile").textContent = "修复时自动编译对比";
   $("reviewHint").textContent = "语法通过不代表含义正确，请核对修改。";
-  curName = name; preFix = null;
-  $("tabname").textContent = name;
+  preFix = null; $("tabname").textContent = name;
   $("btnDiff").disabled = true; $("btnDiff").textContent = "查看修复对比";
   $("tab-diff").setAttribute("aria-disabled", "true");
-  showCenter("edit");
-  disposeDiff();
-  if (! $("previewPane").classList.contains("collapsed")) {
-    if (! $("previewPane").style.width) $("previewPane").style.width = "38%";
-  }
-  const d = await j(`/api/studio/file?token=${T}&name=${name}`);
-  if (epoch !== fileEpoch) return;
-  if (editor.getModel()) editor.getModel().setValue(d.content);
-  else editor.setValue(d.content);
-  showCenter("edit");
-  loadFiles();
-  analyze();
-  compilePreview(d.content);
-  setTimeout(() => { editor.layout(); if (diffEditor) diffEditor.layout(); }, 60);
+  showCenter("edit"); disposeDiff();
+  if (!$("previewPane").classList.contains("collapsed") && !$("previewPane").style.width) $("previewPane").style.width = "50%";
+  invalidatePreview("正在打开文档…"); editor.updateOptions({readOnly:true});
+  try {
+    const d = await j(`/api/studio/file?token=${encodeURIComponent(T)}&name=${encodeURIComponent(name)}`);
+    const loadedHash = d.sha256 || await sha256Text(d.content);
+    if (epoch !== fileEpoch) return;
+    curName = name; loadingDocument = true;
+    if (editor.getModel()) editor.getModel().setValue(d.content); else editor.setValue(d.content);
+    loadingDocument = false; savedContent = d.content; savedHash = loadedHash; documentOrigin = d.origin || "";
+    setPreference("lastFile", name); updateSaveState(); showCenter("edit");scheduleEditorContext();
+    loadFiles().catch(warn); analyze({reveal:false}).catch(warn); compilePreview(d.content);
+    setTimeout(() => { editor.layout(); if (diffEditor) diffEditor.layout(); }, 60);
+  } finally { if (epoch === fileEpoch) { editor.updateOptions({readOnly:false}); updateSaveState(); } }
 }
 
-async function analyze() {
-  const epoch = fileEpoch;
-  const content = currentContent();
-  const d = await j(`/api/studio/analyze?token=${T}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: curName, content })
-  });
-  if (epoch === fileEpoch && content === currentContent()) renderProblems(d.problems);
+async function analyze(options={reveal:false}) {
+  const epoch=fileEpoch,content=currentContent();
+  const data=await j(`/api/studio/analyze?token=${T}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:curName,content})});
+  if(epoch===fileEpoch&&content===currentContent()){renderProblems(data.problems);if(options.reveal)toggleBottomPanel('problems',true,$('btnAnalyze'));}
 }
 
 function renderProblems(problems) {
   $("probCount").textContent = problems.length;
-  $("probCount").style.display = problems.length ? "inline-block" : "none";
+  $("probCount").style.display="inline-block";
   if (!problems.length) {
     $("problems").innerHTML = `<div class="prob fixed">✓ 支持范围内未检出问题；数学含义仍需核对</div>`;
     return;
@@ -355,6 +260,8 @@ function renderProblems(problems) {
 function gotoLine(line) {
   const ed = diffShown && diffEditor ? diffEditor.getModifiedEditor() : editor;
   if (!ed || !ed.getModel()) return;
+  if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
+  if(isMobileWorkspace()&&navigatorOpen)toggleNavigator(false,null,false);
   ed.revealLineInCenter(line);
   ed.setPosition({ lineNumber: line, column: 1 });
   ed.focus();
@@ -367,10 +274,14 @@ function showCenter(mode) {
   $("diff").classList.toggle("hide", mode !== "diff");
   $("tab-edit").classList.toggle("active", mode !== "diff");
   $("tab-diff").classList.toggle("active", mode === "diff");
+  $("tab-edit").setAttribute("aria-selected",String(mode !== "diff"));$("tab-diff").setAttribute("aria-selected",String(mode === "diff"));
+  $("tab-edit").setAttribute("tabindex",mode !== "diff"?"0":"-1");$("tab-diff").setAttribute("tabindex",mode === "diff"?"0":"-1");
   $("tab-edit").style.color = mode !== "diff" ? "var(--fg)" : "var(--dim)";
   $("tab-diff").style.color = mode === "diff" ? "var(--fg)" : "var(--dim)";
   if (!$("btnDiff").disabled) $("btnDiff").textContent = mode === "diff" ? "返回编辑器" : "查看修复对比";
+  if (previewBinding && previewBinding.content !== currentContent()) invalidatePreview("已切换文档版本，请重新编译此版本。");
   if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
+  scheduleEditorContext();
 }
 $("btnDiff").onclick = () => showCenter(diffShown ? "edit" : "diff");
 
@@ -392,140 +303,101 @@ function download(name, blob) {
 }
 
 $("btnExport").onclick = () => {
-  if (!editor.getModel()) return alert("先打开一个文档");
+  if (!editor?.getModel() || !curName) return toast("请先打开一个文档。",true);
   download(curName.replace(/\.tex$/, "") + (diffShown && modModel ? ".fixed" : "") + ".tex",
            new Blob([currentContent()], { type: "text/plain" }));
 };
 
-$("btnPdf").onclick = () => {
-  if (!lastPreviewTag) return alert("先编译一次");
-  fetch(`/api/studio/pdf/${curName}/${lastPreviewTag}?token=${T}`).then(r => {
-    if (!r.ok) throw new Error("PDF 不存在");
-    return r.blob();
-  }).then(b => download(curName.replace(/\.tex$/, "") + ".pdf", b))
-    .catch(e => alert(e.message));
+$("btnPdf").onclick = async () => {
+  try {
+    if ((!lastPreviewTag && !previewBinding?.pdf) || !previewBinding || previewBinding.name !== curName || previewBinding.content !== currentContent()) throw new Error("当前内容尚未编译，请先更新预览。");
+    const binding=previewBinding, name=curName, content=currentContent(), epoch=fileEpoch, previewVersion=previewEpoch,
+          sourceRevision=editor.getModel().getVersionId(), candidateView=diffShown;
+    const filename=name.replace(/\.tex$/, "") + (candidateView ? ".candidate" : "") + ".pdf";
+    const r = await fetch(authUrl(binding.pdf || `/api/studio/pdf/${encodeURIComponent(name)}/${encodeURIComponent(lastPreviewTag)}`));
+    if (!r.ok) throw new Error("PDF 不存在，请重新编译。");
+    const blob=await r.blob();
+    if (binding !== previewBinding || name !== curName || epoch !== fileEpoch || previewVersion !== previewEpoch ||
+        content !== currentContent() || candidateView !== diffShown || sourceRevision !== editor.getModel().getVersionId())
+      throw new Error("下载期间文档或版本已变化；已取消旧 PDF 下载，请重新编译当前版本。");
+    download(filename,blob);
+  } catch (error) { warn(error); }
 };
 
 $("btnUpload").onclick = () => $("fileInput").click();
 $("fileInput").onchange = async (ev) => {
-  const f = ev.target.files[0];
-  if (!f) return;
-  const text = await f.text();
-  await j(`/api/studio/upload?token=${T}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: f.name, content: text })
-  });
-  ev.target.value = "";
-  await loadFiles();
-  loadFile(f.name);
-};
-
-let ocrResult = null;
-$("btnOcr").onclick = () => $("ocrInput").click();
-$("ocrInput").onchange = async ev => {
-  const file = ev.target.files[0];
-  if (!file) return;
-  ocrResult = null;
-  $("ocrCandidate").value = "";
-  $("btnOcrAccept").disabled = $("btnOcrLayout").disabled = true;
-  $("btnOcr").disabled = true;
-  $("ocrStatus").textContent = "正在识别，原文不会自动修改…";
+  const f = ev.target.files[0]; if (!f || busy) return;
   try {
-    if (file.size > 8 * 1024 * 1024) throw new Error("图片上限为 8 MiB");
-    const response = await fetch(`/api/studio/ocr?token=${encodeURIComponent(T)}`, {
-      method: "POST", headers: {"Content-Type": "image/png"}, body: file
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || "OCR 请求失败");
-    if (result.status !== "OK") throw new Error(`${result.status}: ${result.reason}`);
-    ocrResult = result;
-    $("ocrCandidate").value = result.lines.join("\n");
-    $("ocrStatus").textContent = `${result.lines.length} 行候选 · ${result.model} · 待人工核对`;
-    $("btnOcrAccept").disabled = $("btnOcrLayout").disabled = false;
-  } catch (e) { $("ocrStatus").textContent = e.message; }
-  finally { $("btnOcr").disabled = false; ev.target.value = ""; }
-};
-$("btnOcrAccept").onclick = () => {
-  if (!ocrResult || !editor || !curName || busy || diffShown) {
-    return alert("请先打开文档，并结束修复或对比，再采纳 OCR 候选。");
-  }
-  const text = $("ocrCandidate").value;
-  if (!text.trim()) return;
-  editor.pushUndoStop();
-  editor.executeEdits("ocr-human-adoption", [{range: editor.getSelection(), text, forceMoveMarkers: true}]);
-  editor.pushUndoStop();
-  $("btnOcrAccept").disabled = true;
-  $("ocrStatus").textContent = "已人工采纳到当前文档，可撤销；尚未保存或编译。";
-};
-$("btnOcrLayout").onclick = () => {
-  if (!ocrResult) return;
-  const nodes = $("ocrCandidate").value.split(/\r?\n/).filter(line => line.trim()).map((text, i) => ({
-    id: `ocr-${i + 1}`, type: "text", page: 1, data: {text}, review_status: "pending"
-  }));
-  download("layout.json", new Blob([JSON.stringify({doc: "ocr-import", source: "local PNG OCR",
-    source_sha256: ocrResult.source_sha256, model: ocrResult.model, review_status: "pending", nodes}, null, 2)],
-    {type: "application/json"}));
+    if (!discardAllowed()) return;
+    if (f.size > 2 * 1024 * 1024) throw new Error("文档过大，请选择 2 MB 以内的 .tex 文件。");
+    await mutateDocument(async () => { const text=await f.text(); await post("upload",{name:f.name,content:text}); return f.name; },"文档已导入到本地工作区。");
+  } catch (error) { warn(error); } finally { ev.target.value = ""; }
 };
 
-let lastPreviewTag = null;
-let pvZoom = "fit";
+let lastPreviewTag = null, previewBinding = null, previewPages = [], previewPage = 0;
+let pvZoom = getPreference("previewZoom","fit");
 function setPvImg(src) {
-  const style = pvZoom === "fit"
-    ? "width:100%;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-in"
-    : "max-width:none;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-out";
-  $("pvImgWrap").innerHTML = `<img id="pvImg" src="${src}" style="${style}" title="点击切换 适应/原始大小">`;
-  $("pvImg").onclick = () => { pvZoom = pvZoom === "fit" ? "raw" : "fit"; $("pvImg").style.cssText =
-    pvZoom === "fit"
-      ? "width:100%;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-in"
-      : "max-width:none;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:zoom-out"; };
+  $('pvImgWrap').classList.toggle('fit',pvZoom==='fit');$('pvImgWrap').classList.toggle('raw',pvZoom!=='fit');
+  $('pvImgWrap').innerHTML=`<img id="pvImg" alt="文档第 ${previewPage+1} 页预览" src="${esc(src)}">`;
+  $('pvImg').onclick=()=>{pvZoom=pvZoom==='fit'?'raw':'fit';setPreference('previewZoom',pvZoom);setPvImg(src);};
 }
-$("pvZoomFit").onclick = () => { pvZoom = "fit"; if ($("pvImg")) $("pvImg").click = null, setPvImg($("pvImg").src); };
-$("pvZoom100").onclick = () => { pvZoom = "raw"; if ($("pvImg")) setPvImg($("pvImg").src); };
+
+function renderPreviewPage() {
+  if (!previewPages.length) return;
+  setPvImg(authUrl(previewPages[previewPage]));
+  $("pvPage").textContent = `${previewPage+1} / ${previewPages.length}`;
+  $("pvPrevious").disabled = previewPage === 0; $("pvNext").disabled = previewPage === previewPages.length - 1;
+}
+$("pvPrevious").onclick = () => { if (previewPage > 0) { previewPage--; renderPreviewPage(); } };
+$("pvNext").onclick = () => { if (previewPage < previewPages.length - 1) { previewPage++; renderPreviewPage(); } };
+$("pvZoomFit").onclick = () => { pvZoom = "fit"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
+$("pvZoom100").onclick = () => { pvZoom = "raw"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
 async function compilePreview(content) {
+  if (!curName || !editor?.getModel()) return;
   const epoch = ++previewEpoch, name = curName;
-  lastPreviewTag = null; $("btnPdf").classList.add("hide");
-  $("pvStatus").innerHTML = `<span class="spin"></span>Tectonic 编译中…`;
-  $("pvTabStatus").innerHTML = `<span class="spin"></span>`;
-  $("pvLog").classList.add("hide"); $("pvImgWrap").innerHTML = "";
+  lastPreviewTag = null; previewBinding = null; setPdfAvailable(false);
+  $("pvStatus").innerHTML = `<span class="spin"></span>正在编译文档…`; $("pvTabStatus").textContent = "编译中";
+  $("pvLog").classList.add("hide");
   try {
-    const d = await j(`/api/studio/preview?token=${T}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: curName, content })
-    });
-    if (epoch !== previewEpoch || name !== curName) return;
-    if (d.ok && d.png) {
-      lastPreviewTag = d.png.split("/").pop().split("?")[0];
-      $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · ${curName}`;
-      $("pvTabStatus").innerHTML = `<span style="color:var(--ok)">✓</span>`;
-      setPvImg(`${d.png}&token=${T}`);
-      $("btnPdf").classList.remove("hide");
+    const d = await post("preview", {name,content});
+    if (epoch !== previewEpoch || name !== curName || content !== currentContent()) return;
+    const compileOk = d.compile_ok ?? d.ok;
+    previewPages = (d.pages || (d.png ? [d.png] : [])).map(page => typeof page === "string" ? page : page.url || page.png).filter(Boolean);
+    previewPage = 0;
+    if (compileOk) {
+      lastPreviewTag = d.tag || (d.png ? d.png.split("/").pop().split("?")[0] : null);
+      previewBinding = {name,content,pdf:d.pdf};
+      $("pvStatus").textContent = previewPages.length ? `编译完成 · ${previewPages.length} 页` : "PDF 已生成，页面预览不可用。";
+      $("pvTabStatus").textContent = "✓ 编译完成";
+      if (previewPages.length) renderPreviewPage();
+      if (lastPreviewTag || d.pdf) setPdfAvailable(true);
+      if (!previewPages.length && d.log) { $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log; }
     } else {
-      lastPreviewTag = null;
-      $("pvStatus").innerHTML = `<span style="color:var(--err)">编译 ✗ 失败</span> · 错误详情（通常即文档中的问题）`;
-      $("pvTabStatus").innerHTML = `<span style="color:var(--err)">✗</span>`;
-      $("pvLog").classList.remove("hide");
-      $("pvLog").textContent = d.log || "unknown";
-      $("btnPdf").classList.add("hide");
+      previewPages = []; $("pvStatus").textContent = "未能生成 PDF，请查看编译详情。"; $("pvTabStatus").textContent = "编译未通过";
+      $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log || "编译器未返回详细信息。";
+      $("pvImgWrap").innerHTML = '<div class="preview-empty"><b>▤</b>修正源码后，再试一次编译。</div>';
     }
-  } catch (e) { if (epoch === previewEpoch) $("pvStatus").textContent = "编译请求失败: " + e.message; }
+  } catch (error) { if (epoch === previewEpoch) { $("pvStatus").textContent = "编译请求失败：" + error.message; $("pvTabStatus").textContent = "请求失败"; } }
 }
 $("btnCompile").onclick = () => compilePreview(currentContent());
 
-$("btnAnalyze").onclick = () => analyze().catch(e => alert(e.message));
+$("btnAnalyze").onclick = () => analyze({reveal:true}).catch(error=>{warn(error);$('joblog').textContent=error.message;toggleBottomPanel('log',true,$('btnAnalyze'));});
 
 $("btnFix").onclick = async () => {
-  if (busy) return;
-  showCenter("edit"); ++previewEpoch;
+  if (busy || !curName) return;
+  showCenter("edit"); invalidatePreview("正在生成候选…");
   busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
   $("btnAnalyze").disabled = true; $("btnCompile").disabled = true;
-  $("btnAccept").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
-  preFix = editor.getValue();
+  $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
   $("joblog").innerHTML = "";
   try {
+    const source = await captureSource();
+    preFix = source.content; lastResult = null; lastCandidateSource = null;
     const d0 = await j(`/api/studio/fix?token=${T}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: curName, content: preFix })
+      body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true, skill_selection: $("skillSelection").checked === true })
     });
+    activeJob=d0.job; $("btnCancel").classList.remove("hide"); $("btnCancel").disabled=false;
     let done = false;
     while (!done) {
       await new Promise(r => setTimeout(r, 1200));
@@ -533,14 +405,15 @@ $("btnFix").onclick = async () => {
       $("joblog").innerHTML = s.log.map(lineStyle).join("<br>");
       $("joblog").scrollTop = 1e9;
       done = s.done;
-      if (s.done && s.error) { alert("修复任务出错：" + s.error); return; }
-      if (s.done && s.result) applyResult(s.result);
+      if(s.done&&s.error){toast('修复任务未完成：'+s.error,true);$('joblog').innerHTML+=("<br>"+lineStyle(s.error));toggleBottomPanel('log',true,$('btnFix'));return;}
+      if (s.done && s.result) await applyResult(s.result, source);
     }
-  } catch (e) { alert(e.message); }
+  } catch(e){warn(e);$('joblog').innerHTML+='<br>'+lineStyle(e.message);toggleBottomPanel('log',true,$('btnFix'));}
   finally {
+    activeJob=null; $("btnCancel").classList.add("hide");
     busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
     $("btnAnalyze").disabled = false; $("btnCompile").disabled = false;
-    $("btnFix").disabled = false; $("btnFix").innerHTML = "✨ Skill 一键修复";
+    $("btnFix").disabled = false; setToolLabel("btnFix","修复候选"); updateSaveState(); loadJobs().catch(() => {});
   }
 };
 
@@ -551,57 +424,197 @@ function lineStyle(l) {
   return esc(l);
 }
 
-function applyResult(res) {
-  ++previewEpoch; lastResult = res;
-  $("btnAccept").disabled = false; $("btnReport").disabled = false;
-  $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。";
+async function applyResult(res, source = null) {
+  source = source || await captureSource();
+  await validateCandidate(res, source);
+  if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
+  ++previewEpoch; lastResult = res; lastCandidateSource = source;
+  $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
+  const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
+  $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
+    (humanRequests ? ` 规划器请求人工核对 ${humanRequests} 个节点；详情见报告事件。` : "");
   disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
-  origModel = monaco.editor.createModel(preFix, "latex");
+  origModel = monaco.editor.createModel(source.content, "latex");
   diffEditor = monaco.editor.createDiffEditor($("diff"), {
-    theme: "texada-blue", automaticLayout: true, fontSize: 14,
+    theme: "texada-blue", automaticLayout: true, fontSize: editorFontSize,
+    unicodeHighlight: { ambiguousCharacters: false, nonBasicASCII: false },
     renderSideBySide: true, readOnly: true, minimap: { enabled: false }
   });
-  diffEditor.setModel({ original: origModel, modified: modModel });
+  diffEditor.setModel({ original: origModel, modified: modModel });applyEditorPreferences();
+  diffEditor.getModifiedEditor().onDidChangeCursorPosition?.(updateEditorStatus);diffEditor.getModifiedEditor().onDidChangeCursorSelection?.(updateEditorStatus);
   $("btnDiff").disabled = false;
   $("tab-diff").setAttribute("aria-disabled", "false");
   renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
-  showCenter("diff");
+  showCenter("diff");toggleAgentDrawer(true,$('btnAgent'));
   $("compile").innerHTML =
-    `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
-    `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
+    `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.status === "NOT_CHECKED" ? "未检查" : res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
+    `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
   if (res.compile_after.png) {
     $("preview").className = "";
     $("preview").innerHTML = `<img src="${res.compile_after.png}&token=${T}">`;
   }
   if (res.compile_after.png) {
-    // 更新预览标签页并自动切过去（diff 看完看渲染效果）
     const png = res.compile_after.png;
-    lastPreviewTag = png.split("/").pop().split("?")[0];
-    $("pvStatus").innerHTML = `<span style="color:var(--ok)">编译 ✓</span> · 修复后文档`;
-    setPvImg(`${png}&token=${T}`);
-    $("btnPdf").classList.remove("hide");
+    lastPreviewTag = res.compile_after.tag || png.split("/").pop().split("?")[0];
+    previewBinding = {name:curName, content:res.fixed_content, pdf:res.compile_after.pdf};
+    previewPages = (res.compile_after.pages || [png]).map(page => typeof page === "string" ? page : page.url || page.png).filter(Boolean); previewPage = 0;
+    $("pvStatus").textContent = "候选编译完成 · 尚未采用";
+    renderPreviewPage(); setPdfAvailable(true);
   }
 }
 
-$("btnAccept").onclick = () => {
-  if (!lastResult || busy) return;
-  editor.setValue(lastResult.fixed_content);
-  showCenter("edit");
-  $("btnAccept").disabled = true;
-  $("reviewHint").textContent = "已采用候选到编辑器，可继续编辑或导出。报告保留此次修复记录。";
-  analyze(); compilePreview(editor.getValue());
-};
+
+function sourceMatches(source) {
+  return !!editor && !!editor.getModel() && source.name === curName && source.epoch === fileEpoch &&
+    source.revision === editor.getModel().getVersionId() && source.content === editor.getValue();
+}
+async function sha256Text(text) {
+  if (!globalThis.crypto?.subtle) throw new Error("需要安全的本机浏览器环境进行候选校验。");
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function captureSource() {
+  const source = { name: curName, epoch: fileEpoch, revision: editor.getModel().getVersionId(), content: editor.getValue() };
+  source.sha256 = await sha256Text(source.content);
+  if (!sourceMatches(source)) throw new Error("原文或文件在校验时已变化。");
+  return Object.freeze(source);
+}
+function sameReviewBinding(a, b) {
+  const keys = ["input_hash", "parent_revision", "candidate_hash", "current_revision"];
+  return !!a && !!b && Object.keys(a).length === keys.length && Object.keys(b).length === keys.length &&
+    keys.every(key => Object.hasOwn(a, key) && Object.hasOwn(b, key) && a[key] === b[key]);
+}
+async function validateCandidate(res, source) {
+  if (!sourceMatches(source) || res.requires_review !== true || typeof res.fixed_content !== "string" ||
+      res.original_sha256 !== source.sha256 || await sha256Text(res.fixed_content) !== res.candidate_sha256)
+    throw new Error("候选与原文绑定不一致；保留原文。");
+  if (res.handoff) {
+    const h = res.handoff, f = source.formula;
+    const inputHash = f ? await sha256Text(f.original) : null;
+    const candidateHash = typeof h.candidate === "string" ? await sha256Text(h.candidate) : null;
+    const originalPoints = Array.from(source.content);
+    if (!f || h.schema_version !== 1 || h.transfer_id !== f.transfer_id || res.handoff_transfer_id !== f.transfer_id || h.checkpoint !== "MiniCPM-V-4.7-1B" ||
+        h.document_sha256 !== source.sha256 || h.input_sha256 !== inputHash || h.original_latex !== f.original ||
+        h.expected_revision !== source.revision || res.source_revision !== source.revision ||
+        h.source_range?.encoding !== "unicode-codepoints" || h.source_range.start !== f.range.start || h.source_range.end !== f.range.end ||
+        candidateHash !== h.candidate_sha256 || h.status !== "review_required" || h.review?.status !== "pending" ||
+        !(h.parent_revision === null || (Number.isSafeInteger(h.parent_revision) && h.parent_revision >= 0)) ||
+        !Number.isSafeInteger(h.candidate_revision) || h.candidate_revision < 1 ||
+        typeof h.review.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(h.review.id) ||
+        !sameReviewBinding(h.review.binding, {input_hash: inputHash, parent_revision: h.parent_revision,
+                                            candidate_hash: candidateHash, current_revision: h.candidate_revision}) ||
+        originalPoints.slice(0, f.range.start).join("") + h.candidate + originalPoints.slice(f.range.end).join("") !== res.fixed_content)
+      throw new Error("单公式交接的范围、版本或审阅绑定不一致。");
+  }
+  if (!sourceMatches(source)) throw new Error("原文在异步校验时已变化；保留原文。");
+}
+function invalidateCandidate(message) {
+  $("btnAccept").disabled = true; $("btnReject").disabled = true;
+  $("reviewHint").textContent = message;
+}
+async function decideCandidate(decision) {
+  const result = lastResult, source = lastCandidateSource;
+  if (!result || !source || busy || result.local_decision) return;
+  busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
+  $("btnAccept").disabled = true; $("btnReject").disabled = true;
+  try {
+    await validateCandidate(result, source);
+    if (modModel && modModel.getValue() !== result.fixed_content) throw new Error("候选视图已变化；请重新生成。");
+    if (result.handoff) {
+      const d = await j(`/api/studio/handoff/${result.handoff_transfer_id}/decision?token=${T}`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({decision, name:source.name, content:source.content, revision:source.revision})
+      });
+      if (d.transfer_id !== result.handoff_transfer_id || d.decision !== decision || d.original_sha256 !== source.sha256 ||
+          d.candidate_sha256 !== result.candidate_sha256 || d.source_revision !== source.revision ||
+          d.review?.id !== result.handoff.review.id || d.review?.status !== (decision === "accept" ? "accepted" : "rejected") ||
+          !sameReviewBinding(d.review.binding, result.handoff.review.binding))
+        throw new Error("远端审阅确认与候选绑定不一致；保留原文。");
+    }
+    if (!result.handoff && result.job_id) {
+      const d = await post(`jobs/${result.job_id}/decision`, {decision,name:source.name,content:source.content,candidate_sha256:result.candidate_sha256});
+      if (d.job_id !== result.job_id || d.decision !== decision || d.original_sha256 !== source.sha256 || d.candidate_sha256 !== result.candidate_sha256)
+        throw new Error("审阅记录与当前候选不一致，原文保持不变。");
+    }
+    await validateCandidate(result, source);
+    if (lastResult !== result || lastCandidateSource !== source || !sourceMatches(source))
+      throw new Error("请求期间原文或文件已变化；本地未采用候选。");
+    result.local_decision = decision; lastCandidateSource = null;
+    if (decision === "accept") {
+      editor.setValue(result.fixed_content);
+      showCenter("edit");
+      $("reviewHint").textContent = "已采用候选到编辑器。请保存到本地，或导出文档。"; updateSaveState();
+      analyze().catch(warn); compilePreview(editor.getValue());
+    } else {
+      showCenter("edit"); invalidatePreview("已拒绝候选，请重新编译原文。");
+      $("preview").textContent = "候选已拒绝，原文保持不变。";
+      $("reviewHint").textContent = "已拒绝候选并保留原文。报告仍保留此次候选记录。";
+    }
+  } catch (error) {
+    invalidateCandidate("采用/拒绝未完成；原文保持不变。" + error.message);
+  } finally {
+    busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false; updateSaveState();
+  }
+}
+$("btnAccept").onclick = () => decideCandidate("accept");
+$("btnReject").onclick = () => decideCandidate("reject");
+
+function formulaAtSelection(source) {
+  const model = editor.getModel(), selection = editor.getSelection(), position = editor.getPosition();
+  const from = model.getOffsetAt(selection.getStartPosition()), to = model.getOffsetAt(selection.getEndPosition());
+  const cursor = model.getOffsetAt(position);
+  const matches = [...source.content.matchAll(/(?<!\\)\$([^$\r\n]+)(?<!\\)\$/gu)];
+  const match = matches.find(m => { const start = m.index + 1, end = start + m[1].length;
+    return from === to ? start <= cursor && cursor <= end : from === start && to === end; });
+  if (!match) throw new Error("请将光标放在一个 $...$ 行内公式内，或只选择它的完整正文。");
+  const start = match.index + 1, end = start + match[1].length;
+  return {original: match[1], range: {start: Array.from(source.content.slice(0, start)).length,
+                                   end: Array.from(source.content.slice(0, end)).length, encoding:"unicode-codepoints"}};
+}
+async function requestFormulaHandoff(action) {
+  if (busy || !handoffEnabled) return;
+  busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
+  try {
+    const source = await captureSource();
+    const formula = {...formulaAtSelection(source), transfer_id: crypto.randomUUID()};
+    const boundSource = Object.freeze({...source, formula});
+    if (!sourceMatches(boundSource)) throw new Error("原文或文件已变化。");
+    preFix = source.content; lastCandidateSource = null; lastResult = null;
+    invalidateCandidate("正在交接单公式；原文保持不变。");
+    const result = await j(`/api/studio/handoff?token=${T}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name:source.name, content:source.content, revision:source.revision,
+                            source_range:formula.range, requested_action:action, transfer_id:formula.transfer_id})
+    });
+    if (!sourceMatches(boundSource)) throw new Error("交接期间原文或文件已变化；保留原文。");
+    await applyResult(result, boundSource);
+  } catch (error) {
+    invalidateCandidate("交接未完成；原文保持不变。" + error.message);
+  } finally {
+    busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false; updateSaveState();
+  }
+}
+$("btnHandoff").onclick = () => requestFormulaHandoff("repair");
+$("btnHandoffComplete").onclick = () => requestFormulaHandoff("complete");
+j(`/api/studio/handoff/config?token=${T}`).then(config => {
+  handoffEnabled = config.enabled === true && config.checkpoint === "MiniCPM-V-4.7-1B";
+  $("btnHandoff").disabled = !handoffEnabled; $("btnHandoffComplete").disabled = !handoffEnabled;
+  $("handoffHint").textContent = handoffEnabled ? "同一 MiniCPM 4.7 checkpoint；仅生成单公式候选，需人工审阅。" : "服务默认关闭；仅交接当前行内公式，不读取图像。";
+}).catch(() => {});
+
 $("btnReport").onclick = () => {
   if (!lastResult) return;
   const r = lastResult;
   const report = ["# TeXada Studio 质检报告", "", `文档：${curName}`,
-    `实际模型请求：${r.model_calls ?? "旧记录未计数"}；模型：${r.model || "本次未调用"}；耗时：${r.elapsed_seconds} 秒`,
+    `实际模型请求：${r.model_calls ?? "未记录"}；模型：${r.model || (r.model_calls === 0 ? "本次未调用" : "未核实实际调用模型")}；耗时：${typeof r.elapsed_seconds === "number" ? r.elapsed_seconds + " 秒" : "未记录"}`,
     `Skill 指令：${r.skill_mode || "旧记录未记录"}`,
+    `受限规划：${r.planner_mode ? "开启" : "关闭"}；拒绝动作：${r.planner?.rejected ?? 0}`,
+    `模型选 Skill：${r.skill_selection ? "开启" : "关闭"}；选择拒绝：${r.planner?.selection_rejections ?? 0}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
-    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.ok ? "通过" : "失败"}`,
-    `候选编译：${r.compile_after.ok ? "通过" : "失败"}`,
+    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.status === "NOT_CHECKED" ? "未检查" : r.compile_before.ok ? "通过" : "失败"}`,
+    `候选编译：${r.compile_after.status === "NOT_CHECKED" ? "未检查" : r.compile_after.ok ? "通过" : "失败"}`,
     `修改数：${(r.edits || []).length}；剩余问题：${r.problems_after.length}`, "", "## 修改记录", ""];
   for (const e of (r.edits || [])) report.push(`L${e.line} · ${e.skill}`, "", "原文：", "~~~~latex", e.before, "~~~~", "候选：", "~~~~latex", e.after, "~~~~", "");
   for (const p of r.problems_after) report.push(`待处理 L${p.line}：${p.reason || p.status}`);
@@ -609,14 +622,693 @@ $("btnReport").onclick = () => {
   download(curName.replace(/\.tex$/, "") + ".audit.md", new Blob([report.join("\n")], {type:"text/markdown"}));
 };
 
-function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 
-fetch(`/api/nodeinfo?token=${T}`).then(r => r.json()).then(d => {
-  $("sb-node").textContent = d.host + " · " + (d.gpu || "").split(",")[0];
-  $("sb-model").textContent = d.model || "—";
-  $("sb-right").textContent = d.mem;
-}).catch(() => {});
-loadFiles();
+loadFiles().catch(warn);
+
+let savingDocument = false;
+async function saveDocument() {
+  if (!editor?.getModel() || !curName || busy || savingDocument) return;
+  savingDocument = true;
+  const name = curName, epoch = fileEpoch, content = editor.getValue(), expected = savedHash;
+  $("btnSave").disabled = true;updateSaveState();
+  try {
+    const d = await post("save", {name, content, expected_sha256: expected});
+    if (curName === name && epoch === fileEpoch) { savedContent = content; savedHash = d.sha256 || await sha256Text(content); documentOrigin = "local"; updateSaveState(); }
+    await loadFiles(); toast("已保存到本机。");
+  } catch (error) { warn(error); }
+  finally { savingDocument = false; updateSaveState(); }
+}
+$("btnSave").onclick = saveDocument;
+function documentSnapshot() {
+  return {name:curName,epoch:fileEpoch,revision:editor?.getModel()?.getVersionId(),content:editor?.getValue()};
+}
+function documentSnapshotMatches(source) {
+  return source.name === curName && source.epoch === fileEpoch && source.revision === editor?.getModel()?.getVersionId() && source.content === editor?.getValue();
+}
+function lockDocumentMutation(locked) {
+  busy=locked; if (editor) editor.updateOptions({readOnly:locked});
+  for (const id of ["btnSave","btnNew","btnRename","btnDelete","btnUpload","btnFix","btnAnalyze","btnCompile","btnOcrCreate"]) $(id).disabled=locked;
+  syncOcrControls(); updateSaveState();
+}
+async function mutateDocument(operation,successMessage) {
+  if (busy || savingDocument) return;
+  const source=documentSnapshot(); lockDocumentMutation(true);
+  try {
+    const targetName=await operation();
+    await loadFiles();
+    if (!documentSnapshotMatches(source)) { toast(successMessage + " 等待期间编辑内容已变化，已保留当前编辑，未自动切换文档。"); return; }
+    busy=false;
+    if (targetName) await loadFile(targetName,true);
+    else { curName="";savedContent="";savedHash=null;documentOrigin="";loadingDocument=true;editor.setValue("");loadingDocument=false;disposeDiff();showCenter("edit");invalidatePreview();updateSaveState(); }
+    toast(successMessage);
+  } finally { lockDocumentMutation(false); }
+}
+const starterDocument = window.TeXadaTemplates?.defaultContent?.() ?? "\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n\\section{新的文档}\n\n在这里开始写作。$E = mc^2$\n\n\\end{document}\n";
+$("btnNew").onclick = async () => {
+  if (busy || !discardAllowed()) return;
+  const name = typeof prompt === "function" ? prompt("新文档名称（以 .tex 结尾）", "untitled.tex") : null;
+  if (!name) return;
+  try { await mutateDocument(async()=>{await post("create",{name,content:starterDocument});return name;},"新文档已创建。"); } catch(error) { warn(error); }
+};
+$("btnRename").onclick = async () => {
+  if (!curName || busy) return;
+  if (isDirty()) return toast("请先保存当前修改，再重命名。", true);
+  if (documentOrigin === "sample") return toast("示例文件需先保存成本地副本。", true);
+  const name=curName,hash=savedHash,newName = typeof prompt === "function" ? prompt("新的文档名称",curName) : null;
+  if (!newName || newName === name) return;
+  try { await mutateDocument(async()=>{await post("rename",{name,new_name:newName,expected_sha256:hash});return newName;},"文档已重命名。"); } catch(error) { warn(error); }
+};
+$("btnDelete").onclick = async () => {
+  if (!curName || busy) return;
+  if (documentOrigin === "sample") return toast("示例文件保留在素材库中，不能删除。", true);
+  const name=curName,hash=savedHash;
+  if (typeof confirm !== "function" || !confirm(`删除本地文档「${name}」？此操作无法撤销。`)) return;
+  try { await mutateDocument(async()=>{await post("delete",{name,expected_sha256:hash});const d=await j(`/api/studio/files?token=${encodeURIComponent(T)}`);return d.files?.[0] || null;},"本地文档已删除。"); } catch(error) { warn(error); }
+};
+
+window.addEventListener("beforeunload", event => { if (isDirty()) { event.preventDefault(); event.returnValue=""; } });
+
+let activeJob = null;
+async function loadJobs() {
+  const d = await j(`/api/studio/jobs?token=${encodeURIComponent(T)}`);
+  const jobs = d.jobs || [];
+  const render = list => list.length ? list.map(job => {
+    const id = job.id || job.job_id;
+    const label = job.cancel_requested && !job.done ? "正在停止" : job.cancelled ? "已停止" : job.error ? "未完成" : job.done ? "已完成" : "运行中";
+    return `<button class="history-item" data-job="${esc(id)}" data-name="${esc(job.name || "")}">${esc(job.name || "文档任务")}<small>${label} · ${esc(job.created_at ? new Date(typeof job.created_at === "number" ? job.created_at * 1000 : job.created_at).toLocaleString() : "本地记录")}</small></button>`;
+  }).join("") : '<div class="hint">还没有运行记录。生成候选后会显示在这里。</div>';
+  $("jobs").innerHTML = render(jobs.slice(0,5)); $("historyJobs").innerHTML = render(jobs);
+}
+async function restoreJob(id,name) {
+  if (busy) return;
+  const d = await j(`/api/studio/fixstatus?token=${encodeURIComponent(T)}&id=${encodeURIComponent(id)}`);
+  $("joblog").innerHTML=(d.log||[]).map(lineStyle).join('<br>');closeDialog('historyDialog');toggleBottomPanel('log',true,$('btnHistory'));
+  if (!d.done) return toast("此任务仍在运行，完成后可重新打开记录。");
+  if (d.error) return toast(d.error,true);
+  if (!d.result) return toast("此记录没有可恢复的候选。");
+  if (name && name !== curName) { if (!discardAllowed()) return; await loadFile(name,true); }
+  if (await sha256Text(editor.getValue()) !== d.result.original_sha256) return toast("当前原文与历史任务不同。记录已显示，候选不能应用到此版本。",true);
+  if (d.result.local_decision || d.review?.decision) return toast("此候选已有审阅决定，请创建新的修复任务。");
+  await applyResult(d.result); closeDialog("historyDialog"); toast("历史候选已恢复，请审阅差异。");
+}
+for (const id of ["jobs","historyJobs"]) $(id).addEventListener("click", e => {
+  const item=e.target.closest?.("[data-job]"); if (item) restoreJob(item.dataset.job,item.dataset.name).catch(warn);
+});
+$("btnRefreshJobs").onclick = () => loadJobs().catch(warn);
+$("btnHistory").onclick = () => { openDialog("historyDialog"); loadJobs().catch(warn); };
+$("btnHistoryClose").onclick = () => closeDialog("historyDialog");
+$("btnCancel").onclick = async () => {
+  if (!activeJob) return;
+  try { await post(`jobs/${activeJob}/cancel`,{}); toast("已请求停止。当前步骤结束后停止，不再继续后续模型请求。"); $("btnCancel").disabled=true; }
+  catch(error) { warn(error); }
+};
+
+let studioConfig = null;
+function displayModelConnection(available) {
+  const state=available===true?'connected':available===false?'disconnected':'unchecked';
+  $("modelIndicator").dataset.state=state;
+  $("modelConnectionStatus").textContent=available===true?' · 已连接':available===false?' · 未连接':' · 未检查';
+  $("localBadge").textContent=available===true?'本地模型已连接':available===false?'尚未连接到本地模型':'连接状态尚未检查';
+  $("localBadge").classList.toggle('pending',available!==true);
+  $("btnModelStatus").title=$("localBadge").textContent+' · 打开本地模型设置';
+}
+function sameModelConfiguration(a,b) {
+  const endpoint=value=>String(value||'').trim().replace(/\/+$/,'');
+  return !!a&&!!b&&endpoint(a.base_url)===endpoint(b.base_url)&&String(a.model||'').trim()===String(b.model||'').trim();
+}
+function displayConfig(config) {
+  studioConfig=config;
+  $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
+  $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
+  $("sb-model").textContent=/minicpm/i.test(config.model||"")?"MiniCPM":/qwen/i.test(config.model||"")?"Qwen":"本地模型";
+  const available=config.model_available;
+  displayModelConnection(available);
+  const tools=config.tools || {};
+  $("configStatus").textContent=[available === true ? "模型服务可用" : available === false ? "尚未连接到本地模型" : "连接状态尚未检查", `编译器：${tools.tectonic ? "可用" : "待安装"}`,`页面预览：${tools.pdftoppm ? "可用" : "待安装"}`].join(" · ");
+  if (config.error) $("configStatus").textContent += " · " + config.error;
+}
+async function loadConfig(probe=false) { const d=await j(`/api/studio/config?token=${encodeURIComponent(T)}${probe ? "&probe=true" : ""}`); displayConfig(d); return d; }
+$("btnSettings").onclick = () => { openDialog("settingsDialog"); loadConfig().catch(warn); };
+$("btnSettingsClose").onclick = () => closeDialog("settingsDialog");
+$("btnSettingsSave").onclick = async () => {
+  try { const d=await post("settings",{base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()}); displayConfig(d); closeDialog("settingsDialog"); toast("本地模型设置已保存。"); } catch(error) { warn(error); }
+};
+$("btnTestModel").onclick = async () => {
+  $("btnTestModel").disabled=true; $("configStatus").textContent="正在检查本地模型…";
+  const draft={base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()};
+  try {
+    const d=await post("probe",draft);
+    if(sameModelConfiguration(draft,studioConfig))displayModelConnection(d.model_available);
+    $("configStatus").textContent=d.model_available ? "此配置可以连接，点击保存后生效。" : (d.message || d.error || "未连接到本地模型，请确认服务已启动。");
+    toast(d.model_available ? "连接正常。设置尚未保存。" : "未连接到本地模型，请确认服务已启动。",!d.model_available);
+  } catch(error) { if(sameModelConfiguration(draft,studioConfig))displayModelConnection(false);warn(error); }
+  finally { $("btnTestModel").disabled=false; }
+};
+async function installLocalTools(tool="tectonic"){
+  const button=$(tool==="poppler"?"btnInstallPoppler":"btnInstallTools"),hint=$("installToolsHint");
+  button.disabled=true;
+  hint.textContent=tool==="poppler"?"正在经 Homebrew 安装 Poppler（可能需要几分钟）…":"正在从 Tectonic 官方 Release 下载（约 21 MB），完成后自动校验 SHA256…";
+  try {
+    const d=await post("tools/install",{tool});
+    hint.textContent=tool==="poppler"?"Poppler 已安装；PDF 导入与页面预览可用。":`已安装 Tectonic ${d.version} → ${d.path}；本次会话即可编译 PDF。`;
+    toast(tool==="poppler"?"Poppler 安装完成。":"Tectonic 安装完成。");
+    loadConfig().catch(()=>{});
+  } catch(error) {
+    hint.textContent="安装失败："+(error&&error.message||String(error))+"。可重试或改用系统包管理器。";
+    button.disabled=false;
+  }
+}
+$("btnInstallTools").onclick=()=>installLocalTools("tectonic");
+$("btnInstallPoppler").onclick=()=>installLocalTools("poppler");
+
+let ocrFile = null, ocrRunning = false, ocrRequestId = 0, ocrEpoch = 0;
+let ocrReviewActive = false, ocrReviewRevision = 0;
+function syncOcrControls() {
+  $("btnOcr").disabled=busy || ocrRunning || ocrReviewActive || !ocrFile;
+  $("btnOcr").setAttribute('aria-busy',String(ocrRunning));
+  $("btnOcrCreate").disabled=busy || ocrRunning;
+  setToolLabel("btnOcr",ocrRunning ? "识别中…" : "识别");
+}
+function cancelOcrReview() {
+  ++ocrEpoch;ocrReviewActive=false;closeDialog("ocrDialog");syncOcrControls();
+  $("ocrHint").textContent=ocrRunning ? "本次结果已取消。当前请求结束后可重新识别。" : "已取消候选。可选择原件后重新识别。";
+}
+function closeImportPanel() {
+  ++ocrEpoch;ocrReviewActive=false;closeDialog("ocrDialog");closeDialog("importDialog");syncOcrControls();
+  $("ocrHint").textContent=ocrRunning ? "已关闭本次识别。当前请求结束后可重新识别。" : "仅向配置的本地模型发送。识别结果经你确认后新建文档。";
+}
+for(const id of ["ocrCandidate","ocrName"])$(id).addEventListener("input",()=>{++ocrReviewRevision;});
+$("importDialog").addEventListener("cancel",event=>{event.preventDefault();closeImportPanel();});
+$("ocrDialog").addEventListener("cancel",event=>{event.preventDefault();cancelOcrReview();});
+function chooseOcrFile(file) {
+  if (!file) return;
+  if (!(file.type === "application/pdf" || ["image/png","image/jpeg","image/webp"].includes(file.type))) return toast("请选择 PDF、PNG、JPEG 或 WebP 文件。",true);
+  if (file.size > 12*1024*1024) return toast("请选择 12 MB 以内的文件。",true);
+  ++ocrEpoch;ocrFile=file;$("ocrFileLabel").textContent=file.name;syncOcrControls();
+  $("ocrHint").textContent=ocrReviewActive ? "请先完成或取消当前候选审阅，再识别新的原件。" : ocrRunning ? "已选择新原件。当前请求结束后可开始识别，新结果不会覆盖已有候选。" : "原件已就绪。点击识别后审阅候选。";
+}
+$("dropZone").onclick = () => $("ocrInput").click();
+$("dropZone").addEventListener("keydown",e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("ocrInput").click(); } });
+$("ocrInput").onchange = e => chooseOcrFile(e.target.files[0]);
+$("dropZone").addEventListener("dragover",e => { e.preventDefault(); $("dropZone").classList.add("dragover"); });
+$("dropZone").addEventListener("dragleave",() => $("dropZone").classList.remove("dragover"));
+$("dropZone").addEventListener("drop",e => { e.preventDefault(); $("dropZone").classList.remove("dragover"); chooseOcrFile(e.dataTransfer.files[0]); });
+function fileBase64(file) { return new Promise((resolve,reject) => { const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result).split(",",2)[1]); reader.onerror=()=>reject(new Error("读取文件失败。")); reader.readAsDataURL(file); }); }
+$("btnOcr").onclick = async () => {
+  if (!ocrFile || busy || ocrRunning || ocrReviewActive || $("ocrDialog").open) return;
+  const file=ocrFile,epoch=ocrEpoch,requestId=++ocrRequestId,maxPages=Number($("ocrPages").value);
+  const pageStart=Math.max(1,Math.floor(Number($("ocrStart").value)||1));
+  $("ocrStart").value=String(pageStart);
+  const review={revision:ocrReviewRevision,name:$("ocrName").value,content:$("ocrCandidate").value};
+  const current=()=>requestId===ocrRequestId && epoch===ocrEpoch;
+  ocrRunning=true;syncOcrControls();
+  $("ocrHint").textContent="正在本地识别，请等待模型返回。原始文档保持不变。";
+  try {
+    const data=await fileBase64(file);
+    if(!current())return;
+    const d=await post("import",{name:file.name,mime_type:file.type,data_base64:data,max_pages:maxPages,page_start:pageStart});
+    if(!current())return;
+    if (typeof d.content !== "string" || d.requires_review !== true) throw new Error("识别服务没有返回可审阅的候选。");
+    if(ocrReviewActive || $("ocrDialog").open || review.revision!==ocrReviewRevision || review.name!==$("ocrName").value || review.content!==$("ocrCandidate").value){
+      $("ocrHint").textContent="候选已有编辑，本次识别结果未覆盖审阅内容。";return;
+    }
+    $("ocrName").value=(d.name || file.name.replace(/\.[^.]+$/,"") + ".tex").replace(/\.[^.]+$/,".tex");
+    $("ocrCandidate").value=d.content;ocrReviewActive=true;openDialog("ocrDialog");
+    presentOcrPages(d,file);
+    $("ocrHint").textContent="识别完成。请对照原件审阅候选，再创建文档。";
+  } catch(error) { if(current()){warn(error);$("ocrHint").textContent="识别未完成，请检查本地模型与文件后重试。";} }
+  finally { if(requestId===ocrRequestId){ocrRunning=false;syncOcrControls();} }
+};
+$("btnOcrCancel").onclick = cancelOcrReview;
+$("btnOcrCreate").onclick = async () => {
+  if(savingDocument)return toast("正在保存当前文档，请稍后新建识别文档。");
+  if (busy || ocrRunning || !discardAllowed()) return;
+  const name=$("ocrName").value.trim(),content=$("ocrCandidate").value;
+  try { await mutateDocument(async()=>{await post("create",{name,content});return name;},"识别候选已保存为新文档，请对照原件检查。");closeImportPanel();editor?.focus(); } catch(error) { warn(error); }
+};
+
+// ---- PDF 分页切割:按页审阅、剔除、拆分为多个文档、继续识别后续批次 ----
+const OCR_PREAMBLE="% TeXada Studio local OCR candidate — compare with the original before use.\n\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb,graphicx,booktabs}\n\\begin{document}\n";
+let ocrEdited=false, ocrImportRecord=null, ocrPageSelection={};
+$("ocrCandidate").addEventListener("input",()=>{ocrEdited=true;});
+function checkedOcrPageNumbers(){
+  return Object.keys(ocrPageSelection).filter(number=>ocrPageSelection[number]).map(Number).sort((a,b)=>a-b);
+}
+function ocrPageDocument(page){
+  return OCR_PREAMBLE+`% Source page ${page.page} — OCR candidate; review against original\n${page.body??page.text??""}`+"\n\\end{document}\n";
+}
+function presentOcrPages(result,file){
+  ocrImportRecord={d:result,file};ocrEdited=false;
+  const pages=Array.isArray(result.pages)&&result.pages.length>1?result.pages:[];
+  ocrPageSelection={};pages.forEach(page=>{ocrPageSelection[page.page]=true;});
+  $("ocrPageSplitField").hidden=!pages.length;$("btnOcrSplit").hidden=!pages.length;
+  $("ocrPageList").innerHTML=pages.map(page=>`<label class="preference-row"><span>第 ${page.page} 页<small>候选 ${(page.body??page.text??"").length} 字符</small></span><input type="checkbox" checked data-ocr-page="${page.page}"></label>`).join("");
+  const more=result.has_more_pages===true&&result.source_pages;
+  $("btnOcrMore").hidden=!more;
+  if(more)$("btnOcrMore").textContent=`继续识别第 ${result.pages[result.pages.length-1].page+1} 页起（共 ${result.source_pages} 页）`;
+}
+function rebuildOcrCandidate(){
+  if(!ocrImportRecord||ocrEdited)return;
+  const keep=new Set(checkedOcrPageNumbers());
+  const kept=ocrImportRecord.d.pages.filter(page=>keep.has(page.page));
+  if(!kept.length)return;
+  $("ocrCandidate").value=OCR_PREAMBLE+kept.map(page=>`% Source page ${page.page} — OCR candidate; review against original\n${page.body??page.text??""}`).join("\n\n\\clearpage\n\n")+"\n\\end{document}\n";
+}
+$("ocrPageList").addEventListener("change",event=>{
+  const item=event.target?.closest?.("[data-ocr-page]")||event.target;
+  if(!item||item.dataset?.ocrPage===undefined)return;
+  ocrPageSelection[Number(item.dataset.ocrPage)]=!!item.checked;
+  rebuildOcrCandidate();
+});
+$("btnOcrSplit").onclick = async () => {
+  if(!ocrImportRecord)return;
+  if(savingDocument)return toast("正在保存当前文档，请稍候。");
+  if (busy || ocrRunning || !discardAllowed()) return;
+  const keep=new Set(checkedOcrPageNumbers());
+  const targets=ocrImportRecord.d.pages.filter(page=>keep.has(page.page));
+  if(!targets.length)return toast("请至少勾选一页再拆分。",true);
+  const stem=$("ocrName").value.trim().replace(/\.tex$/,"")||"识别文档";
+  try {
+    await mutateDocument(async()=>{
+      for(const page of targets)await post("create",{name:`${stem}-第${page.page}页.tex`,content:ocrPageDocument(page)});
+      return `${stem}-第${targets[targets.length-1].page}页.tex`;
+    },`已按页拆分为 ${targets.length} 个文档，请逐页对照原件检查。`);
+    closeImportPanel();editor?.focus();
+  } catch(error) { warn(error); }
+};
+$("btnOcrMore").onclick = () => {
+  if(!ocrImportRecord||busy||ocrRunning)return;
+  const next=ocrImportRecord.d.pages[ocrImportRecord.d.pages.length-1].page+1;
+  $("ocrStart").value=String(next);
+  cancelOcrReview();
+  $("btnOcr").onclick();
+};
+
+for (const id of ["plannerMode","skillSelection"]) {
+  $(id).checked=getPreference(id,"false") === "true";
+  $(id).addEventListener("change",()=>setPreference(id,$(id).checked));
+}
+loadConfig().catch(()=>{ $("localBadge").textContent="本地配置未读取"; });
+loadJobs().catch(()=>{});
+
+// ---- Editor chrome: local icons, preferences, navigation and commands. ----
+const TOOL_ICON_PATHS = {
+  warning:'<path d="m12 3 10 18H2zM12 9v5M12 17h.01"/>',columns:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M11 4v16"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/>',
+  save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', minus:'<path d="M5 12h14"/>',
+  search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+  replace:'<path d="M4 5h8M8 2l4 3-4 3M20 19h-8M16 16l-4 3 4 3M5 12h5M14 12h5"/>',
+  check:'<path d="m5 12 4 4L19 6"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',
+  checkCircle:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  sparkles:'<path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3zM20 2v4M18 4h4"/>',
+  play:'<path d="m8 4 12 8-12 8z"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  download:'<path d="M12 3v12m-5-5 5 5 5-5M5 16v4h14v-4"/>',
+  edit:'<path d="m16 3 5 5-12 12-6 1 1-6zM13 6l5 5"/>',
+  trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+  history:'<path d="M3 11a9 9 0 1 1 2 7M3 5v6h6M12 7v5l3 2"/>',
+  theme:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',
+  settings:'<path d="M4 6h16M4 18h16M4 12h16"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/>',
+  model:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4M10 10h4v4h-4z"/>',
+  command:'<path d="M8 8h8v8H8zM8 8H5a3 3 0 1 1 3-3zm8 0V5a3 3 0 1 1 3 3zm0 8h3a3 3 0 1 1-3 3zm-8 0v3a3 3 0 1 1-3-3z"/>',
+  outline:'<path d="M4 5h16M8 10h12M8 15h12M4 20h16M4 10v5"/>',
+  workflow:'<rect x="3" y="3" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M6 8v9h9M12 5h6v7M15 9l3 3 3-3"/>',
+  scan:'<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5M7 8h10M7 12h7M7 16h10"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
+  chevronLeft:'<path d="m15 5-7 7 7 7"/>',chevronRight:'<path d="m9 5 7 7-7 7"/>',
+  chevronUp:'<path d="m5 15 7-7 7 7"/>',
+  refresh:'<path d="M20 7a9 9 0 1 0 1 8M20 2v5h-5"/>',
+  fit:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M8 8h8v8H8z"/>',
+  template:'<path d="M12 3 2 8l10 5 10-5zM2 13l10 5 10-5"/>',
+};
+function toolIcon(name) {
+  return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${TOOL_ICON_PATHS[name] || TOOL_ICON_PATHS.file}</svg>`;
+}
+const TOOL_BUTTONS = {
+  activityDocuments:['file','','文档与大纲'],activitySearch:['search','','查找和搜索'],activityOcr:['scan','','图片与PDF识别'],activityAgent:['model','','Agent与审阅'],activitySettings:['settings','','编辑器设置'],
+  btnWorkspaceSettings:['settings','','工作区设置'],btnExportMenu:['download','导出','导出文档'],btnEditorTools:['columns','','编辑与布局工具'],btnQuickOutline:['outline','转到章节','转到章节'],btnTogglePreview:['columns','切换PDF预览','切换PDF预览'],btnImportClose:['close','','关闭识别面板'],btnBottomClose:['close','','关闭底部面板'],
+
+  sepBtnL:['chevronLeft','','折叠或展开文档导航'],sepBtnR:['chevronRight','','折叠或展开检查面板'],sepBtnE:['chevronRight','','折叠或展开PDF预览'],sepBtnH:['chevronUp','','折叠或展开活动记录'],
+  btnSave:['save','','保存 · ⌘/Ctrl S'], btnNew:['plus','','新建文档'], btnNewFromTemplate:['template','','从模板新建'], btnUpload:['folder','','打开 LaTeX 文档'],
+  btnAnalyze:['checkCircle','检查','检查公式语法与表格'], btnFix:['sparkles','修复候选','生成待审阅的修复候选'], btnCompile:['play','编译','编译当前文档'],
+  btnExport:['download','导出 LaTeX (.tex)','导出当前 LaTeX 源文件'], btnPdf:['download','导出 PDF','导出当前版本 PDF'],btnCancel:['stop','停止','停止当前任务'],
+  btnRename:['edit','重命名','重命名当前文档'],btnDelete:['trash','删除','删除当前本地文档'],btnHistory:['history','运行记录','查看运行记录'],
+  btnTheme:['theme','增强对比度','切换编辑器对比度'],btnSettings:['model','本地模型','配置本地模型'],btnInspector:['checkCircle','检查','打开检查与审阅面板'],
+  btnCommand:['search','命令','命令面板 · ⌘/Ctrl Shift P'],btnFind:['search','查找','查找 · ⌘/Ctrl F'],btnReplace:['replace','查找和替换','查找和替换'],
+  btnOutline:['outline','','转到章节 · ⌘/Ctrl Shift O'],btnEditorSettings:['settings','编辑器设置','编辑器设置'],
+  btnAccept:['check','采用候选','采用候选到编辑器'],btnReject:['close','拒绝候选','拒绝候选并保留原文'],btnReport:['file','检查报告','导出检查报告'],
+  btnOcr:['scan','识别','识别所选图片或 PDF'],btnRefreshJobs:['refresh','','刷新运行记录'],btnInspectorClose:['close','','关闭检查面板'],
+  btnEditorSettingsClose:['close','','关闭编辑器设置'],btnOutlineClose:['close','','关闭文档大纲'],btnTemplateClose:['close','','关闭模板面板'],
+  btnZoomOut:['minus','','缩小字号'],btnZoomIn:['plus','','增大字号'],pvPrevious:['chevronLeft','','上一页'],pvNext:['chevronRight','','下一页'],pvZoomFit:['fit','适应','适应整页'],
+};
+function setToolLabel(id, label) {
+  const config=TOOL_BUTTONS[id],button=$(id); if (!button || !config) return;
+  button.innerHTML=toolIcon(config[0])+(label ? `<span class="button-label">${esc(label)}</span>` : '');
+  if(id==='btnCommand')button.innerHTML+='<kbd>⌘⇧P</kbd>';
+  button.title=config[2];button.setAttribute('aria-label',config[2]);
+}
+function paintEditorIcons() {
+  for (const [id,config] of Object.entries(TOOL_BUTTONS)) setToolLabel(id,config[1]);
+  document.querySelectorAll?.('[data-icon]').forEach(el=>{el.innerHTML=toolIcon(el.dataset.icon);});
+  const drop=document.querySelector?.('.drop-symbol'); if(drop)drop.innerHTML=toolIcon('image');
+}
+function syncEditorPreferences() {
+  $('prefFontSize').value=editorFontSize;
+  $('prefWordWrap').checked=editorPreferences.wordWrap === 'on';$('prefMinimap').checked=editorPreferences.minimap;
+}
+function applyEditorPreferences() {
+  const options={fontSize:editorFontSize,wordWrap:editorPreferences.wordWrap,minimap:{enabled:editorPreferences.minimap}};
+  for (const target of [editor,diffEditor?.getOriginalEditor?.(),diffEditor?.getModifiedEditor?.()]) target?.updateOptions(options);
+  setPreference('fontSize',editorFontSize);setPreference('wordWrap',editorPreferences.wordWrap);setPreference('minimap',editorPreferences.minimap);
+  syncEditorPreferences();
+}
+$('btnEditorSettings').onclick=()=>{syncEditorPreferences();openDialog('editorSettingsDialog');};
+$('btnEditorSettingsClose').onclick=$('btnEditorDone').onclick=()=>closeDialog('editorSettingsDialog');
+$('prefFontSize').addEventListener('change',()=>{editorFontSize=Math.min(28,Math.max(10,Number($('prefFontSize').value)||15));applyEditorPreferences();});
+$('prefWordWrap').addEventListener('change',()=>{editorPreferences.wordWrap=$('prefWordWrap').checked?'on':'off';applyEditorPreferences();});
+$('prefMinimap').addEventListener('change',()=>{editorPreferences.minimap=$('prefMinimap').checked;applyEditorPreferences();});
+$('btnEditorReset').onclick=()=>{editorFontSize=15;editorPreferences.wordWrap='on';editorPreferences.minimap=false;applyEditorPreferences();};
+function activeTextEditor() {return diffShown && diffEditor ? diffEditor.getModifiedEditor() : editor;}
+function editorStatistics(text,selected='') {
+  const han=(text.match(/\p{Script=Han}/gu)||[]).length;
+  const words=(text.replace(/\p{Script=Han}/gu,' ').match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)||[]).length;
+  return {characters:Array.from(text).length,writingUnits:han+words,selectedCharacters:Array.from(selected).length};
+}
+// The model version is the cache authority; cursor moves never rescan the document.
+const editorContentCache=new WeakMap();
+function cachedEditorContent(target=activeTextEditor()) {
+  const model=target?.getModel();if(!model)return null;
+  const version=model.getVersionId();let cached=editorContentCache.get(model);
+  if(!cached||cached.version!==version){const text=model.getValue?model.getValue():target.getValue();cached={model,version,text,statistics:editorStatistics(text),outline:null};editorContentCache.set(model,cached);}
+  return cached;
+}
+function updateEditorStatus() {
+  const target=activeTextEditor(),cached=cachedEditorContent(target);if(!cached)return;
+  const {model,statistics:stats}=cached,position=target.getPosition()||{lineNumber:1,column:1},selection=target.getSelection();
+  let selected='';
+  if(selection){const from=selection.getStartPosition?.(),to=selection.getEndPosition?.();if(from&&to&&(from.lineNumber!==to.lineNumber||from.column!==to.column))selected=model.getValueInRange?model.getValueInRange(selection):cached.text.slice(model.getOffsetAt(from),model.getOffsetAt(to));}
+  const selectedCount=Array.from(selected).length;
+  $('sb-position').textContent=`行 ${position.lineNumber}，列 ${position.column}`;
+  $('sb-count').textContent=`${stats.characters.toLocaleString()} 字符`;
+  $('sb-count').title=`源文件统计（包含 LaTeX 命令）：${stats.characters} 字符，约 ${stats.writingUnits} 个中英文字词。`;
+  $('sb-selection').textContent=`已选 ${selectedCount} 字符`;$('sb-selection').classList.toggle('hide',selectedCount===0);
+  if(outlineRenderedModel===model&&outlineRenderedVersion===cached.version)updateOutlineSelection(position.lineNumber);
+}
+
+// Preserve UTF-16 offsets for Monaco while removing non-executable TeX regions.
+function texEscapedAt(source,index){let slashes=0;while(index>0&&source[--index]==='\\')slashes++;return slashes%2===1;}
+function maskIgnoredTex(source) {
+  const masked=source.split('');
+  const blank=(from,to)=>{for(let j=from;j<to;j++)if(masked[j]!=='\n'&&masked[j]!=='\r')masked[j]=' ';};
+  for(let i=0;i<source.length;i++){
+    if(source[i]==='%'&&!texEscapedAt(source,i)){let end=source.indexOf('\n',i);if(end<0)end=source.length;blank(i,end);i=end-1;continue;}
+    if(source[i]!=='\\'||texEscapedAt(source,i))continue;
+    const raw=source.slice(i).match(/^\\begin\s*\{(verbatim\*?|Verbatim|lstlisting|minted|comment|filecontents\*?|alltt|luacode\*?)\}/);
+    if(raw){const name=raw[1].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),endPattern=new RegExp('\\\\end\\s*\\{'+name+'\\}','g');endPattern.lastIndex=i+raw[0].length;const end=endPattern.exec(source),stop=end?end.index+end[0].length:source.length;blank(i,stop);i=stop-1;continue;}
+    const verb=source.slice(i).match(/^\\verb\*?(?![A-Za-z])/);
+    if(verb){const start=i+verb[0].length,delimiter=source[start];if(delimiter&&!/[\r\n\s]/.test(delimiter)){const end=source.indexOf(delimiter,start+1),lineEnd=source.indexOf('\n',start);const stop=end>=0&&(lineEnd<0||end<lineEnd)?end+1:(lineEnd<0?source.length:lineEnd);blank(i,stop);i=stop-1;}}
+  }
+  return masked.join('');
+}
+function readTexGroup(source,start,open='{',close='}') {
+  if(source[start]!==open)return null;let depth=1,braceDepth=0;
+  for(let i=start+1;i<source.length;i++){
+    if(texEscapedAt(source,i))continue;
+    if(open==='['){if(source[i]==='{'){braceDepth++;continue;}if(source[i]==='}'&&braceDepth){braceDepth--;continue;}if(braceDepth)continue;}
+    if(source[i]===open)depth++;else if(source[i]===close&&--depth===0)return {body:source.slice(start+1,i),end:i+1};
+  }
+  return null;
+}
+function extractDocumentOutline(source) {
+  const masked=maskIgnoredTex(source),pattern=/\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*)?(?![A-Za-z@])/g;
+  const levels={part:0,chapter:0,section:1,subsection:2,subsubsection:3,paragraph:4,subparagraph:4},entries=[];
+  let match;
+  while((match=pattern.exec(masked))&&entries.length<300){
+    if(texEscapedAt(masked,match.index))continue;let offset=pattern.lastIndex;
+    while(/\s/.test(masked[offset]||'')&&offset<masked.length)offset++;
+    if(masked[offset]==='['){const short=readTexGroup(masked,offset,'[',']');if(!short)continue;offset=short.end;while(/\s/.test(masked[offset]||'')&&offset<masked.length)offset++;}
+    const group=readTexGroup(masked,offset);if(!group)continue;
+    const title=group.body.replace(/\\([#$%&_{}])/g,'$1').replace(/\\[A-Za-z@]+\*?(?:\[[^\]]*\])?/g,'').replace(/[{}]/g,'').replace(/\s+/g,' ').trim();
+    entries.push({label:title||'无标题',kind:match[1],level:levels[match[1]],line:masked.slice(0,match.index).split('\n').length,column:match.index-masked.lastIndexOf('\n',match.index-1),offset:match.index,starred:!!match[2]});
+    pattern.lastIndex=group.end;
+  }
+  return entries;
+}
+let outlineEntries=[],outlineTimer,outlineRenderedModel=null,outlineRenderedVersion=null,activeOutlineIndex=-1;
+function updateOutlineSelection(line) {
+  let low=0,high=outlineEntries.length-1,active=-1;
+  while(low<=high){const middle=(low+high)>>1;if(outlineEntries[middle].line<=line){active=middle;low=middle+1;}else high=middle-1;}
+  if(active===activeOutlineIndex)return;
+  for(const id of ['outline','outlineDialogList']){
+    const container=$(id);container.querySelector?.(`[data-outline-index="${activeOutlineIndex}"]`)?.classList.remove('active');
+    container.querySelector?.(`[data-outline-index="${active}"]`)?.classList.add('active');
+  }
+  activeOutlineIndex=active;
+}
+function updateOutline() {
+  const cached=cachedEditorContent();if(!cached)return;
+  if(cached.outline===null)cached.outline=extractDocumentOutline(cached.text);
+  outlineEntries=cached.outline;
+  if(outlineRenderedModel!==cached.model||outlineRenderedVersion!==cached.version){
+    const render=()=>outlineEntries.length?outlineEntries.map((entry,index)=>`<button class="outline-item level-${entry.level}" data-outline-index="${index}" title="第 ${entry.line} 行 · ${esc(entry.label)}"><span class="outline-marker">${entry.level>1?'·':'§'}</span><span class="outline-label">${esc(entry.label)}</span><span class="outline-line">${entry.line}</span></button>`).join(''):'<p class="hint">使用 \\section{标题} 建立文档大纲。</p>';
+    $('outline').innerHTML=render();$('outlineDialogList').innerHTML=render();$('outlineCount').textContent=outlineEntries.length||'';
+    outlineRenderedModel=cached.model;outlineRenderedVersion=cached.version;activeOutlineIndex=-1;
+  }
+  updateOutlineSelection(activeTextEditor()?.getPosition()?.lineNumber||1);
+}
+
+function scheduleEditorContext(){updateEditorStatus();clearTimeout(outlineTimer);outlineTimer=setTimeout(updateOutline,180);}
+function jumpToOutline(index){const entry=outlineEntries[Number(index)];if(!entry)return;closeDialog('outlineDialog');gotoLine(entry.line);activeTextEditor()?.setPosition({lineNumber:entry.line,column:entry.column});updateEditorStatus();}
+for(const id of ['outline','outlineDialogList'])$(id).addEventListener('click',event=>{const item=event.target.closest?.('[data-outline-index]');if(item)jumpToOutline(item.dataset.outlineIndex);});
+function openOutline(){updateOutline();openDialog('outlineDialog');}
+$('btnOutline').onclick=openOutline;$('btnOutlineClose').onclick=()=>closeDialog('outlineDialog');
+function runEditorAction(id){
+  const target=activeTextEditor();if(!target?.getModel())return;
+  if(isMobileWorkspace()&&navigatorOpen)toggleNavigator(false,null,false);
+  if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
+  target.focus();const action=target.getAction?.(id);if(action)return action.run();toast('编辑器尚未就绪，请稍后再试。',true);
+}
+$('btnFind').onclick=()=>runEditorAction('actions.find');$('btnReplace').onclick=()=>runEditorAction('editor.action.startFindReplaceAction');
+
+const EDITOR_COMMANDS=[
+  {id:'file.new',label:'新建文档',detail:'创建本地 LaTeX 文档',icon:'plus',keywords:'new create',button:'btnNew'},
+  {id:'file.open',label:'打开 LaTeX 文档',detail:'从本机导入 .tex',icon:'folder',keywords:'open import tex',button:'btnUpload'},
+  {id:'file.new-template',label:'从模板新建',detail:'选择内置文档骨架创建本地文档',icon:'template',keywords:'template new create blank beamer exam',button:'btnNewFromTemplate'},
+  {id:'file.save',label:'保存文档',detail:'保存当前修改到本机',icon:'save',keywords:'save',shortcut:'⌘/Ctrl S',button:'btnSave'},
+  {id:'editor.find',label:'查找',detail:'在当前文档中搜索',icon:'search',keywords:'find search',shortcut:'⌘/Ctrl F',button:'btnFind'},
+  {id:'editor.replace',label:'查找和替换',detail:'打开编辑器替换面板',icon:'replace',keywords:'replace find',button:'btnReplace'},
+  {id:'editor.outline',label:'转到章节',detail:'在文档大纲中跳转',icon:'outline',keywords:'outline section heading',shortcut:'⌘/Ctrl ⇧ O',button:'btnOutline'},
+  {id:'document.analyze',label:'检查文档',detail:'检查公式语法与简单表格合计',icon:'checkCircle',keywords:'check analyze',button:'btnAnalyze'},
+  {id:'document.fix',label:'生成修复候选',detail:'先查看差异，再决定是否采用',icon:'sparkles',keywords:'fix repair agent',button:'btnFix'},
+  {id:'document.compile',label:'编译预览',detail:'使用本地 TeX 编译器生成 PDF',icon:'play',keywords:'compile preview pdf',button:'btnCompile'},
+  {id:'file.export',label:'导出 LaTeX',detail:'下载当前查看的源文件版本',icon:'download',keywords:'export latex tex',button:'btnExport'},
+  {id:'file.pdf',label:'导出 PDF',detail:'下载与当前内容绑定的 PDF',icon:'download',keywords:'export pdf',button:'btnPdf'},
+  {id:'editor.settings',label:'编辑器设置',detail:'字号、自动换行与代码小地图',icon:'settings',keywords:'font wrap minimap settings',button:'btnEditorSettings'},
+  {id:'model.settings',label:'本地模型设置',detail:'配置本机模型服务',icon:'model',keywords:'model local settings',button:'btnSettings'},
+  {id:'tools.install',label:'下载 Tectonic',detail:'从官方 Release 安装本地 PDF 编译器',icon:'download',keywords:'tectonic install tools compile pdf',button:'btnInstallTools'},
+  {id:'tools.install-poppler',label:'安装 Poppler',detail:'经 Homebrew 安装 PDF 导入与预览工具',icon:'download',keywords:'poppler install tools pdf import preview',button:'btnInstallPoppler'},
+  {id:'document.import',label:'识别图片 / PDF',detail:'从原件创建可审阅的 LaTeX 候选',icon:'scan',keywords:'ocr image pdf import',run:openImportPanel},
+  {id:'history.open',label:'查看运行记录',detail:'恢复尚未审阅的修复候选',icon:'history',keywords:'history runs',button:'btnHistory'},
+  {id:'appearance.theme',label:'切换编辑器对比度',detail:'保持深海蓝，调整背景对比度',icon:'theme',keywords:'theme dark light',button:'btnTheme'},
+];
+let filteredCommands=[],selectedCommand=0,commandPaletteOpen=false,commandPreviousFocus=null;
+function commandEnabled(command){if(!command.button)return true;const button=$(command.button);return !!button&&!button.disabled&&!button.classList.contains('hide');}
+function renderCommands(){
+  const query=String($('commandInput').value||'').trim().toLocaleLowerCase();
+  filteredCommands=EDITOR_COMMANDS.filter(command=>`${command.label} ${command.detail} ${command.keywords}`.toLocaleLowerCase().includes(query));
+  selectedCommand=Math.min(selectedCommand,Math.max(0,filteredCommands.length-1));
+  if(filteredCommands.length&&!commandEnabled(filteredCommands[selectedCommand])){const first=filteredCommands.findIndex(commandEnabled);if(first>=0)selectedCommand=first;}
+  $('commandList').innerHTML=filteredCommands.length?filteredCommands.map((command,index)=>`<button id="command-option-${index}" class="command-option" role="option" aria-selected="${index===selectedCommand}" aria-disabled="${!commandEnabled(command)}" data-command-index="${index}" tabindex="-1"${commandEnabled(command)?'':' disabled'}>${toolIcon(command.icon)}<span class="command-label">${esc(command.label)}<small>${esc(command.detail)}</small></span>${command.shortcut?`<kbd>${esc(command.shortcut)}</kbd>`:''}</button>`).join(''):'<div class="empty">没有匹配命令，试试「保存」「查找」或「编译」。</div>';
+  $('commandInput').setAttribute('aria-activedescendant',filteredCommands.length?`command-option-${selectedCommand}`:'');
+}
+function openCommandPalette(){commandPreviousFocus=document.activeElement||null;commandPaletteOpen=true;selectedCommand=0;$('commandInput').value='';$('commandInput').setAttribute('aria-expanded','true');renderCommands();openDialog('commandDialog');$('commandInput').focus?.();}
+function closeCommandPalette(){commandPaletteOpen=false;$('commandInput').setAttribute('aria-expanded','false');closeDialog('commandDialog');if(commandPreviousFocus?.isConnected)commandPreviousFocus.focus?.();else editor?.focus();}
+async function executeCommand(index=selectedCommand){const command=filteredCommands[Number(index)];if(!command||!commandEnabled(command))return;closeCommandPalette();try{if(command.run)await command.run();else{const button=$(command.button);if(button.click)button.click();else await button.onclick?.();}}catch(error){warn(error);}}
+function moveCommandSelection(delta){if(!filteredCommands.length)return;for(let steps=0;steps<filteredCommands.length;steps++){selectedCommand=(selectedCommand+delta+filteredCommands.length)%filteredCommands.length;if(commandEnabled(filteredCommands[selectedCommand]))break;}renderCommands();$('commandList').querySelector?.('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});}
+$('btnCommand').onclick=$('btnCommandHint').onclick=openCommandPalette;
+$('commandInput').addEventListener('input',()=>{selectedCommand=0;renderCommands();});
+$('commandList').addEventListener('click',event=>{const item=event.target.closest?.('[data-command-index]');if(item)executeCommand(item.dataset.commandIndex);});
+$('commandDialog').addEventListener('cancel',event=>{event.preventDefault();closeCommandPalette();});
+function handleGlobalEditorKey(event){
+  // Safari can dispatch the IME-confirming Enter after compositionend.
+  if(event.isComposing||(event.key==='Enter'&&event.keyCode===229))return;
+  if(!commandPaletteOpen&&handleWorkspaceKeys(event))return;
+  if(commandPaletteOpen){if(['ArrowDown','ArrowUp','Enter','Escape'].includes(event.key)){event.preventDefault();event.stopPropagation?.();if(event.key==='Escape')closeCommandPalette();else if(event.key==='Enter')executeCommand();else moveCommandSelection(event.key==='ArrowDown'?1:-1);}return;}
+  const key=event.key?.toLowerCase();
+  if((event.metaKey||event.ctrlKey)&&event.shiftKey&&key==='p'){event.preventDefault();openCommandPalette();}
+  else if((event.metaKey||event.ctrlKey)&&event.shiftKey&&key==='o'){event.preventDefault();openOutline();}
+  else if((event.metaKey||event.ctrlKey)&&!event.shiftKey&&key==='s'){event.preventDefault();saveDocument();}
+}
+document.addEventListener('keydown',handleGlobalEditorKey,true);
+for(const id of ['tab-edit','tab-diff'])$(id).addEventListener('keydown',event=>{
+  if(event.isComposing||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();
+  const available=['tab-edit',...(!$('tab-diff').disabled&&$('tab-diff').getAttribute('aria-disabled')!=='true'?['tab-diff']:[])];
+  let index=available.indexOf(id);index=event.key==='Home'?0:event.key==='End'?available.length-1:(index+(event.key==='ArrowRight'?1:-1)+available.length)%available.length;
+  showCenter(available[index]==='tab-diff'?'diff':'edit');$(available[index]).focus?.();
+});
+
+// ---- Workspace panels: one source of truth, independent of legacy layout preferences. ----
+let agentDrawerOpen=false,navigatorOpen=false,bottomPanelKind='log';
+let agentDrawerTrigger=null,navigatorTrigger=null,bottomPanelTrigger=null;
+let previewExpandedWidth='50%';
+function isNarrowWorkspace(){return typeof window.matchMedia==='function'?window.matchMedia('(max-width: 1100px)').matches:(window.innerWidth||1440)<=1100;}
+function isMobileWorkspace(){return typeof window.matchMedia==='function'?window.matchMedia('(max-width: 700px)').matches:(window.innerWidth||1440)<=700;}
+function layoutWorkspace(){editor?.layout();diffEditor?.layout();}
+function restoreWorkspaceFocus(trigger){if(trigger?.isConnected!==false&&trigger?.focus)trigger.focus();else editor?.focus();}
+function workspaceFocusable(container){
+  return Array.from(container.querySelectorAll?.('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')||[]).filter(el=>!el.disabled&&!el.hidden&&!el.classList?.contains('hide')&&(typeof el.getClientRects!=='function'||el.getClientRects().length>0));
+}
+function toggleNavigator(open=!navigatorOpen,trigger=null,restoreFocus=true){
+  if(open&&!navigatorOpen)navigatorTrigger=trigger||document.activeElement||$('activityDocuments');
+  navigatorOpen=!!open;$('sidebar').classList.toggle('collapsed',!navigatorOpen);$('sidebar').classList.toggle('navigator-open',navigatorOpen&&isMobileWorkspace());
+  $('activityDocuments').classList.toggle('active',navigatorOpen);$('activityDocuments').setAttribute('aria-expanded',String(navigatorOpen));
+  const floating=navigatorOpen&&isMobileWorkspace();$('navigatorBackdrop').classList.toggle('hide',!floating);
+  $('sidebar').setAttribute('role',floating?'dialog':'complementary');$('sidebar').setAttribute('aria-modal',String(floating));
+  if(floating){if(agentDrawerOpen)toggleAgentDrawer(false,null,false);workspaceFocusable($('sidebar'))[0]?.focus?.();}
+  else if(!open&&restoreFocus)restoreWorkspaceFocus(navigatorTrigger);
+  layoutWorkspace();
+}
+function toggleAgentDrawer(open=!agentDrawerOpen,trigger=null,restoreFocus=true){
+  if(open&&!agentDrawerOpen)agentDrawerTrigger=trigger||document.activeElement||$('btnAgent');
+  agentDrawerOpen=!!open;const panel=$('rightpanel');panel.classList.remove('collapsed');panel.style.width='320px';
+  panel.classList.toggle('closed',!open);panel.classList.toggle('open',!!open);panel.classList.toggle('mobile-open',!!open&&isNarrowWorkspace());
+  $('main').classList.toggle('agent-open',!!open);
+  for(const id of ['btnAgent','activityAgent','btnInspector'])$(id).setAttribute('aria-expanded',String(!!open));
+  $('activityAgent').classList.toggle('active',!!open);
+  const floating=!!open&&isNarrowWorkspace();$('inspectorBackdrop').classList.toggle('hide',!floating);
+  panel.setAttribute('role',floating?'dialog':'complementary');panel.setAttribute('aria-modal',String(floating));
+  if(floating){if(navigatorOpen&&isMobileWorkspace())toggleNavigator(false,null,false);$('btnInspectorClose').focus?.();}
+  else if(!open&&restoreFocus)restoreWorkspaceFocus(agentDrawerTrigger);
+  layoutWorkspace();
+}
+function toggleInspector(open){toggleAgentDrawer(open,$('btnInspector'));}
+function toggleBottomPanel(kind=bottomPanelKind,open,trigger=null){
+  if(!['problems','log'].includes(kind))kind='log';
+  const wasOpen=!$('bottom').classList.contains('collapsed'),wasKind=bottomPanelKind;
+  const show=open===undefined?(!wasOpen||wasKind!==kind):!!open;
+  bottomPanelKind=kind;if(show&&!wasOpen)bottomPanelTrigger=trigger||document.activeElement;
+  $('bottom').classList.toggle('collapsed',!show);$('bottom').style.height=show?'195px':'';
+  $('hsep').style.display=show?'block':'none';
+  $('problemsPane').classList.toggle('hide',kind!=='problems');$('logPane').classList.toggle('hide',kind!=='log');
+  for(const [id,panel] of [['btnProblems','problems'],['btnLog','log']]){const active=show&&panel===kind;$(id).classList.toggle('active',active);$(id).setAttribute('aria-expanded',String(active));}
+  $('btnBottomClose').disabled=!show;
+  layoutWorkspace();
+}
+function togglePreviewPane(){
+  const panel=$('previewPane'),closed=panel.classList.contains('collapsed');
+  if(closed){panel.classList.remove('collapsed');panel.style.width=previewExpandedWidth;panel.style.overflow='';}
+  else{previewExpandedWidth=panel.style.width||'50%';panel.classList.add('collapsed');panel.style.width='0';panel.style.overflow='hidden';}
+  $('btnTogglePreview').setAttribute('aria-pressed',String(closed));layoutWorkspace();
+}
+function openImportPanel(){closeWorkspaceMenu(false);syncOcrControls();openDialog('importDialog');}
+function templateEntries(){return window.TeXadaTemplates?.list?.()||[];}
+function renderTemplateList(){
+  const entries=templateEntries();
+  $('templateList').innerHTML=entries.length?entries.map(template=>
+    `<button class="template-option" role="listitem" data-template-id="${esc(template.id)}" title="${esc(template.description)}"><span class="template-name">${esc(template.name)}</span><small>${esc(template.description)}</small></button>`
+  ).join(''):'<p class="hint">内置模板未加载；仍可用「新建文档」直接创建空白文档。</p>';
+}
+function openTemplatePanel(){closeWorkspaceMenu(false);renderTemplateList();openDialog('templateDialog');}
+function closeTemplatePanel(){closeDialog('templateDialog');}
+$('btnNewFromTemplate').onclick=openTemplatePanel;
+$('btnTemplateClose').onclick=closeTemplatePanel;
+$('templateDialog').addEventListener('cancel',event=>{event.preventDefault();closeTemplatePanel();});
+async function createFromTemplate(templateId){
+  const template=templateEntries().find(entry=>entry.id===templateId);
+  if(!template||busy||!discardAllowed())return;
+  const name=typeof prompt==="function"?prompt("新文档名称（以 .tex 结尾）","untitled.tex"):null;
+  if(!name)return;
+  closeTemplatePanel();
+  try { await mutateDocument(async()=>{await post("create",{name,content:template.content});return name;},"已从模板创建文档。"); } catch(error) { warn(error); }
+}
+$('templateList').addEventListener('click',event=>{
+  const item=event.target.closest?.('[data-template-id]');if(!item)return;
+  createFromTemplate(item.dataset.templateId);
+});
+function initializeWorkspace(){
+  // Old light/card UI widths, collapsed flags and zero log heights do not govern this layout.
+  $('sidebar').style.width='';$('rightpanel').style.width='320px';$('bottom').style.height='';$('previewPane').style.width='50%';
+  $('rightpanel').classList.remove('collapsed');toggleAgentDrawer(false,null,false);toggleBottomPanel('log',false);
+  toggleNavigator(!isMobileWorkspace(),null,false);$('btnTogglePreview').setAttribute('aria-pressed','true');setPdfAvailable(!!previewBinding);wasMobileWorkspace=isMobileWorkspace();wasNarrowWorkspace=isNarrowWorkspace();
+}
+$('activityDocuments').onclick=()=>toggleNavigator(!navigatorOpen,$('activityDocuments'));
+$('activitySearch').onclick=()=>{
+  if(isMobileWorkspace())toggleNavigator(false,null,false);
+  else toggleNavigator(true,$('activitySearch'));
+  if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
+  runEditorAction('actions.find');
+};
+$('activityOcr').onclick=openImportPanel;$('btnImportClose').onclick=closeImportPanel;
+$('activityAgent').onclick=()=>toggleAgentDrawer(!agentDrawerOpen,$('activityAgent'));
+$('btnAgent').onclick=()=>toggleAgentDrawer(!agentDrawerOpen,$('btnAgent'));
+$('activitySettings').onclick=()=>{syncEditorPreferences();openDialog('editorSettingsDialog');};
+$('btnInspector').onclick=()=>toggleAgentDrawer(true,$('btnInspector'));
+$('btnInspectorClose').onclick=()=>toggleAgentDrawer(false);
+$('inspectorBackdrop').onclick=()=>toggleAgentDrawer(false);
+$('navigatorBackdrop').onclick=()=>toggleNavigator(false);
+$('btnProblems').onclick=()=>toggleBottomPanel('problems',undefined,$('btnProblems'));
+$('btnLog').onclick=()=>toggleBottomPanel('log',undefined,$('btnLog'));
+$('btnBottomClose').onclick=()=>{toggleBottomPanel(bottomPanelKind,false);restoreWorkspaceFocus(bottomPanelTrigger);};
+$('btnModelStatus').onclick=()=>{openDialog('settingsDialog');loadConfig().catch(warn);};
+$('btnQuickOutline').onclick=openOutline;
+$('btnTogglePreview').onclick=togglePreviewPane;
+
+// Menus dismiss before invoking existing real operations, preserving focus and capability gates.
+let openWorkspaceMenu=null,workspaceMenuTrigger=null;
+function positionWorkspaceMenu(menu,trigger){
+  const rect=trigger.getBoundingClientRect(),width=menu.offsetWidth||210;
+  menu.style.top=Math.max(8,(rect.bottom||48)+6)+'px';
+  menu.style.left=Math.max(8,Math.min(rect.left||8,(window.innerWidth||1440)-width-8))+'px';
+}
+function closeWorkspaceMenu(restoreFocus=true){
+  if(!openWorkspaceMenu)return;$(openWorkspaceMenu).classList.add('hide');workspaceMenuTrigger?.setAttribute('aria-expanded','false');
+  const trigger=workspaceMenuTrigger;openWorkspaceMenu=null;workspaceMenuTrigger=null;if(restoreFocus)restoreWorkspaceFocus(trigger);
+}
+function toggleWorkspaceMenu(id,trigger,open){
+  const shouldOpen=open===undefined?openWorkspaceMenu!==id:!!open;closeWorkspaceMenu(false);if(!shouldOpen){restoreWorkspaceFocus(trigger);return;}
+  const menu=$(id);menu.classList.remove('hide');openWorkspaceMenu=id;workspaceMenuTrigger=trigger;trigger.setAttribute('aria-expanded','true');
+  positionWorkspaceMenu(menu,trigger);workspaceFocusable(menu)[0]?.focus?.();
+}
+function toggleExportMenu(open){toggleWorkspaceMenu('exportMenu',$('btnExportMenu'),open);}
+function closeExportMenu(restoreFocus=true){if(openWorkspaceMenu==='exportMenu')closeWorkspaceMenu(restoreFocus);}
+function setPdfAvailable(available){$('btnPdf').classList.remove('hide');$('btnPdf').disabled=!available;$('btnPdf').setAttribute('aria-disabled',String(!available));}
+$('btnExportMenu').onclick=()=>toggleExportMenu();
+$('btnWorkspaceSettings').onclick=()=>toggleWorkspaceMenu('workspaceSettingsMenu',$('btnWorkspaceSettings'));
+$('btnEditorTools').onclick=()=>toggleWorkspaceMenu('editorToolsMenu',$('btnEditorTools'));
+for(const id of ['exportMenu','workspaceSettingsMenu','editorToolsMenu']){
+  const menu=$(id);
+  for(const button of Array.from(menu.querySelectorAll?.('button')||[])){
+    const original=button.onclick;button.onclick=async event=>{if(button.disabled)return;closeWorkspaceMenu();return original?.(event);};
+  }
+}
+document.addEventListener('click',event=>{if(openWorkspaceMenu&&!$(openWorkspaceMenu).contains?.(event.target)&&!workspaceMenuTrigger?.contains?.(event.target))closeWorkspaceMenu(false);});
+function handleWorkspaceKeys(event){
+  if(event.isComposing)return false;
+  if(openWorkspaceMenu){
+    const items=workspaceFocusable($(openWorkspaceMenu)),active=items.indexOf(document.activeElement);
+    if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();let index=event.key==='Home'?0:event.key==='End'?items.length-1:(active+(event.key==='ArrowDown'?1:-1)+items.length)%items.length;items[index]?.focus?.();return true;}
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation?.();closeWorkspaceMenu();return true;}
+    if(event.key==='Tab')closeWorkspaceMenu();
+  }
+  const nativeDialog=document.querySelector?.('dialog[open]');if(nativeDialog)return false;
+  const floatingAgent=agentDrawerOpen&&isNarrowWorkspace(),floatingNavigator=navigatorOpen&&isMobileWorkspace();
+  if(event.key==='Escape'){
+    if(agentDrawerOpen){event.preventDefault();toggleAgentDrawer(false);return true;}
+    if(floatingNavigator){event.preventDefault();toggleNavigator(false);return true;}
+    if(!$('bottom').classList.contains('collapsed')){event.preventDefault();toggleBottomPanel(bottomPanelKind,false);restoreWorkspaceFocus(bottomPanelTrigger);return true;}
+  }
+  if(event.key==='Tab'&&(floatingAgent||floatingNavigator)){
+    const container=floatingAgent?$('rightpanel'):$('sidebar'),items=workspaceFocusable(container);if(!items.length)return false;
+    const first=items[0],last=items[items.length-1],outside=!container.contains?.(document.activeElement);
+    if(outside||(event.shiftKey&&document.activeElement===first)||(!event.shiftKey&&document.activeElement===last)){event.preventDefault();(event.shiftKey?last:first).focus?.();return true;}
+  }
+  return false;
+}
+
+paintEditorIcons();syncEditorPreferences();
+
 </script>
 </body>
 </html>

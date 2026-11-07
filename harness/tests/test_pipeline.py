@@ -76,14 +76,14 @@ class CheckerBoundaryTest(unittest.TestCase):
         with patch.object(pipeline.subprocess, "run", return_value=result):
             self.assertEqual(pipeline.run_verify("x"), record)
 
-    def test_formula_checker_failure_after_candidate_stops_retrying(self):
+    def test_formula_checker_failure_after_deterministic_candidate_stops_retrying(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 pipeline.subprocess, "run", side_effect=[response("RETRY"), response("OK", code=1)]):
             provider = Mock()
             provider.repair_formula.return_value = "x"
-            result = pipeline.process_formula(directory, "doc", {"id": "f-1", "data": {"latex": "x+"}}, provider)
+            result = pipeline.process_formula(directory, "doc", {"id": "f-1", "data": {"latex": r"\frac{a}{b"}}, provider)
             self.assertEqual(result, "NEEDS_HUMAN")
-            self.assertEqual(provider.repair_formula.call_count, 1)
+            provider.repair_formula.assert_not_called()
 
     def test_audit_accepts_normal_human_exit_code(self):
         for status, code in (("OK", 0), ("RETRY", 0), ("NEEDS_HUMAN", 0), ("NEEDS_HUMAN", 1)):

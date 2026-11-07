@@ -32,4 +32,4 @@
 
 发布说明写明提交号、运行环境、实际执行的检查及结果，链接对应证据。[验证记录](validation.md)区分契约测试、作者参考修订和真实模型运行；旧176.4秒讲解版及 `dff5fc6` 记录保留为历史，当前演示以[动态录屏](dynamic-demo.md)为准。
 
-自动 CI、定时任务、公开试用服务及外部用户验证尚未启用或开展；首次 Release 和外部试跑按后续计划进行。
+仓库已配置 [Studio regression](../.github/workflows/regression.yml)，覆盖 Python、JavaScript 与语法检查；实际通过状态以 GitHub 对应提交的运行结果为准。源码包现在附完整提交、逐文件 manifest 和 SHA256 清单，见[打包说明](source-package.md)。定时任务、公开试用服务、首次正式 Release 和外部试跑仍是独立后续工作。

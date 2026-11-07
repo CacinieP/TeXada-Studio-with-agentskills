@@ -1,0 +1,76 @@
+{
+  "mainline_base": "181ee92cdea84f99f2dcc8d4d7989ca9d91279eb",
+  "python_test_count": 473,
+  "suites": [
+    {
+      "suite": "harness",
+      "exit_code": 0,
+      "tests": [
+        "123"
+      ]
+    },
+    {
+      "suite": "webui",
+      "exit_code": 0,
+      "tests": [
+        "176"
+      ]
+    },
+    {
+      "suite": "scripts",
+      "exit_code": 0,
+      "tests": [
+        "71"
+      ]
+    },
+    {
+      "suite": "desktop",
+      "exit_code": 0,
+      "tests": [
+        "12"
+      ]
+    },
+    {
+      "suite": "cleanup",
+      "exit_code": 0,
+      "tests": [
+        "77"
+      ]
+    },
+    {
+      "suite": "ocr",
+      "exit_code": 0,
+      "tests": [
+        "14"
+      ]
+    },
+    {
+      "suite": "webui/test_studio.cjs",
+      "exit_code": 0,
+      "tests": []
+    },
+    {
+      "suite": "webui/test_latex.cjs",
+      "exit_code": 0,
+      "tests": []
+    },
+    {
+      "suite": "webui/test_templates.cjs",
+      "exit_code": 0,
+      "tests": []
+    },
+    {
+      "suite": "skills/latex-cleanup/tests/test_audit_math.cjs",
+      "exit_code": 0,
+      "tests": []
+    }
+  ],
+  "tested_file_sha256": {
+    "webui/app.py": "164410d65b2bd18a549f5871fa7270f7572005ff7e3cf833972d5b193cf49c6a",
+    "webui/local_runtime.py": "a2b7a16a24496e5e8e3c71c29b61487a57e12084eb690b43dfecc57abe3f6eb3",
+    "webui/studio.html": "035373d26cb2cf20ba52dc083b9c480d4da30f8af1cc62eb41b79a34a24ef4fe",
+    "harness/docforensics/vlm.py": "84dc7f996ad391a68b311859a696fa1bd0766abbe112d323ef93cdfb5ffade2e",
+    "scripts/run-local-studio.py": "5099c76d56d3386388bb8cfe2fdb8fdb17b6219d14b96ee6a70ff72637307dce"
+  },
+  "notes": "Historical default-configuration assertions were updated and failing suites rerun. Counts are actual local executions, not CI status."
+}

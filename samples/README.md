@@ -4,7 +4,7 @@
 
 | 输入 | 用途 | 运行方式 |
 | --- | --- | --- |
-| [`docs/*.tex`](docs/)：13份文档 | Studio 编辑、分析、候选审阅 | [启动 Studio](../README.md#2-打开-studio) |
+| [`docs/*.tex`](docs/)：13份文档 | Studio 编辑、分析、候选审阅 | [启动 Studio](../README.md#开始使用) |
 | `paper-01/`、`exam-01/`、`report-01/` 的 `layout.json` | CLI 检查与续跑 | 下方 fixture 命令 |
 | [`evaluation/cases.json`](evaluation/cases.json)：27例 | 检查器契约回归 | [检查案例](evaluation/README.md) |
 | [`ocr/`](ocr/)：真实文字合成图 | 图片 → 文本候选链路 | `doc-ocr-extract` 脚本 |

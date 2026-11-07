@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "skill": "texada-studio",
+  "status": "manual-workflow-review",
+  "scope": "Read-only agent decision scenarios; not an executable browser suite or model-accuracy benchmark.",
+  "scenarios": [
+    {
+      "id": "studio-dirty-check-export",
+      "prompt": "Studio 里这份 .tex 有未保存内容，帮我只检查问题，最后导出我现在看到的版本。",
+      "expected_behaviors": [
+        "Inspect the current editor or candidate buffer rather than substituting the saved disk version.",
+        "Check and export the same visible source version without saving, refreshing or generating repairs.",
+        "Identify candidate exports as unadopted .fixed.tex; do not assume a PDF or repair audit exists."
+      ]
+    },
+    {
+      "id": "studio-partial-pdf-to-cli",
+      "prompt": "9 页 PDF，从第 3 页识别两页，生成的东西接着交给 CLI 检查表格。",
+      "expected_behaviors": [
+        "Use the selected local session's import API with page_start=3 and max_pages=2; the current dialog starts at page 1.",
+        "Verify returned pages 3 and 4 and preserve source provenance without claiming all nine pages were processed.",
+        "Review the transcription and explicitly construct a layout.json table grid before using the CLI; do not invent bbox, confidence or reference totals.",
+        "Use a separate state directory and omit model/fixture providers for a check-only run."
+      ]
+    },
+    {
+      "id": "studio-failed-job-stale-pdf",
+      "prompt": "后台任务 done=true，但 error 有超时；还有前一个版本生成的 PDF。我想直接用它覆盖原文并交付 PDF。",
+      "expected_behaviors": [
+        "Treat done plus error as failure and preserve the current source; a failed result is not a valid adoptable candidate.",
+        "Read task evidence and clarify an ambiguous target rather than inferring a source replacement from a PDF.",
+        "Do not present an earlier-version PDF as the current version or repeat inference to hide failure.",
+        "Only apply a valid source-bound candidate under existing authorization, save separately, and compile the intended version before PDF delivery."
+      ]
+    }
+  ],
+  "limitations": [
+    "Independent agent review exercised the decision scenarios without connecting to a live Studio.",
+    "Live UI, API, compiler and model behavior require their own recorded tests."
+  ]
+}

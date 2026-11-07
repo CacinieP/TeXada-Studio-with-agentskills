@@ -93,3 +93,11 @@ Use the official root (non-thinking) 1B F16 GGUF, not the separate thinking
 variant. The script runs actual model repair arms and the real synthetic PNG;
 fixture results are never reported as model measurements. No model default is
 changed by this experiment. Temporary test servers have been stopped.
+
+## Mainline integration note
+
+These measurements were made on the earlier Cline-derived branch before
+mainline reconciliation. Mainline has newer preservation checks, prompt feedback
+and revision-bound review; do not treat the ratios above as measurements of
+that newer implementation. The current editor/importer is retained during
+integration, and its acceptance is validated separately.

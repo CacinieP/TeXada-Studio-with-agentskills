@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "model": "minicpm-v4.7-35b-a3b-q4",
+  "model_file": "MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf",
+  "model_sha256": "9ecf91e814d7e9adc64325b1b65f8628a9b1bb8da4f61a92869ca7489bfd888e",
+  "model_bytes": 21166255008,
+  "projector_file": "mmproj-model-f16.gguf",
+  "projector_sha256": "bff3b688e14c300eca273092c37c50a0ddfcc2054e079af1a0480edeed5d20f1",
+  "base": "http://127.0.0.1:18147",
+  "created_at_unix": 1794075815.040183,
+  "protocol": "OpenAI-compatible",
+  "max_tokens": 4096,
+  "purpose": "deployment and candidate contract probe, semantic accuracy unmeasured",
+  "health": {
+    "status": "ok"
+  },
+  "v1/models": {
+    "models": [
+      {
+        "name": "minicpm-v4.7-35b-a3b-q4",
+        "model": "minicpm-v4.7-35b-a3b-q4",
+        "modified_at": "",
+        "size": "",
+        "digest": "",
+        "type": "model",
+        "description": "",
+        "tags": [
+          ""
+        ],
+        "capabilities": [
+          "completion",
+          "multimodal"
+        ],
+        "parameters": "",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "",
+          "families": [
+            ""
+          ],
+          "parameter_size": "",
+          "quantization_level": ""
+        }
+      }
+    ],
+    "object": "list",
+    "data": [
+      {
+        "id": "minicpm-v4.7-35b-a3b-q4",
+        "aliases": [
+          "minicpm-v4.7-35b-a3b-q4"
+        ],
+        "tags": [],
+        "object": "model",
+        "architecture": {
+          "input_modalities": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output_modalities": [
+            "text"
+          ]
+        },
+        "created": 1794075815,
+        "owned_by": "llamacpp",
+        "meta": {
+          "vocab_type": 2,
+          "n_vocab": 248144,
+          "n_ctx": 8192,
+          "n_ctx_train": 262144,
+          "n_embd": 2048,
+          "n_params": 34659889792,
+          "size": 21155270400,
+          "ftype": "Q4_K - Medium"
+        }
+      }
+    ]
+  }
+}

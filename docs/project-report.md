@@ -1,7 +1,5 @@
 # TeXada Studio with Agent Skills 项目报告
 
-团队：LinguistsWantTech　队长：邓一纯　队员：刘丰华
-
 方向：科研与教育中的 LaTeX 文档质检　更新：2026-09-29
 
 [项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skills 技术报告](skills-technical-report.md)

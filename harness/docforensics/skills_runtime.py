@@ -36,7 +36,11 @@ def load_skill(name="doc-formula-verify", skill_root=None):
     The intentionally limited frontmatter parser accepts scalar metadata, not
     general YAML. Neither the Skill nor its checker may resolve outside root.
     """
-    if name not in ALLOWED_SKILLS:
+    return _read_skill(name, skill_root, ALLOWED_SKILLS)
+
+
+def _read_skill(name, skill_root, allowed_skills):
+    if name not in allowed_skills:
         raise ValueError("skill_not_allowed")
     try:
         root = Path(skill_root or DEFAULT_SKILL_ROOT).resolve(strict=True)
@@ -77,7 +81,8 @@ def load_skill(name="doc-formula-verify", skill_root=None):
         raise ValueError("skill_name_mismatch")
     if not fields.get("description") or not "\n".join(lines[closing + 1:]).strip():
         raise ValueError("skill_empty_instructions")
-    checker = (root / name / "scripts" / "verify.py").resolve()
+    checker_name = "audit_table.py" if name == "doc-table-audit" else "verify.py"
+    checker = (root / name / "scripts" / checker_name).resolve()
     if not checker.is_relative_to(root):
         raise ValueError("skill_path_escape")
     return LoadedSkill(name, instructions, sha256_bytes(raw), file_sha256(checker))

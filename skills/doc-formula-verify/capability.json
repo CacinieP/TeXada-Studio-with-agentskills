@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "skill_id": "doc-formula-verify",
+  "version": "1.0.0",
+  "capability": "formula_syntax_review",
+  "node_kind": "formula",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "latex"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "latex": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32768
+      }
+    }
+  },
+  "supported_actions": [
+    "check-formula",
+    "propose-repair",
+    "request-human"
+  ]
+}

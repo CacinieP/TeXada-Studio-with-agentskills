@@ -2,12 +2,22 @@
 
 ## Unreleased
 
-- Studio PNG OCR upload, editable candidate review, explicit undoable adoption, and pending text-node layout export; see [usage](docs/studio-ocr.md).
-- Archive the completed v4.7 pilot and correct the 35B/1B model identity and unsupported Mac/CUDA conclusions; see [evidence](docs/evaluation-results/v47-pilot-01/README.md).
-
 ### Added
 
-- Verified local MiniCPM-V 4.7 35B Q4, 1B Q4 and non-quantized 1B F16 probes, with real repair/OCR traces, official weight hashes, and reproducible server configuration ([report](docs/evaluation-results/v47-local-comparison-01/README.md)).
+- Produce a notarized DMG in CI when signing secrets are configured: the bundle workflow imports a Developer ID Application certificate into a temporary keychain, signs the app with a hardened runtime and timestamp, notarizes and staples it, then builds/signs/notarizes/staples a UDZO disk image (with an /Applications symlink) and gates it through `spctl`; without secrets it falls back to the unsigned zip artifact.
+- Add a CI build for the self-contained desktop app: a macOS arm64 workflow installs the pinned Tectonic release and Poppler, prepares the TeX cache, runs `desktop/build_bundle.py`, smoke-tests the bundle in an isolated environment (stripped PATH/HOME, offline compile against the bundled cache), then uploads a ditto-zipped artifact with a SHA256 checksum.
+- Ship a fully self-contained macOS app: `desktop/build_bundle.py` freezes the Python runtime, server dependencies, Tectonic, the TeX resource cache and Poppler (with a hand-rolled dylib collector that rewrites load commands and re-signs ad hoc) into one `TeXada Studio.app`; the backend runs as an in-process thread so quitting the window leaves nothing behind. License audit for every bundled component ships as `desktop/licenses-audit.md`.
+- Add PDF page-splitting OCR import: the import dialog gains a start-page field, the review dialog lists per-page candidates that can be excluded or split into one document per page, and a continuation button batches the remaining pages of long PDFs.
+- Add one-click Poppler install (macOS): a second settings-dialog button and `tool_fetch.install_poppler` drive `brew install poppler` explicitly, mirroring the pinned Tectonic bootstrap.
+- Add an optional macOS desktop shell: a locally generated `TeXada Studio.app` opens the private entry in its own WKWebView window, reuses a running session or starts (and cleanly reclaims) its own backend, with orphan detection so a force-killed window never leaves a stray server behind.
+- Add one-click Tectonic bootstrap: a settings-dialog button and `scripts/install_local_tools.py` download the pinned official release (`tectonic@0.17.0`), verify its SHA256, install to `~/.texada/bin`, and make it available to a running session without restart; the launcher prepends that directory to PATH.
+- Expand the local Monaco snippet pack from 25 to 82 entries, adding amsthm theorem-class environments, matrices and determinants, cross-references, accents, adaptive delimiters and common Greek letters and math symbols.
+- Add five offline document templates (blank article, lecture notes, exam paper, Beamer, English article) with a picker reachable from the sidebar and the command palette; blank new documents now come from the same template module.
+- Highlight TeX's modular building blocks with dedicated token classes: sectioning commands (bold blue), preamble and definition directives including `\input`/`\include` file splits (violet), and cross-references with their keys (`\label`/`\ref`/`\cite`, teal) join the existing keyword/comment/math coloring in the shipped theme.
+- Fold documents by TeX structure: a local folding provider pairs `\begin`/`\end` environments and closes sections at the next heading of the same or higher level, ignoring commented-out structure and verbatim content; unterminated environments fold to the end of the document.
+- Refresh the bilingual repository entry with a current synthetic-workspace screenshot, local deployment/troubleshooting guides and source distribution checksums with per-file manifests.
+- Add a Studio operation Skill and current AgentSkills guide; align formula, table, OCR-input and reporting instructions with the local Web UI and its review/version boundaries.
+- Fresh local verification records for 2026-10-15, with installation and model-switch troubleshooting.
 
 - Thirteen Studio documents, including eight original mathematics samples with extraction, syntax and compilation expectations.
 - Twenty-seven checker cases, a casebook and reproducible evaluation reports.
@@ -15,14 +25,10 @@
 - A continuous browser demo with real model waiting, candidate review, adoption, downloads and sample navigation; all narration uses one synthetic voice reference.
 - `scripts/compile_studio_cases.py` to reproduce twelve archived compilation cases in a fresh output directory.
 - Chinese and English setup guides, troubleshooting, contribution guidance and release materials.
-- `doc-ocr-extract` Skill: image → text candidate lines via a local vision OCR model (`OCR_MODEL`, default `minicpm-ocr:latest`), with raw-bytes input, the checker-family status contract (OK / NEEDS_HUMAN / NEEDS_ENV), bounded response excerpts and ten contract tests under a fake endpoint.
-- A reproducible real-text OCR sample: `samples/ocr/source-inlines-01.tex` rendered to `inlines-01.png` via `scripts/make_ocr_samples.py` (Tectonic + pdftoppm), plus the first real-run evidence under `docs/evaluation-results/ocr-chain-01/` including candidate defects that justify mandatory human adoption.
-- OpenAI-compatible transport for the OCR chain (issue #30): `ocr_extract.py` defaults to `/v1/chat/completions` with `image_url` data URLs — the same protocol face as the formula-repair provider — while `--transport ollama` keeps the native `/api/chat` fallback; `OCR_TRANSPORT` selects the default and both paths share the status/limits contract.
 
 ### Changed
 
-- Keep MiniCPM-V 4.7 35B-A3B Q4_K_M as the default repair model, using the tested local llama.cpp alias/endpoint. `VLM_BASE` configures both Studio and batch requests; document Mac memory requirements and preserve explicit model overrides.
-
+- Restructure both READMEs for end users: add a consolidated Configuration section (model service with an Ollama reuse example, optional tools and TeX cache, editor preferences and local data) and move scanner boundaries, packaging and historical-material links into the documentation index and local guide.
 - Reorganize documentation around setup, reproducible examples and implementation details; require Python 3.11+ for the Harness.
 - Vendor Monaco 0.52.2 locally, preserve its MIT license and verify pinned package and file hashes.
 - Use scoped signed cookies for editor assets and an explicit token for API access.
@@ -31,6 +37,12 @@
 
 ### Fixed
 
+- Prefer source-preserving deterministic formula repairs inspired by Math Agent; reject mathematical drift, retain unsupported/ambiguous input, and carry bounded rejection feedback across model retries. Apply the same scope policy in Studio, the constrained planner and CLI, with policy hashes bound to resume identity.
+- Clear stale PDF pages and compiler logs when the source changes, and keep Safari IME confirmation from executing command-palette actions.
+- Use TeX lexical context for single-formula handoffs and reject candidates that consume or escape the existing closing delimiter.
+- Isolate damaged task history and reject incomplete candidate bindings or malformed review decisions without server errors.
+- Classify invalid reference totals as input errors before attempting table repair.
+- Run the JavaScript behavior and LaTeX cleanup suites in CI alongside the existing Python regressions.
 - Preserve the editor until the user adopts a reviewed candidate; reset failed controls and discard stale file or preview responses.
 - Fix empty diff panels, stale comparisons, hidden collapse controls and preview resizing.
 - Reject partial LaTeX parses and malformed checker input; handle missing dependencies without issuing repair requests.
@@ -39,3 +51,9 @@
 - Remove embedded deployment credentials, private paths and an unlicensed textbook extract from distributed source and reachable history.
 
 Historical runtime results remain in [validation records](docs/validation.md); previous media are listed in the [demo archive](docs/demo.md).
+
+## Local 35B profile and experiment archive (2026-11-08)
+
+- Keep the current mainline editor, guarded OCR importer and revision-bound review flow; do not restore the obsolete Cline UI.
+- Default local profile to verified MiniCPM-V 4.7 35B-A3B Q4_K_M, loopback port 18147; preserve saved/manual settings. Update auto-launch weight selection and document memory requirements.
+- Preserve standalone MiniCPM-OCR candidate CLI, OpenAI-compatible transport, original synthetic OCR samples and historical three-variant evidence. Old-branch results do not validate the newer mainline repair implementation.

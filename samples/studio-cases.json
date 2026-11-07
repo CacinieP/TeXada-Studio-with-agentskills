@@ -289,12 +289,12 @@
       "title": "Multiline align extraction boundary",
       "source": "original synthetic teaching sample",
       "license": "AGPL-3.0-only",
-      "intent": "An unclosed sized delimiter is intentionally placed inside align*, beyond the current inline-dollar extraction scope.",
+      "intent": "An unclosed sized delimiter is intentionally placed inside align*. The shared scanner extracts the structure and conservatively requests human review.",
       "expected_analysis": {
         "formula_checks": [],
-        "problem_count": 0,
-        "status_counts": {},
-        "problem_types": {}
+        "problem_count": 1,
+        "status_counts": {"NEEDS_HUMAN": 1},
+        "problem_types": {"formula": 1}
       },
       "repair_expectation": {
         "model_success_not_guaranteed": true,
@@ -304,9 +304,9 @@
         "deterministic_edits": 0
       },
       "reference_edits": [],
-      "semantic_boundary": "Zero findings with zero extracted formulas does not establish source validity.",
+      "semantic_boundary": "Structural extraction does not establish validity; alignment remains a human-review item.",
       "extraction_boundary": [
-        "The align* environment is not extracted.",
+        "The align* environment is extracted but not sent to the scalar checker or repair model.",
         "Its intentional delimiter defect must be reviewed independently; no automatic edit is expected."
       ],
       "compile_status": "not_run"
@@ -321,9 +321,9 @@
       "intent": "Original notes intentionally contain an unresolved equation reference and bibliography key.",
       "expected_analysis": {
         "formula_checks": [],
-        "problem_count": 0,
-        "status_counts": {},
-        "problem_types": {}
+        "problem_count": 1,
+        "status_counts": {"NEEDS_HUMAN": 1},
+        "problem_types": {"formula": 1}
       },
       "repair_expectation": {
         "model_success_not_guaranteed": true,
@@ -335,7 +335,7 @@
       "reference_edits": [],
       "semantic_boundary": "Cross-reference resolution is not formula-syntax validation.",
       "extraction_boundary": [
-        "The equation environment is not extracted.",
+        "The equation environment is extracted; its label requires human review rather than scalar repair.",
         "Equation labels and bibliography keys are not audited.",
         "Zero reported problems is not complete document validation."
       ],

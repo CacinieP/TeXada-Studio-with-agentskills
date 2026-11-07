@@ -5,6 +5,7 @@
 """
 
 import hashlib
+import copy
 import importlib.metadata
 import json
 import math
@@ -15,6 +16,7 @@ import sys
 
 from . import state
 from .vlm import FixtureProvider, OllamaProvider
+from .formula_repair import assess_candidate, deterministic_candidate, repair_blocker
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
@@ -118,6 +120,8 @@ def node_identity(node, provider, kind=None):
         "schema_version": state.SCHEMA_VERSION,
         "checker_sha256": _file_sha256(checker) if checker else None,
         "pipeline_sha256": _file_sha256(__file__),
+        "formula_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "formula_repair.py")),
+        "tex_context_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "tex_context.py")),
         "state_sha256": _file_sha256(state.__file__),
         "python": list(sys.version_info[:3]), "dependencies": versions,
         "max_retries": MAX_RETRIES, "provider": _provider_context(provider),
@@ -188,13 +192,16 @@ def _trace_metadata(provider):
     return trace
 
 
-def _invoke_provider(run_dir, common, provider, node, kind, attempt, previous):
+def _invoke_provider(run_dir, common, provider, node, kind, attempt, previous, repair_context=None):
     state.append(run_dir, **common, action="PROVIDER_START", attempt=attempt,
                  checker_status=previous.get("status"), checker_reason=previous.get("reason", ""),
                  provider=_provider_name(provider))
     error = None
     try:
-        candidate = getattr(provider, "repair_" + kind)(node)
+        request_node = copy.deepcopy(node)
+        if kind == "formula" and repair_context:
+            request_node["data"]["repair_context"] = copy.deepcopy(repair_context)
+        candidate = getattr(provider, "repair_" + kind)(request_node)
         # Invalid provider objects are a rejected result, not a broken journal.
         state.canonical_sha256(candidate)
     except Exception as exc:
@@ -234,9 +241,36 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
     attempts, model_calls, model_calls_known = 0, 0, True
     repaired = None
     provider_reason = None
+    previous_candidate, rejection_reason, seen = None, None, set()
+    if kind == "formula" and result.get("status") == "RETRY":
+        blocked = repair_blocker(original)
+        if blocked:
+            result = {"status": "NEEDS_HUMAN", "reason": blocked}
+            state.append(run_dir, **common, action="REPAIR_SKIPPED", reason=blocked)
+        else:
+            candidate = deterministic_candidate(original)
+            if candidate is not None:
+                scope = assess_candidate(original, candidate)
+                state.append(run_dir, **common, action="DETERMINISTIC_REPAIR", candidate=candidate,
+                             scope=scope, model_calls=0)
+                checked = check(candidate)
+                _record_check(run_dir, common, checked, "deterministic_candidate", 0, candidate=candidate)
+                if checked.get("status") == "OK" and scope["allowed"]:
+                    result, repaired = checked, candidate
+                    state.append(run_dir, **common, action="CANDIDATE_ACCEPTED", attempt=0,
+                                 candidate=candidate, checker_status="OK", scope=scope,
+                                 provider="deterministic-syntax", model_calls=0)
+                elif checked.get("status") == "NEEDS_ENV":
+                    result = checked
+                else:
+                    previous_candidate, rejection_reason = candidate, checked.get("reason", "checker_rejected")
+                    state.append(run_dir, **common, action="CANDIDATE_REJECTED", attempt=0,
+                                 candidate=candidate, reason="deterministic_checker_rejected", check=checked)
     while result.get("status") == "RETRY" and attempts < MAX_RETRIES:
         attempts += 1
-        candidate, trace = _invoke_provider(run_dir, common, provider, node, kind, attempts, result)
+        context = ({"attempt": attempts, "checker": result, "previous_candidate": previous_candidate,
+                    "rejection_reason": rejection_reason} if kind == "formula" else None)
+        candidate, trace = _invoke_provider(run_dir, common, provider, node, kind, attempts, result, context)
         model_calls += trace["model_calls"]
         model_calls_known = model_calls_known and trace["model_calls_known"]
         if candidate is None:
@@ -244,15 +278,36 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
             state.append(run_dir, **common, action="CANDIDATE_REJECTED", attempt=attempts,
                          candidate=None, reason=provider_reason,
                          checker_status=result.get("status"), checker_reason=result.get("reason", ""))
+            if kind == "formula" and provider_reason in {
+                    "bad_candidate_json", "bad_candidate_type", "bad_candidate_text", "empty_candidate", "incomplete_response"}:
+                previous_candidate, rejection_reason = None, provider_reason
+                continue
             break
+        if kind == "formula" and isinstance(candidate, str) and candidate in seen:
+            result = {"status": "NEEDS_HUMAN", "reason": "repeated_rejected_candidate"}
+            state.append(run_dir, **common, action="CANDIDATE_REJECTED", attempt=attempts,
+                         candidate=candidate, reason="repeated_rejected_candidate")
+            break
+        if isinstance(candidate, str):
+            seen.add(candidate)
         result = check(candidate)
         _record_check(run_dir, common, result, "candidate", attempts, candidate=candidate)
-        accepted = result.get("status") == "OK"
+        scope = assess_candidate(original, candidate) if kind == "formula" else {"allowed": True}
+        accepted = result.get("status") == "OK" and scope["allowed"]
+        if kind == "formula":
+            state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,
+                         candidate=candidate, scope=scope)
         state.append(run_dir, **common, action="CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
                      attempt=attempts, candidate=candidate, checker_status=result.get("status"),
-                     checker_reason=result.get("reason", ""), checker_detail=result.get("detail", ""))
+                     checker_reason=result.get("reason", ""), checker_detail=result.get("detail", ""),
+                     **({"scope": scope} if kind == "formula" else {}))
         if accepted:
             repaired = candidate
+        elif kind == "formula" and result.get("status") != "NEEDS_ENV":
+            rejection_reason = scope["reason"] if not scope["allowed"] else result.get("reason", "checker_rejected")
+            previous_candidate = candidate
+            # Syntax acceptance cannot erase a failed source-preservation check.
+            result = {**result, "status": "RETRY", "reason": rejection_reason}
 
     status = "OK" if result.get("status") == "OK" else "NEEDS_HUMAN"
     reason = result.get("reason", "")
@@ -265,7 +320,7 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
               "attempts": attempts, "model_calls": model_calls, "model_calls_known": model_calls_known,
               "checker_status": result.get("status"), "checker_reason": result.get("reason", ""),
               "reason": reason, "detail": result.get("detail", ""),
-              "provider": _provider_name(provider),
+              "provider": "deterministic-syntax" if repaired is not None and attempts == 0 else _provider_name(provider),
               "review_required": status == "NEEDS_HUMAN" or repaired is not None}
     if provider_reason:
         fields["provider_reason"] = provider_reason
