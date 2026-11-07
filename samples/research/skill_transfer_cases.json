@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "dataset_id": "skill-transfer-preservation-v1",
+  "dataset_kind": "synthetic",
+  "annotation_status": "pending",
+  "cases": [
+    {
+      "id": "H01",
+      "original_latex": "\\frac{u^3+v}{9",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 1",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H02",
+      "original_latex": "\\sqrt{\\frac{p}{q}",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 2",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H03",
+      "original_latex": "\\left(r+s",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 3",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H04",
+      "original_latex": "\\lim_{t\\to c g(t)=M",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 4",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H05",
+      "original_latex": "h(z)+",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 5",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H06",
+      "original_latex": "b_+e",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 6",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H07",
+      "original_latex": "u+v}",
+      "case_kind": "injected",
+      "review_status": "pending",
+      "injection": "synthetic malformed syntax for source-preservation transfer",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 7",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    },
+    {
+      "id": "H08",
+      "original_latex": "r^2+s^2",
+      "case_kind": "control",
+      "review_status": "pending",
+      "injection": "",
+      "source": {
+        "title": "Synthetic source-preservation transfer set",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+        "license": "MIT",
+        "locator": "skill-transfer-source.txt line 8",
+        "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+      }
+    }
+  ]
+}

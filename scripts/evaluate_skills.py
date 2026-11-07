@@ -282,6 +282,8 @@ def run(args):
             raise ValueError("model mode cannot use fixture repairs")
     elif args.base or args.model:
         raise ValueError("--base and --model are only allowed in model mode")
+    if getattr(args, "skill_root", None) and args.mode != "model":
+        raise ValueError("--skill-root is only allowed in model mode")
     if args.mode == "fixture" and not args.fixture_repairs:
         raise ValueError("fixture mode requires explicit --fixture-repairs")
     if args.mode != "fixture" and args.fixture_repairs:
@@ -292,7 +294,8 @@ def run(args):
     if args.mode == "model":
         providers = {group: OllamaProvider(base=args.base, model=args.model, skill_mode=skill,
                                            seed=args.seed, max_tokens=args.max_tokens,
-                                           formula_response_format=getattr(args, "formula_response_format", "text"))
+                                           formula_response_format=getattr(args, "formula_response_format", "text"),
+                                           skill_root=getattr(args, "skill_root", None))
                      for group, skill in zip(GROUPS[1:], ("off", "on"))}
     elif args.mode == "fixture":
         repairs = read_fixtures(args.fixture_repairs)
@@ -471,6 +474,8 @@ def main(argv=None):
     run_parser.add_argument("--mode", choices=("dry-run", "fixture", "model"), default="dry-run")
     run_parser.add_argument("--base")
     run_parser.add_argument("--model")
+    run_parser.add_argument("--skill-root", type=Path,
+                            help="explicit local Skill snapshot root for controlled body comparisons")
     run_parser.add_argument("--seed", type=int, default=0)
     run_parser.add_argument("--max-tokens", type=int, default=300)
     run_parser.add_argument("--formula-response-format", choices=("text", "json_schema"), default="text",

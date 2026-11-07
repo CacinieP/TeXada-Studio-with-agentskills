@@ -1,0 +1,412 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "mode": "model",
+  "created_at": "2026-11-07T23:34:15.777839+00:00",
+  "dataset_id": "skill-transfer-preservation-v1",
+  "dataset_kind": "synthetic",
+  "catalog_sha256": "ffbf4eb9554a823dcee216cc19e5f97bb9cc5c25d63791bd96f500942ebdc0c0",
+  "catalog": {
+    "schema_version": 1,
+    "dataset_id": "skill-transfer-preservation-v1",
+    "dataset_kind": "synthetic",
+    "annotation_status": "pending",
+    "cases": [
+      {
+        "id": "H01",
+        "original_latex": "\\frac{u^3+v}{9",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 1",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H02",
+        "original_latex": "\\sqrt{\\frac{p}{q}",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 2",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H03",
+        "original_latex": "\\left(r+s",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 3",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H04",
+        "original_latex": "\\lim_{t\\to c g(t)=M",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 4",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H05",
+        "original_latex": "h(z)+",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 5",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H06",
+        "original_latex": "b_+e",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 6",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H07",
+        "original_latex": "u+v}",
+        "case_kind": "injected",
+        "review_status": "pending",
+        "injection": "synthetic malformed syntax for source-preservation transfer",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 7",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      },
+      {
+        "id": "H08",
+        "original_latex": "r^2+s^2",
+        "case_kind": "control",
+        "review_status": "pending",
+        "injection": "",
+        "source": {
+          "title": "Synthetic source-preservation transfer set",
+          "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/skill-transfer-source.txt",
+          "license": "MIT",
+          "locator": "skill-transfer-source.txt line 8",
+          "sha256": "3bbe4467076d2bc0a2c598f09ccb171c4edc2d254378856172cacff29b5d2a22"
+        }
+      }
+    ]
+  },
+  "catalog_changed_during_run": false,
+  "configuration": {
+    "seed": 0,
+    "temperature": 0,
+    "max_tokens": 1024,
+    "max_candidates_per_case_per_model_arm": 2,
+    "max_model_calls": 32,
+    "initial_syntax_ok_skips_repair": true
+  },
+  "provider_fingerprints": {
+    "model_without_skill": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "off",
+      "skill_id": null,
+      "skill_sha256": null,
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "0bb43109f7b57524062a911b2947c3c61bb79cfbbb703b094c2d98c5aee8220d",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+        "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+        "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+      }
+    },
+    "model_with_skill": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "on",
+      "skill_id": "doc-formula-verify",
+      "skill_sha256": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "590b360e07958c709b8c99b53f1f148c42ef73e169f53e83029fd7e83ad63769",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+        "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+        "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+      }
+    }
+  },
+  "controlled_configuration_verified": true,
+  "program_sha256": {
+    "scripts/evaluate_skills.py": "330089dca887a6c686ae7891eee9fe609676efdc47b033291b8194b0ed15bc96",
+    "harness/docforensics/vlm.py": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+    "harness/docforensics/pipeline.py": "fc4b55245daa567b50bfec2e9553997f9dbe5161e29693ead6ef5e19d46c91e8",
+    "skills/doc-formula-verify/scripts/verify.py": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+  },
+  "code_changed_during_run": false,
+  "environment": {
+    "python": "3.13.13",
+    "dependencies": {
+      "sympy": "1.14.0",
+      "antlr4-python3-runtime": "4.11.0"
+    }
+  },
+  "elapsed_seconds": 23.268655,
+  "execution_order": [
+    {
+      "case_id": "H01",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H01",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H01",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H02",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H02",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H02",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H03",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H03",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H03",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H04",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H04",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H04",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H05",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H05",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H05",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H06",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H06",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H06",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H07",
+      "group": "checker_only"
+    },
+    {
+      "case_id": "H07",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H07",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H08",
+      "group": "model_without_skill"
+    },
+    {
+      "case_id": "H08",
+      "group": "model_with_skill"
+    },
+    {
+      "case_id": "H08",
+      "group": "checker_only"
+    }
+  ],
+  "summary": {
+    "by_group": {
+      "checker_only": {
+        "cases": 8,
+        "model_calls": 0,
+        "fixture_calls": 0,
+        "output_changed": 0,
+        "candidate_syntax_ok": 0,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 1,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 7,
+            "output_changed": 0
+          }
+        },
+        "outcomes": {
+          "checker_only_no_repair": 7,
+          "initial_syntax_ok_no_repair": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      },
+      "model_without_skill": {
+        "cases": 8,
+        "model_calls": 8,
+        "fixture_calls": 0,
+        "output_changed": 6,
+        "candidate_syntax_ok": 6,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 1,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 7,
+            "output_changed": 6
+          }
+        },
+        "outcomes": {
+          "candidate_syntax_ok_pending_review": 6,
+          "unresolved": 1,
+          "initial_syntax_ok_no_repair": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      },
+      "model_with_skill": {
+        "cases": 8,
+        "model_calls": 8,
+        "fixture_calls": 0,
+        "output_changed": 6,
+        "candidate_syntax_ok": 6,
+        "no_candidate": 0,
+        "by_case_kind": {
+          "original": {
+            "cases": 0,
+            "output_changed": 0
+          },
+          "control": {
+            "cases": 1,
+            "output_changed": 0
+          },
+          "injected": {
+            "cases": 7,
+            "output_changed": 6
+          }
+        },
+        "outcomes": {
+          "candidate_syntax_ok_pending_review": 6,
+          "unresolved": 1,
+          "initial_syntax_ok_no_repair": 1
+        },
+        "semantic_accuracy": null,
+        "human_reviewed": 0
+      }
+    },
+    "paired_output_differences": 0,
+    "semantic_accuracy": null,
+    "human_time_savings": null
+  },
+  "files": {
+    "results.jsonl": "fae3e067c4cc5a4b85c9a15c03b3496e2037a0f0b9c838a13358478b6ab5164c",
+    "blind-review.csv": "d79f07ad92e060d414e3e70f3ed5e5dacc6c72ea266b0a67738068f72cebfbdb",
+    "report.md": "35b1dfadc8f86395776e68297c5516083d53a56fabbc077673227bd39ae57a11"
+  }
+}
