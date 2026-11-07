@@ -77,23 +77,34 @@ Tectonic may download TeX packages on first compilation. See [troubleshooting](d
 
 ## 3. Connect a real model
 
-Prepare a local Ollama-compatible service and select an installed model tag:
+The default repair model is **MiniCPM-V 4.7 35B-A3B Q4_K_M**, using the tested local llama.cpp OpenAI-compatible endpoint. Weights plus vision projector total about 22.3 GB before runtime/system memory. A 16 GB Mac is not a supported target; 24 GB is too tight for the default experience. 32 GB is an untested planning starting point; 64 GB was tested. 1B F16 remains an explicit option, with no automatic downgrade. See the [measured comparison](docs/evaluation-results/v47-local-comparison-01/README.md).
+
+Start the server with the official files:
 
 ```bash
-ollama list
-curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='REPLACE_WITH_AN_INSTALLED_MODEL_TAG'
-export SKILL_MODE=on
+llama-server -m /path/to/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf \
+  --mmproj /path/to/mmproj-model-f16.gguf \
+  --host 127.0.0.1 --port 18147 --alias minicpm-v4.7-35b-a3b-q4 \
+  -c 8192 -np 1 -ngl 99 --reasoning off
 ```
 
-Start or restart Studio from that terminal. Its model endpoint is fixed at `127.0.0.1:11434`. It sends formula text and allows up to two candidate attempts. `SKILL_MODE=on` adds the formula Skill's instructions to the system message; `off` provides the comparison mode. Defaults differ between entry points, so set the model explicitly.
+In the Studio terminal:
 
-To use the same model from the CLI:
+```bash
+export VLM_BASE=http://127.0.0.1:18147
+export VLM_MODEL=minicpm-v4.7-35b-a3b-q4
+export SKILL_MODE=on
+curl --fail "$VLM_BASE/v1/models"
+```
+
+Studio and batch jobs share `VLM_BASE` and `VLM_MODEL`. Ollama remains explicitly configurable at port 11434 with an installed tag, but the retest timed out there, so the working llama.cpp path is the default. The app sends formula text with up to two attempts. `SKILL_MODE=on` loads formula Skill instructions; `off` is the comparison mode. Restart Studio after changing configuration. OCR keeps its independent `OCR_BASE` / `OCR_MODEL` settings and local MiniCPM-OCR default.
+
+CLI with the same model:
 
 ```bash
 PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" --skill-mode on
+  --vlm "$VLM_BASE" --vlm-model "$VLM_MODEL" --skill-mode on
 ```
 
 Candidates and counts depend on the model. Reports go to the `--state` directory. The [CLI manual](harness/README.md) covers Skill records, request parameters, and resume rules.

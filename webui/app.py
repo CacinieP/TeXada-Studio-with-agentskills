@@ -26,7 +26,8 @@ if not TOKEN.strip():
     raise RuntimeError("DEMO_TOKEN must be set to a non-empty secret before starting the server")
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
-VLM_MODEL = os.environ.get("VLM_MODEL", "qwen3.8:27b-q4_K_M")
+VLM_MODEL = os.environ.get("VLM_MODEL", "minicpm-v4.7-35b-a3b-q4")
+VLM_BASE = os.environ.get("VLM_BASE", "http://127.0.0.1:18147").rstrip("/")
 TECTONIC = os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
 app = FastAPI(title="TeXada Studio with Agent Skills demo")
@@ -84,7 +85,7 @@ def _run_pipeline(fresh: bool):
     if fresh and os.path.exists(STATE):
         shutil.rmtree(STATE)
     command = [sys.executable, "-m", "docforensics", "run", "samples", "--state", STATE,
-               "--vlm", "http://127.0.0.1:11434", "--vlm-model", VLM_MODEL]
+               "--vlm", VLM_BASE, "--vlm-model", VLM_MODEL]
     env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
     try:
         p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
@@ -279,7 +280,7 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
 def _new_provider():
-    return OllamaProvider("http://127.0.0.1:11434", VLM_MODEL, skill_mode=SKILL_MODE)
+    return OllamaProvider(VLM_BASE, VLM_MODEL, skill_mode=SKILL_MODE)
 
 
 PROVIDER = _new_provider()

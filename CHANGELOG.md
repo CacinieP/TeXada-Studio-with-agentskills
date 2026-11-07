@@ -21,6 +21,8 @@
 
 ### Changed
 
+- Keep MiniCPM-V 4.7 35B-A3B Q4_K_M as the default repair model, using the tested local llama.cpp alias/endpoint. `VLM_BASE` configures both Studio and batch requests; document Mac memory requirements and preserve explicit model overrides.
+
 - Reorganize documentation around setup, reproducible examples and implementation details; require Python 3.11+ for the Harness.
 - Vendor Monaco 0.52.2 locally, preserve its MIT license and verify pinned package and file hashes.
 - Use scoped signed cookies for editor assets and an explicit token for API access.

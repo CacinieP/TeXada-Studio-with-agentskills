@@ -100,13 +100,18 @@ class AppTest(unittest.TestCase):
     def test_pipeline_uses_current_python_no_shell_and_keeps_exit_code(self):
         model = "model name; this must stay one argument"
         process = SimpleNamespace(stdout=["failed\n"], returncode=7, wait=lambda: 7)
-        with patch.object(studio, "VLM_MODEL", model), patch.dict(studio._run, clear=True), \
+        with patch.object(studio, "VLM_MODEL", model), patch.object(studio, "VLM_BASE", "http://127.0.0.1:18149"), \
+                patch.dict(studio._run, clear=True), \
                 patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(studio.threading, "Thread") as thread:
             studio._run_pipeline(fresh=False)
             command = popen.call_args.args[0]
             self.assertEqual(command[:3], [sys.executable, "-m", "docforensics"])
             self.assertEqual(command[-1], model)
+            self.assertEqual(command[command.index("--vlm") + 1], studio.VLM_BASE)
+            provider = studio._new_provider()
+            self.assertEqual(provider.base, studio.VLM_BASE)
+            self.assertEqual(provider.model, model)
             self.assertNotIn("shell", popen.call_args.kwargs)
             thread.call_args.kwargs["target"]()
             self.assertTrue(studio._run["done"])

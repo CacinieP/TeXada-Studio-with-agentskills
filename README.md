@@ -77,23 +77,34 @@ Tectonic 首次编译可能下载 TeX 包。安装与预览问题见[排错说�
 
 ## 3. 接入真实模型
 
-先准备本机 Ollama 兼容服务，选择已经安装的模型标签：
+默认修复模型保持 **MiniCPM-V 4.7 35B-A3B Q4_K_M**，使用已实测的本地 llama.cpp OpenAI 兼容服务。主权重加视觉投影器约 22.3GB，还需 KV 缓存和系统内存：16GB 不作为支持目标，24GB 不建议作为默认体验；32GB 是推估的起点（尚未实测），本项目已在 64GB Mac 上验证。1B F16 保留为显式可选模型，不自动降级。[三组实测与边界](docs/evaluation-results/v47-local-comparison-01/README.md)。
+
+先启动模型服务（将路径替换为已下载的官方文件）：
 
 ```bash
-ollama list
-curl --fail http://127.0.0.1:11434/v1/models
-export VLM_MODEL='替换为已安装的完整模型标签'
-export SKILL_MODE=on
+llama-server -m /path/to/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf \
+  --mmproj /path/to/mmproj-model-f16.gguf \
+  --host 127.0.0.1 --port 18147 --alias minicpm-v4.7-35b-a3b-q4 \
+  -c 8192 -np 1 -ngl 99 --reasoning off
 ```
 
-在设置这些变量的终端启动或重启 Studio。模型接口固定为 `127.0.0.1:11434`；程序发送公式文本，最多尝试两次候选。`SKILL_MODE=on` 会读取公式 Skill 正文加入系统消息，`off` 用于对照。默认模型标签因入口而异，显式设置可避免误用。
+另开终端启动 Studio，默认配置如下：
+
+```bash
+export VLM_BASE=http://127.0.0.1:18147
+export VLM_MODEL=minicpm-v4.7-35b-a3b-q4
+export SKILL_MODE=on
+curl --fail "$VLM_BASE/v1/models"
+```
+
+Studio 和批处理任务共用 `VLM_BASE` / `VLM_MODEL`。使用 Ollama 时可显式设 `VLM_BASE=http://127.0.0.1:11434` 和安装的完整标签，但本次该标签存在请求超时，默认采用已跑通的 llama.cpp 路径。程序发送公式文本，最多尝试两次候选；`SKILL_MODE=on` 加载公式 Skill 正文，`off` 用于对照。修改配置后重启 Studio。OCR 仍独立使用 `OCR_BASE` / `OCR_MODEL`，默认本地 MiniCPM-OCR。
 
 CLI 使用同一模型时：
 
 ```bash
 PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" --skill-mode on
+  --vlm "$VLM_BASE" --vlm-model "$VLM_MODEL" --skill-mode on
 ```
 
 真实候选和计数取决于模型。报告仍写入 `--state` 指定目录。Skill 加载记录、请求参数和续跑规则见 [CLI 手册](harness/README.md)。

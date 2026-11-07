@@ -46,14 +46,14 @@ ollama list
 export VLM_MODEL='替换为已安装的完整模型标签'
 PYTHONPATH=harness python -m docforensics run samples \
   --state state/model-01 \
-  --vlm http://127.0.0.1:11434 --vlm-model "$VLM_MODEL" \
+  --vlm "$VLM_BASE" --vlm-model "$VLM_MODEL" \
   --skill-mode on --seed 0 --max-tokens 300
 ```
 
 | 参数 | 默认值 | 用途 |
 | --- | --- | --- |
 | `--state` | `state/run1` | 事件和报告目录 |
-| `--vlm-model` | `qwen2.5vl:7b` | 模型标签，建议显式指定已安装标签 |
+| `--vlm-model` | `minicpm-v4.7-35b-a3b-q4`（可用 `VLM_MODEL` 覆盖） | 模型标签，建议显式指定已安装标签 |
 | `--skill-mode` | `on` | 加载公式 Skill；`off` 用于对照 |
 | `--seed` | `0` | 传给模型服务的 seed |
 | `--max-tokens` | `300` | 每次响应的 token 上限 |

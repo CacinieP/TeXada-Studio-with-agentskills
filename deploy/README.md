@@ -31,7 +31,7 @@ pdftoppm -v
 ollama list
 ```
 
-`TECTONIC` 可指向用户目录中的编译器。Studio 请求本机 `127.0.0.1:11434`，`VLM_MODEL` 应选 `ollama list` 中的完整标签。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。
+`TECTONIC` 可指向用户目录中的编译器。Studio 默认请求 `VLM_BASE=http://127.0.0.1:18147` 上的 `VLM_MODEL=minicpm-v4.7-35b-a3b-q4`；按主 README 先启动本地 llama.cpp 服务。其他 OpenAI 兼容后端可显式覆盖这两个变量。35B Q4 已在 64GB Mac 验证，16GB 不支持默认配置，32GB 仅为尚未实测的起点建议。中文样本需要 `Noto Sans CJK SC`；英文 `math-clean.tex` 可先用于预览验收。Tectonic 首次编译可能下载 TeX 包。
 
 ## 配置和启动
 
