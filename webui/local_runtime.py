@@ -445,6 +445,7 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
             self.base, self.model = base, model
             self.endpoint = base + "/chat/completions"
             self._api_key = ""
+            self.formula_response_format = "text"
             self.disable_thinking = model.casefold().startswith(("minicpm-v-4.7", "minicpm-v4.7"))
             self.skill_mode, self.seed, self.max_tokens = skill_mode, seed, max_tokens
             self.skill = load_skill(skill_root=skill_root) if skill_mode == "on" else None

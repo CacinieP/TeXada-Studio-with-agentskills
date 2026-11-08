@@ -201,6 +201,60 @@ class LocalRuntimeTest(unittest.TestCase):
         self.assertEqual(provider.last_trace["model_calls"], 1)
         self.assertEqual(provider.last_trace["reason"], "ok")
 
+    def test_local_provider_initializes_fingerprint_without_remote_constructor(self):
+        harness = str(Path(__file__).resolve().parents[1] / "harness")
+        with patch.object(sys, "path", [harness, *sys.path]):
+            from docforensics.vlm import OpenAICompatibleProvider
+            with patch.object(OpenAICompatibleProvider, "__init__", side_effect=AssertionError("remote init")), \
+                    patch("local_runtime.local_json_request", side_effect=AssertionError("network")), \
+                    patch.dict(os.environ, {"VLM_API_KEY": "ignored\ncredential"}):
+                for mode in ("off", "on"):
+                    with self.subTest(skill_mode=mode):
+                        provider = make_local_provider("http://localhost:18147", "MiniCPM-V-4.7-1B",
+                                                       skill_mode=mode, seed=7, max_tokens=1024)
+                        fingerprint = provider.fingerprint()
+                        self.assertEqual(provider.formula_response_format, "text")
+                        self.assertEqual(provider._api_key, "")
+                        self.assertEqual(fingerprint["parameters"]["formula_response_format"], "text")
+                        self.assertEqual(fingerprint["parameters"]["seed"], 7)
+                        self.assertEqual(fingerprint["parameters"]["max_tokens"], 1024)
+                        self.assertEqual(fingerprint["skill_mode"], mode)
+                        self.assertEqual(fingerprint["local_runtime_sha256"],
+                                         hashlib.sha256(Path(__file__).with_name("local_runtime.py").read_bytes()).hexdigest())
+                        self.assertEqual(fingerprint, provider.fingerprint())
+
+    def test_local_http_stays_text_when_parent_schema_is_explicitly_enabled(self):
+        harness = str(Path(__file__).resolve().parents[1] / "harness")
+        response = {"choices": [{"message": {"content": '{"latex":"a_1"}'}, "finish_reason": "stop"}]}
+        with FakeModel(response) as model, patch.object(sys, "path", [harness, *sys.path]), \
+                patch.dict(os.environ, {"VLM_API_KEY": "ignored\ncredential",
+                                       "HTTP_PROXY": "http://127.0.0.1:1",
+                                       "http_proxy": "http://127.0.0.1:1"}):
+            from docforensics.vlm import OpenAICompatibleProvider
+            # Explicit schema configuration on another provider must not leak locally.
+            with patch.dict(os.environ, {"VLM_API_KEY": ""}):
+                schema_provider = OpenAICompatibleProvider(formula_response_format="json_schema")
+            self.assertEqual(schema_provider.fingerprint()["parameters"]["formula_response_format"], "json_schema")
+            for name in ("MiniCPM-V-4.7-1B", "other-local-model"):
+                with self.subTest(model=name):
+                    provider = make_local_provider(model.base, name, seed=7, max_tokens=1024)
+                    self.assertEqual(provider.repair_formula({"data": {"latex": "a_"}}), "a_1")
+                    provider._new_trace("plan_action")
+                    provider._chat("planner", system="planner", examples=[], timeout=5)
+                    for request in model.requests[-2:]:
+                        self.assertEqual(request["path"], "/v1/chat/completions")
+                        self.assertNotIn("Authorization", request["headers"])
+                        body = request["body"]
+                        self.assertEqual(set(body), {"model", "temperature", "seed", "max_tokens", "messages", "stream"}
+                                         | ({"chat_template_kwargs"} if name.startswith("MiniCPM") else set()))
+                        self.assertEqual(body["model"], name)
+                        self.assertEqual((body["temperature"], body["seed"], body["max_tokens"], body["stream"]),
+                                         (0, 7, 1024, False))
+                        self.assertNotIn("response_format", body)
+                        if name.startswith("MiniCPM"):
+                            self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
+                    self.assertEqual(provider.fingerprint()["parameters"]["formula_response_format"], "text")
+
     def test_invalid_http_and_response_shapes_are_explicit(self):
         for response, status, expected in ((b"not json", 200, "invalid_model_response"),
                                            ([], 200, "invalid_model_response"),
