@@ -60,6 +60,29 @@ def append(run_dir, **event):
     return event
 
 
+def node_revision(events, doc, node_id, input_sha256):
+    """Bind a node's events to a specific content version of that node.
+
+    The first distinct input hash seen for (doc, node_id) is revision 0 and
+    every further distinct hash takes the next number, so each text change
+    increments the revision and reverting text re-identifies its earlier
+    revision. Events without a usable input hash (legacy journals) do not
+    contribute; readers must treat a missing ``revision`` field as revision 0.
+    """
+    if not input_sha256:
+        return None
+    revisions = {}
+    for event in events:
+        if not isinstance(event, dict) or event.get("doc") != doc or event.get("node_id") != node_id:
+            continue
+        digest = event.get("input_sha256")
+        if isinstance(digest, str) and digest and digest not in revisions:
+            revisions[digest] = len(revisions)
+    if input_sha256 not in revisions:
+        revisions[input_sha256] = len(revisions)
+    return revisions[input_sha256]
+
+
 def terminal_event(events, doc, node_id, input_sha256, context_sha256):
     """Return a matching terminal only; historical records without hashes are unsafe."""
     if not input_sha256 or not context_sha256:

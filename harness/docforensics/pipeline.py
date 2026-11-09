@@ -226,8 +226,13 @@ def _record_check(run_dir, common, result, stage, attempt, **content):
 
 
 def _process(run_dir, doc, node, provider, kind, run_id=None,
-             input_sha256=None, context_sha256=None):
+             input_sha256=None, context_sha256=None, revision=None):
     common = _event_context(node, provider, doc, run_id, input_sha256, context_sha256, kind)
+    if revision is None:
+        revision = state.node_revision(state.load_events(run_dir), doc, node["id"],
+                                       common["input_sha256"])
+    if revision is not None:
+        common["revision"] = revision
     common["skill"] = "doc-formula-verify" if kind == "formula" else "doc-table-audit"
     data = node.get("data") or {}
     if not isinstance(data, dict):
@@ -336,12 +341,16 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
     return status
 
 
-def process_formula(run_dir, doc, node, provider, run_id=None, input_sha256=None, context_sha256=None):
-    return _process(run_dir, doc, node, provider, "formula", run_id, input_sha256, context_sha256)
+def process_formula(run_dir, doc, node, provider, run_id=None, input_sha256=None,
+                    context_sha256=None, revision=None):
+    return _process(run_dir, doc, node, provider, "formula", run_id, input_sha256,
+                    context_sha256, revision)
 
 
-def process_table(run_dir, doc, node, provider, run_id=None, input_sha256=None, context_sha256=None):
-    return _process(run_dir, doc, node, provider, "table", run_id, input_sha256, context_sha256)
+def process_table(run_dir, doc, node, provider, run_id=None, input_sha256=None,
+                  context_sha256=None, revision=None):
+    return _process(run_dir, doc, node, provider, "table", run_id, input_sha256,
+                    context_sha256, revision)
 
 
 def run(sample_path, run_dir, provider, run_id=None):
@@ -368,8 +377,12 @@ def run(sample_path, run_dir, provider, run_id=None):
     for node in layout["nodes"]:
         nid = node["id"]
         input_sha256, context_sha256 = node_identity(node, provider)
+        # Every event this node emits is bound to the content revision the
+        # hashes identify, so evidence stays attributable to a formula version.
+        revision = state.node_revision(events, doc, nid, input_sha256)
         common = {"run_id": run_id, "doc": doc, "node_id": nid,
-                  "input_sha256": input_sha256, "context_sha256": context_sha256}
+                  "input_sha256": input_sha256, "context_sha256": context_sha256,
+                  "revision": revision}
         done = state.terminal_event(events, doc, nid, input_sha256, context_sha256)
         if done:
             counts[done["status"]] += 1
@@ -378,9 +391,11 @@ def run(sample_path, run_dir, provider, run_id=None):
             continue
         ntype = node["type"]
         if ntype == "formula":
-            status = process_formula(run_dir, doc, node, provider, run_id, input_sha256, context_sha256)
+            status = process_formula(run_dir, doc, node, provider, run_id, input_sha256,
+                                     context_sha256, revision)
         elif ntype == "table":
-            status = process_table(run_dir, doc, node, provider, run_id, input_sha256, context_sha256)
+            status = process_table(run_dir, doc, node, provider, run_id, input_sha256,
+                                   context_sha256, revision)
         else:
             status = "OK"
             state.append(run_dir, **common, action="TERMINAL", skill="pass-through", status="OK",
