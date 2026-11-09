@@ -728,8 +728,8 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   get('btnFind').onclick();assert.equal(context.testEditor.lastAction,'actions.find');
   assert.equal(get('tab-edit').getAttribute('role'),'tab');
   assert.equal(get('tab-edit').getAttribute('aria-selected'),'true');
-  assert.match(html,/src="\/static\/brand\/texada-agent\.png"/);
-  assert.match(html,/href="\/static\/brand\/texada-favicon\.png"/);
+  assert.match(html,/src="\/static\/brand\/texada-studio\.png"/);
+  assert.match(html,/href="\/static\/brand\/texada-studio-favicon\.png"/);
   assert.match(html,/src="\/static\/editor\/latex\.js"/);
   assert.match(get('btnSave').innerHTML,/<svg[^>]+aria-hidden="true"/);
 
