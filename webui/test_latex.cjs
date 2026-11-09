@@ -197,6 +197,49 @@ assert.ok(highlighted.tokens.some(token => token.value === "\\definecolor" && to
 assert.ok(highlighted.tokens.some(token => token.value === "\\subsubsection" && token.token === "keyword.section"));
 assert.ok(highlighted.tokens.some(token => token.value === "\\citep" && token.token === "keyword.reference"),"longest reference alias wins over its prefix");
 
+// Issue #28-C acceptance boundary for the local snippet completion:
+// insert-only, zero-model, and it never rewrites content around the cursor.
+// The only replaceable span is the trigger token being typed; placeholders
+// live exclusively inside the inserted body; the shipped configuration makes
+// no network call.
+const fs = require("node:fs");
+const source = fs.readFileSync(__dirname + "/static/editor/latex.js", "utf8");
+assert.ok(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon/.test(source),
+  "completion stays zero-model: the shipped LaTeX configuration never touches the network");
+
+const triggerChar = char => char === "\\" || /[A-Za-z@*]/.test(char);
+const snippetGrammar = /^(?:[^$]|\$\{\d+:[^$]*\}|\$\d)*$/;
+const contractDocs = ["prefix \\frac suffix", "  \\fr x", "\\begin{itemize}\n\\sq\n\\end{itemize}",
+  "\\sum_{k=1}^{n} a_k \\alp b", "甲🙂 \\sq"];
+const contractCursors = [[1, 11], [1, 6], [2, 4], [1, 21], [1, 8]];
+const contractSuggestions = contractDocs.flatMap((doc, index) => complete(doc, ...contractCursors[index]));
+assert.ok(contractSuggestions.length >= contractDocs.length, "each contract document yields at least one suggestion");
+for (const item of contractSuggestions) {
+  assert.equal(item.range.startLineNumber, item.range.endLineNumber, "completions never span lines");
+  assert.equal(item.additionalTextEdits, undefined, "completions are insert-only: no extra delete edits");
+  assert.equal(item.insertTextRules, 4, "snippet bodies stay insert-as-snippet");
+  assert.match(item.insertText, snippetGrammar, "every $ in a body is a tabstop or placeholder, never a math delimiter");
+}
+for (const [docIndex, doc] of contractDocs.entries()) {
+  const [lineNumber, column] = contractCursors[docIndex];
+  for (const item of complete(doc, lineNumber, column)) {
+    const lines = doc.split("\n");
+    const line = lines[item.range.startLineNumber - 1];
+    for (let index = item.range.startColumn - 1; index < item.range.endColumn - 1; index++) {
+      assert.ok(triggerChar(line[index]),
+        `replaceable span only covers the trigger token, found ${JSON.stringify(line[index])}`);
+    }
+    assert.ok(item.range.startColumn - 1 <= column - 1 && item.range.endColumn - 1 >= column - 1,
+      "the replaceable span always contains the cursor");
+  }
+}
+for (const item of latex.snippets) {
+  assert.equal(typeof item.body, "string", "snippet bodies are strings");
+  assert.ok(item.body.length > 0, "snippet bodies are non-empty");
+  assert.ok(Array.isArray(item.prefixes) && item.prefixes.length > 0, "every snippet has at least one prefix");
+  assert.ok(!/\r/.test(item.body), "bodies use the editor's newline convention");
+}
+
 first.dispose(); first.dispose();
 assert.deepEqual(monaco.calls.filter(call => call[0] === "dispose").map(call => call[1]),["folding","completion","configuration","tokens","register"]);
 assert.notEqual(latex.install(monaco),first,"disposal permits a fresh installation");
