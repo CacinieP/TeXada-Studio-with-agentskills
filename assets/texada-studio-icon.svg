@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    TeXada Studio series icon. Same family as TeXada-the-Math-Agent's
+    { integral Sigma } mark: navy rounded square, blue gradient STIX
+    glyphs; the editor insertion caret replaces Sigma so the pair reads
+    as one series without being identical.
+
+    Render with: rsvg-convert -w 1024 -h 1024 assets/texada-studio-icon.svg \
+      -o webui/static/brand/texada-studio-source.png
+  -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#112450"/>
+      <stop offset="55%" stop-color="#0b1a3d"/>
+      <stop offset="100%" stop-color="#050e22"/>
+    </radialGradient>
+    <linearGradient id="glyph" x1="0%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%" stop-color="#8fd0ff"/>
+      <stop offset="45%" stop-color="#4a92f4"/>
+      <stop offset="100%" stop-color="#1b52dc"/>
+    </linearGradient>
+    <linearGradient id="glyphDark" x1="0%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%" stop-color="#0f2c5e"/>
+      <stop offset="100%" stop-color="#08183e"/>
+    </linearGradient>
+    <filter id="depthBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="234" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="1021" height="1021" rx="232.5" fill="none"
+        stroke="#3350a0" stroke-opacity="0.28" stroke-width="3"/>
+
+  <g fill="url(#glyphDark)" filter="url(#depthBlur)" transform="translate(0,14)">
+    <text x="185" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="345"
+          text-anchor="middle" dominant-baseline="central">{</text>
+    <text x="845" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="345"
+          text-anchor="middle" dominant-baseline="central">}</text>
+    <text x="400" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="620"
+          text-anchor="middle" dominant-baseline="central">&#8747;</text>
+    <rect x="640" y="338" width="44" height="348" rx="22"/>
+  </g>
+
+  <g fill="#3f83ea" opacity="0.28" filter="url(#glow)">
+    <text x="400" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="620"
+          text-anchor="middle" dominant-baseline="central">&#8747;</text>
+    <rect x="640" y="338" width="44" height="348" rx="22"/>
+  </g>
+
+  <g fill="url(#glyph)">
+    <text x="185" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="345"
+          text-anchor="middle" dominant-baseline="central">{</text>
+    <text x="845" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="345"
+          text-anchor="middle" dominant-baseline="central">}</text>
+    <text x="400" y="512" font-family="STIXSizeTwoSym" font-weight="bold" font-size="620"
+          text-anchor="middle" dominant-baseline="central">&#8747;</text>
+    <rect x="640" y="338" width="44" height="348" rx="22"/>
+  </g>
+</svg>

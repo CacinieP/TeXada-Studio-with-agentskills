@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic"
 TEX_CACHE = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
-BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-agent-source.png"
+BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 
 PY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "test_*.py", "tests", "*.bak*")
 
