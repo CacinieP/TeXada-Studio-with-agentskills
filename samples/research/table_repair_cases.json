@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "dataset_id": "synthetic-table-repair-contract-v1",
+  "dataset_kind": "synthetic",
+  "annotation_status": "pending",
+  "purpose": "Issue #25 contract catalog: authorized total-row edits versus host rejection of data-row mutation. Not a semantic accuracy benchmark.",
+  "cases": [
+    {
+      "id": "TR01",
+      "path": "normal_recompute_total",
+      "source": {
+        "title": "TeXada synthetic table-repair contract source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/table-repair-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "4ab97b5bcd6bba2a2cef1ba8afc6dd7976964a2d679bb87832dea0c18d8cecfc",
+        "locator": "table-repair-source.txt:TR01"
+      },
+      "original_rows": [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.5"]],
+      "expected": {"n_rows": 4, "n_cols": 2},
+      "reference_rows": [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.0"]],
+      "case_kind": "injected",
+      "injection": "Corrupt the total cell from 4.0 to 4.5 while leaving data rows intact.",
+      "authorized_method": "recompute_total_row",
+      "host_expectation": "accept_when_candidate_matches_authorized_scope",
+      "review_status": "pending"
+    },
+    {
+      "id": "TR02",
+      "path": "normal_complete_total",
+      "source": {
+        "title": "TeXada synthetic table-repair contract source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/table-repair-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "4ab97b5bcd6bba2a2cef1ba8afc6dd7976964a2d679bb87832dea0c18d8cecfc",
+        "locator": "table-repair-source.txt:TR02"
+      },
+      "original_rows": [["item", "amount"], ["A", "1.5"], ["B", "2.5"], ["total"]],
+      "expected": {"n_rows": 4, "n_cols": 2},
+      "reference_rows": [["item", "amount"], ["A", "1.5"], ["B", "2.5"], ["total", "4.0"]],
+      "case_kind": "injected",
+      "injection": "Drop the numeric cell from an existing total row.",
+      "authorized_method": "complete_total_row",
+      "host_expectation": "accept_when_candidate_matches_authorized_scope",
+      "review_status": "pending"
+    },
+    {
+      "id": "TR03",
+      "path": "normal_append_total",
+      "source": {
+        "title": "TeXada synthetic table-repair contract source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/table-repair-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "4ab97b5bcd6bba2a2cef1ba8afc6dd7976964a2d679bb87832dea0c18d8cecfc",
+        "locator": "table-repair-source.txt:TR03"
+      },
+      "original_rows": [["月份", "收入", "支出"], ["1月", "100", "80"], ["2月", "120", "90"]],
+      "expected": {"n_rows": 4, "n_cols": 3},
+      "reference_rows": [["月份", "收入", "支出"], ["1月", "100", "80"], ["2月", "120", "90"], ["合计", "220", "170"]],
+      "case_kind": "injected",
+      "injection": "Omit the final total row while declaring expected.n_rows=4.",
+      "authorized_method": "append_total_row",
+      "host_expectation": "accept_when_candidate_matches_authorized_scope",
+      "review_status": "pending"
+    },
+    {
+      "id": "TR04",
+      "path": "reject_data_mutation",
+      "source": {
+        "title": "TeXada synthetic table-repair contract source",
+        "url": "https://github.com/CacinieP/TeXada-Studio-with-agentskills/blob/main/samples/research/table-repair-source.txt",
+        "license": "AGPL-3.0-only",
+        "sha256": "4ab97b5bcd6bba2a2cef1ba8afc6dd7976964a2d679bb87832dea0c18d8cecfc",
+        "locator": "table-repair-source.txt:TR04"
+      },
+      "original_rows": [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.5"]],
+      "expected": {"n_rows": 4, "n_cols": 2},
+      "reference_rows": [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.0"]],
+      "adversarial_candidate": [["项目", "金额"], ["A", "1.5"], ["B", "3.0"], ["合计", "4.5"]],
+      "case_kind": "injected",
+      "injection": "Document a checker-passing data-row rewrite that the host must reject.",
+      "authorized_method": null,
+      "host_expectation": "reject_table_data_modified",
+      "review_status": "pending"
+    }
+  ]
+}

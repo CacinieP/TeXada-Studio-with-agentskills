@@ -1,0 +1,16 @@
+TeXada synthetic table-repair contract source (AGPL-3.0-only).
+These grids are host-authored fixtures for issue #25; they are not extracted
+from an external document. Reference totals stay host-side evidence.
+
+TR01 header/data with wrong total: [["项目","金额"],["A","1.5"],["B","2.5"],["合计","4.5"]]
+TR01 authorized candidate: [["项目","金额"],["A","1.5"],["B","2.5"],["合计","4.0"]]
+
+TR02 short total row: [["item","amount"],["A","1.5"],["B","2.5"],["total"]]
+TR02 authorized candidate: [["item","amount"],["A","1.5"],["B","2.5"],["total","4.0"]]
+
+TR03 missing total, expected.n_rows=4: [["月份","收入","支出"],["1月","100","80"],["2月","120","90"]]
+TR03 authorized candidate: [["月份","收入","支出"],["1月","100","80"],["2月","120","90"],["合计","220","170"]]
+
+TR04 adversarial data mutation (must be rejected by host even if checker passes):
+original [["项目","金额"],["A","1.5"],["B","2.5"],["合计","4.5"]]
+mutated  [["项目","金额"],["A","1.5"],["B","3.0"],["合计","4.5"]]

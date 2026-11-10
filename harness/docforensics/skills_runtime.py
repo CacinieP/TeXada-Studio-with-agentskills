@@ -39,6 +39,15 @@ def load_skill(name="doc-formula-verify", skill_root=None):
     return _read_skill(name, skill_root, ALLOWED_SKILLS)
 
 
+def load_table_skill(skill_root=None):
+    """Read the table Skill body for the fixed table-repair host only.
+
+    Kept separate from ``load_skill`` so formula requests can never load table
+    instructions (and vice versa); the same file-boundary checks apply.
+    """
+    return _read_skill("doc-table-audit", skill_root, frozenset({"doc-table-audit"}))
+
+
 def _read_skill(name, skill_root, allowed_skills):
     if name not in allowed_skills:
         raise ValueError("skill_not_allowed")

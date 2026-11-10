@@ -1,0 +1,273 @@
+# 质检报告
+
+运行：`TR03`
+提供方：openai-compatible
+
+本报告按本次运行统计；候选通过检查不表示已被使用者采用。
+
+本次模型 HTTP 请求尝试：1
+计数包含超时请求，不代表服务端完成推理。
+
+## TR03
+
+OK 1 · 待人工 0 · 复用 0 · 未完成 0
+
+### 节点 TR03
+
+检查终态：OK
+输入 SHA256：`ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5`
+执行上下文 SHA256：`8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b`
+
+证据：⚠️ 缺失
+
+以下为通过检查的候选，未写回源文件。
+
+```diff
+--- original_rows
++++ candidate_rows
+@@ -13,5 +13,10 @@
+     "2月",
+     "120",
+     "90"
++  ],
++  [
++    "合计",
++    "220",
++    "170"
+   ]
+ ]
+```
+
+#### 检查与候选记录
+
+```json
+[
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "CHECK",
+    "stage": "original",
+    "attempt": 0,
+    "checker_status": "RETRY",
+    "checker_reason": "shape_mismatch",
+    "checker_detail": "rows: got 3, expect 4",
+    "original": [
+      [
+        "月份",
+        "收入",
+        "支出"
+      ],
+      [
+        "1月",
+        "100",
+        "80"
+      ],
+      [
+        "2月",
+        "120",
+        "90"
+      ]
+    ],
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:03+0800"
+  },
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "PROVIDER_START",
+    "attempt": 1,
+    "checker_status": "RETRY",
+    "checker_reason": "shape_mismatch",
+    "provider": "openai-compatible",
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:03+0800"
+  },
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "PROVIDER_RESULT",
+    "attempt": 1,
+    "candidate": [
+      [
+        "月份",
+        "收入",
+        "支出"
+      ],
+      [
+        "1月",
+        "100",
+        "80"
+      ],
+      [
+        "2月",
+        "120",
+        "90"
+      ],
+      [
+        "合计",
+        "220",
+        "170"
+      ]
+    ],
+    "model_calls": 1,
+    "model_calls_known": true,
+    "model_called": true,
+    "reason": "ok",
+    "skill_id": "doc-table-audit",
+    "skill_name": "doc-table-audit",
+    "skill_sha256": "ea05cfe54802f8eddf3cc650ea62cfdb0bcda63f5dc5c576de3c85f0dd0219f0",
+    "prompt_sha256": "4cbfdadb25a264409af614967133b1b662dd404ede5bc87cb29265141d0b32e9",
+    "skill_loaded": true,
+    "response_truncated": false,
+    "skill_mode": "on",
+    "elapsed_seconds": 2.136966,
+    "usage": {
+      "prompt_tokens": 1352,
+      "completion_tokens": 53,
+      "total_tokens": 1405
+    },
+    "raw_candidate_response": "{\"rows\": [[\"月份\", \"收入\", \"支出\"], [\"1月\", \"100\", \"80\"], [\"2月\", \"120\", \"90\"], [\"合计\", \"220\", \"170\"]]}",
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:05+0800"
+  },
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "CHECK",
+    "stage": "candidate",
+    "attempt": 1,
+    "checker_status": "OK",
+    "checker_reason": "",
+    "checker_detail": "",
+    "candidate": [
+      [
+        "月份",
+        "收入",
+        "支出"
+      ],
+      [
+        "1月",
+        "100",
+        "80"
+      ],
+      [
+        "2月",
+        "120",
+        "90"
+      ],
+      [
+        "合计",
+        "220",
+        "170"
+      ]
+    ],
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:05+0800"
+  },
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "CANDIDATE_SCOPE",
+    "attempt": 1,
+    "candidate": [
+      [
+        "月份",
+        "收入",
+        "支出"
+      ],
+      [
+        "1月",
+        "100",
+        "80"
+      ],
+      [
+        "2月",
+        "120",
+        "90"
+      ],
+      [
+        "合计",
+        "220",
+        "170"
+      ]
+    ],
+    "scope": {
+      "allowed": true,
+      "reason": "authorized_table_scope",
+      "method": "append_total_row",
+      "row_index": 3
+    },
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:05+0800"
+  },
+  {
+    "run_id": "TR03",
+    "doc": "TR03",
+    "node_id": "TR03",
+    "input_sha256": "ca90e3180763199152fe45389d237adf0763c2f2532d2ca06abf1039cc90d1f5",
+    "context_sha256": "8f460623ba9c48b7da6311836ac11596b46d5d97417e3365e86fad8fcfb5e13b",
+    "revision": 0,
+    "skill": "doc-table-audit",
+    "action": "CANDIDATE_ACCEPTED",
+    "attempt": 1,
+    "candidate": [
+      [
+        "月份",
+        "收入",
+        "支出"
+      ],
+      [
+        "1月",
+        "100",
+        "80"
+      ],
+      [
+        "2月",
+        "120",
+        "90"
+      ],
+      [
+        "合计",
+        "220",
+        "170"
+      ]
+    ],
+    "checker_status": "OK",
+    "checker_reason": "",
+    "checker_detail": "",
+    "scope": {
+      "allowed": true,
+      "reason": "authorized_table_scope",
+      "method": "append_total_row",
+      "row_index": 3
+    },
+    "schema_version": 2,
+    "ts": "2026-11-10T22:37:05+0800"
+  }
+]
+```
