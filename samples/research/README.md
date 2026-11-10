@@ -48,6 +48,7 @@ python scripts/evaluate_skills.py run \
 | --- | --- | --- |
 | [smoke_cases.json](smoke_cases.json) | 完全合成，来源文件为[smoke-source.txt](smoke-source.txt) | 运行器流程检查 |
 | [active_calculus_cases.json](active_calculus_cases.json) | Active Calculus第二版6条原文、6条人工注入错误 | 小规模受控先导实验 |
+| [table_repair_cases.json](table_repair_cases.json) | 合成表格合计契约（合计重算/补全/追加 vs 数据行篡改） | issue #25 表格候选与宿主范围守卫 |
 
 开放教材集合从固定提交的三章按源码顺序各取最早两个符合词法条件的唯一公式。注入操作为删去末个右花括号，无右花括号时追加 `+`。许可与定位见 [ACTIVE_CALCULUS_NOTICE.md](ACTIVE_CALCULUS_NOTICE.md)。重建命令会下载固定版本的公开来源：
 

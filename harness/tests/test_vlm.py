@@ -278,7 +278,7 @@ class ProviderRuntimeTest(unittest.TestCase):
                 self.assertEqual(provider.last_trace["raw_candidate_response"], content[:vlm.TRACE_TEXT_LIMIT])
                 self.assertEqual(provider.last_trace["response_truncated"], len(content) > vlm.TRACE_TEXT_LIMIT)
 
-    def test_safe_numeric_usage_is_saved_and_table_is_not_called(self):
+    def test_safe_numeric_usage_is_saved_and_empty_table_is_rejected_without_network(self):
         provider = vlm.OllamaProvider(skill_mode="on")
         with patch.object(vlm.urllib.request, "urlopen", return_value=response(
                 usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "api_key": "secret"})):
@@ -287,10 +287,71 @@ class ProviderRuntimeTest(unittest.TestCase):
         with patch.object(vlm.urllib.request, "urlopen") as network:
             self.assertIsNone(provider.repair_table({"data": {"rows": []}}))
             network.assert_not_called()
-            self.assertEqual(provider.last_trace["reason"], "not_supported")
+            self.assertEqual(provider.last_trace["reason"], "bad_input")
             self.assertEqual(provider.last_trace["model_calls"], 0)
             self.assertFalse(provider.last_trace["skill_loaded"])
             self.assertIsNone(provider.last_trace["raw_candidate_response"])
+
+    def test_repair_table_contract_strips_reference_totals_and_validates_grid(self):
+        rows = [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.5"]]
+        fixed = [["项目", "金额"], ["A", "1.5"], ["B", "2.5"], ["合计", "4.0"]]
+        node = {
+            "id": "t-201",
+            "data": {
+                "rows": rows,
+                "expected": {"n_rows": 4, "n_cols": 2, "totals": {"col:1": "4.0"}},
+                "repair_context": {
+                    "attempt": 2,
+                    "checker": {"status": "RETRY", "reason": "sum_mismatch"},
+                    "previous_candidate": rows,
+                    "rejection_reason": "unchanged_candidate",
+                    "secret_reference": "DO_NOT_LEAK",
+                },
+            },
+        }
+        for mode in ("off", "on"):
+            provider = vlm.OpenAICompatibleProvider(skill_mode=mode)
+            with self.subTest(mode=mode), patch.object(
+                vlm.urllib.request, "urlopen", return_value=response(json.dumps({"rows": fixed}))
+            ) as network:
+                self.assertEqual(provider.repair_table(node), fixed)
+            payload = json.loads(network.call_args.args[0].data)
+            user_msg = json.loads(payload["messages"][-1]["content"])
+            self.assertEqual(user_msg["task"], "repair_table_grid")
+            self.assertEqual(user_msg["rows"], rows)
+            self.assertEqual(user_msg["expected"], {"n_rows": 4, "n_cols": 2})
+            # Reference totals are host-only evidence; the document message never carries them.
+            self.assertNotIn("totals", payload["messages"][-1]["content"])
+            self.assertNotIn('"4.0"', payload["messages"][-1]["content"])
+            self.assertNotIn("DO_NOT_LEAK", json.dumps(payload["messages"]))
+            self.assertEqual(user_msg["repair_context"]["rejection_reason"], "unchanged_candidate")
+            self.assertEqual(provider.last_trace["reason"], "ok")
+            self.assertEqual(provider.last_trace["skill_loaded"], mode == "on")
+            if mode == "on":
+                self.assertEqual(provider.last_trace["skill_id"], "doc-table-audit")
+                self.assertIn('<loaded_skill name="doc-table-audit">', payload["messages"][0]["content"])
+
+    def test_repair_table_rejects_malformed_and_oversized_grid_candidates(self):
+        rows = [["项目", "金额"], ["A", "1.5"], ["合计", "2.0"]]
+        node = {"id": "t-1", "data": {"rows": rows}}
+        cases = [
+            ("", "empty_response"),
+            ("not json", "bad_candidate_json"),
+            ('{"rows":[]}', "empty_candidate"),
+            ('{"latex":"x"}', "bad_candidate_type"),
+            ('{"rows":[["a","b"],["c"]]}', "bad_candidate_type"),
+            ('{"rows":[["a"],["b"]]}', "bad_candidate_type"),
+            ('{"rows":[["a",true],["b","1"]]}', "bad_candidate_type"),
+            (json.dumps({"rows": [["a", "b\x00"], ["c", "1"]]}), "bad_candidate_text"),
+            (json.dumps({"rows": [["a", "x" * 300], ["c", "1"]]}), "candidate_too_large"),
+        ]
+        for content, reason in cases:
+            provider = vlm.OpenAICompatibleProvider(skill_mode="off")
+            with self.subTest(reason=reason, content=content[:40]), patch.object(
+                vlm.urllib.request, "urlopen", return_value=response(content)
+            ):
+                self.assertIsNone(provider.repair_table(node))
+            self.assertEqual(provider.last_trace["reason"], reason)
 
     def test_configuration_and_skill_validation_precede_network(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(vlm.urllib.request, "urlopen") as network:

@@ -17,6 +17,7 @@ import sys
 from . import anchor_guard, state
 from .vlm import FixtureProvider, OllamaProvider
 from .formula_repair import assess_candidate, deterministic_candidate, repair_blocker
+from .table_repair import assess_table_candidate
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
@@ -121,6 +122,7 @@ def node_identity(node, provider, kind=None):
         "checker_sha256": _file_sha256(checker) if checker else None,
         "pipeline_sha256": _file_sha256(__file__),
         "formula_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "formula_repair.py")),
+        "table_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "table_repair.py")),
         "tex_context_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "tex_context.py")),
         "state_sha256": _file_sha256(state.__file__),
         "python": list(sys.version_info[:3]), "dependencies": versions,
@@ -199,7 +201,7 @@ def _invoke_provider(run_dir, common, provider, node, kind, attempt, previous, r
     error = None
     try:
         request_node = copy.deepcopy(node)
-        if kind == "formula" and repair_context:
+        if repair_context and isinstance(request_node.get("data"), dict):
             request_node["data"]["repair_context"] = copy.deepcopy(repair_context)
         candidate = getattr(provider, "repair_" + kind)(request_node)
         # Invalid provider objects are a rejected result, not a broken journal.
@@ -274,8 +276,8 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
                                  candidate=candidate, reason="deterministic_checker_rejected", check=checked)
     while result.get("status") == "RETRY" and attempts < MAX_RETRIES:
         attempts += 1
-        context = ({"attempt": attempts, "checker": result, "previous_candidate": previous_candidate,
-                    "rejection_reason": rejection_reason} if kind == "formula" else None)
+        context = {"attempt": attempts, "checker": result, "previous_candidate": previous_candidate,
+                   "rejection_reason": rejection_reason}
         candidate, trace = _invoke_provider(run_dir, common, provider, node, kind, attempts, result, context)
         model_calls += trace["model_calls"]
         model_calls_known = model_calls_known and trace["model_calls_known"]
@@ -284,36 +286,37 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
             state.append(run_dir, **common, action="CANDIDATE_REJECTED", attempt=attempts,
                          candidate=None, reason=provider_reason,
                          checker_status=result.get("status"), checker_reason=result.get("reason", ""))
-            if kind == "formula" and provider_reason in {
+            if provider_reason in {
                     "bad_candidate_json", "bad_candidate_type", "bad_candidate_text", "empty_candidate", "incomplete_response"}:
                 previous_candidate, rejection_reason = None, provider_reason
                 continue
             break
-        if kind == "formula" and isinstance(candidate, str) and candidate in seen:
+        seen_key = state.canonical_sha256(candidate)
+        if seen_key in seen:
             result = {"status": "NEEDS_HUMAN", "reason": "repeated_rejected_candidate"}
             state.append(run_dir, **common, action="CANDIDATE_REJECTED", attempt=attempts,
                          candidate=candidate, reason="repeated_rejected_candidate")
             break
-        if isinstance(candidate, str):
-            seen.add(candidate)
+        seen.add(seen_key)
         result = check(candidate)
         _record_check(run_dir, common, result, "candidate", attempts, candidate=candidate)
-        scope = assess_candidate(original, candidate) if kind == "formula" else {"allowed": True}
+        # Both kinds need a source-scope verdict: a checker pass cannot hide a
+        # rewritten data cell (table) or changed operand (formula).
+        scope = (assess_candidate(original, candidate) if kind == "formula"
+                 else assess_table_candidate(original, candidate, data.get("expected")))
         # Anchor findings name what a drifting candidate silently changed;
         # they never authorize an edit that the preservation scope rejects.
         anchor = anchor_guard.anchor_drift(original, candidate) if kind == "formula" else None
         accepted = result.get("status") == "OK" and scope["allowed"]
-        if kind == "formula":
-            state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,
-                         candidate=candidate, scope=scope, anchor=anchor)
+        state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,
+                     candidate=candidate, scope=scope, **({"anchor": anchor} if kind == "formula" else {}))
         state.append(run_dir, **common, action="CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
                      attempt=attempts, candidate=candidate, checker_status=result.get("status"),
                      checker_reason=result.get("reason", ""), checker_detail=result.get("detail", ""),
-                     **({"scope": scope} if kind == "formula" else {}),
-                     **({"anchor": anchor} if kind == "formula" else {}))
+                     scope=scope, **({"anchor": anchor} if kind == "formula" else {}))
         if accepted:
             repaired = candidate
-        elif kind == "formula" and result.get("status") != "NEEDS_ENV":
+        elif result.get("status") != "NEEDS_ENV" and result.get("reason") != "checker_error":
             if anchor and anchor["drift"]:
                 rejection_reason = anchor["reason"]
             elif not scope["allowed"]:
@@ -321,7 +324,7 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
             else:
                 rejection_reason = result.get("reason", "checker_rejected")
             previous_candidate = candidate
-            # Syntax acceptance cannot erase a failed source-preservation check.
+            # Checker acceptance cannot erase a failed source-preservation check.
             result = {**result, "status": "RETRY", "reason": rejection_reason}
 
     status = "OK" if result.get("status") == "OK" else "NEEDS_HUMAN"
