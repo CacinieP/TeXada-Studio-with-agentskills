@@ -12,6 +12,21 @@ import uuid
 
 from . import pipeline, state
 
+DEFAULT_REPAIR_MODEL = "minicpm-v4.7-35b-a3b-q4"
+
+
+def repair_model_default(env=None):
+    """修复线模型默认值：REPAIR_MODEL 优先于 VLM_MODEL（issue #23 按任务路由）。
+
+    空字符串与未设置同样视为未指定；OCR 线的 OCR_MODEL 由 doc-ocr-extract 单独读取。
+    """
+    environment = os.environ if env is None else env
+    for name in ("REPAIR_MODEL", "VLM_MODEL"):
+        value = environment.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return DEFAULT_REPAIR_MODEL
+
 
 def cmd_run(args):
     try:
@@ -220,7 +235,8 @@ def main(argv=None):
     r.add_argument("samples", nargs="+", help="样本目录（含 layout.json）或其父目录")
     r.add_argument("--state", default="state/run1")
     r.add_argument("--vlm", help="OpenAI 兼容端点（如 http://127.0.0.1:11434）；缺省用 fixture 测试替身")
-    r.add_argument("--vlm-model", default=os.environ.get("VLM_MODEL", "minicpm-v4.7-35b-a3b-q4"))
+    r.add_argument("--vlm-model", default=repair_model_default(),
+                   help="修复线模型；默认按 REPAIR_MODEL → VLM_MODEL → 内置本地默认取值（issue #23 按任务路由）")
     r.add_argument("--fixture-repairs", help="fixture 修复表 JSON（仅离线测试用）")
     r.add_argument("--skill-mode", choices=("on", "off"), default="on",
                    help="模型请求是否加载公式 Skill 正文；off 用于受控对照")
