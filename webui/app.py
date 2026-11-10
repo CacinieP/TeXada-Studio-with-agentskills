@@ -351,6 +351,25 @@ def _artifact_directory(name, tag):
     return Path(STUDIO_STATE) / name.removesuffix(".tex") / tag
 
 
+def _subprocess_text(value) -> str:
+    """编译器输出按 UTF-8 解码；非法字节替换，避免整次编译变成未处理异常。"""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _append_compiler_log(log, outcome) -> None:
+    """失败时把编译器原文写进任务日志，成功时不重复成功输出。"""
+    if outcome.get("ok"):
+        return
+    for line in (outcome.get("log") or "").splitlines():
+        text = line.strip()
+        if text:
+            log.append(text)
+
+
 def _studio_compile(content: str, name: str, tag: str):
     """Compile in an isolated build directory; page images are generated lazily."""
     document_text(content)
@@ -367,12 +386,12 @@ def _studio_compile(content: str, name: str, tag: str):
         command = [_tectonic_command(), "--untrusted", "--only-cached", "--keep-logs",
                    "-o", str(directory), str(texf)]
         try:
-            run = subprocess.run(command, cwd=directory, capture_output=True, text=True, timeout=120)
+            run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120)
         except subprocess.TimeoutExpired:
             return {**result, "log": "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
-        log = (run.stderr or run.stdout or "")[-2400:]
+        log = (_subprocess_text(run.stderr) or _subprocess_text(run.stdout))[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
             return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。"}
         base = f"/api/studio/preview/{quote(name)}/{tag}"
@@ -380,8 +399,8 @@ def _studio_compile(content: str, name: str, tag: str):
         page_count = 1
         try:
             info = subprocess.run(["pdfinfo", str(directory / "main.pdf")],
-                                  capture_output=True, text=True, timeout=10)
-            match = _re.search(r"^Pages:\s+(\d+)", info.stdout, _re.MULTILINE)
+                                  capture_output=True, timeout=10)
+            match = _re.search(r"^Pages:\s+(\d+)", _subprocess_text(info.stdout), _re.MULTILINE)
             if match:
                 page_count = int(match.group(1))
         except (OSError, subprocess.SubprocessError):
@@ -1006,6 +1025,7 @@ def _studio_job(name: str, content: str, job_id: str):
         log.append(f"[studio] 编译修复前版本（原始文档）…")
         before = _studio_compile(content, name, "before-" + job_id)
         log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败，请检查编译日志'}")
+        _append_compiler_log(log, before)
         emit("COMPILE", phase="before", ok=before["ok"])
         planner_mode = job.get("planner_mode", False)
         planner_summary = None
@@ -1023,6 +1043,7 @@ def _studio_job(name: str, content: str, job_id: str):
         emit("JOB_END", model_calls=model_calls, edits=len(edits),
              candidate_sha256=hashlib.sha256(fixed.encode()).hexdigest())
         log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
+        _append_compiler_log(log, after)
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
                          "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
