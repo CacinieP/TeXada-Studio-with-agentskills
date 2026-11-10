@@ -150,6 +150,7 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(saved["CFBundleIconFile"], "AppIcon")
             self.assertEqual((resources / "AppIcon.icns").read_bytes(), b"icns-bytes")
 
+    @unittest.skipUnless(sys.platform == "darwin", "codesign 仅在 macOS 上可用")
     def test_seal_app_bundle_restores_signature_after_plist_edit(self):
         import plistlib
         import subprocess
