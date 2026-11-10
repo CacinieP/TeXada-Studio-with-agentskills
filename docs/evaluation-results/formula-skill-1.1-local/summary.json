@@ -1,0 +1,104 @@
+[
+  {
+    "run": "1-baseline-smoke_cases",
+    "snapshot": "baseline",
+    "catalog": "smoke_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 1,
+      "http_attempts": 2,
+      "strict_candidates": 2,
+      "candidate_attempts": 2,
+      "policy_conforming_candidates": 2,
+      "unsafe_changed_candidates": 0,
+      "safe_syntax_repairs": 0,
+      "unchanged_deferral_inputs": 1,
+      "semantic_accuracy": null
+    }
+  },
+  {
+    "run": "1-candidate-smoke_cases",
+    "snapshot": "candidate",
+    "catalog": "smoke_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 1,
+      "http_attempts": 2,
+      "strict_candidates": 2,
+      "candidate_attempts": 2,
+      "policy_conforming_candidates": 2,
+      "unsafe_changed_candidates": 0,
+      "safe_syntax_repairs": 0,
+      "unchanged_deferral_inputs": 1,
+      "semantic_accuracy": null
+    }
+  },
+  {
+    "run": "1-baseline-active_calculus_cases",
+    "snapshot": "baseline",
+    "catalog": "active_calculus_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 7,
+      "http_attempts": 9,
+      "strict_candidates": 9,
+      "candidate_attempts": 9,
+      "policy_conforming_candidates": 4,
+      "unsafe_changed_candidates": 5,
+      "safe_syntax_repairs": 2,
+      "unchanged_deferral_inputs": 1,
+      "semantic_accuracy": null
+    }
+  },
+  {
+    "run": "1-candidate-active_calculus_cases",
+    "snapshot": "candidate",
+    "catalog": "active_calculus_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 7,
+      "http_attempts": 12,
+      "strict_candidates": 12,
+      "candidate_attempts": 12,
+      "policy_conforming_candidates": 10,
+      "unsafe_changed_candidates": 2,
+      "safe_syntax_repairs": 2,
+      "unchanged_deferral_inputs": 4,
+      "semantic_accuracy": null
+    }
+  },
+  {
+    "run": "1-baseline-skill_transfer_cases",
+    "snapshot": "baseline",
+    "catalog": "skill_transfer_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 7,
+      "http_attempts": 8,
+      "strict_candidates": 8,
+      "candidate_attempts": 8,
+      "policy_conforming_candidates": 5,
+      "unsafe_changed_candidates": 3,
+      "safe_syntax_repairs": 3,
+      "unchanged_deferral_inputs": 1,
+      "semantic_accuracy": null
+    }
+  },
+  {
+    "run": "1-candidate-skill_transfer_cases",
+    "snapshot": "candidate",
+    "catalog": "skill_transfer_cases.json",
+    "repeat": 1,
+    "metrics": {
+      "repair_inputs": 7,
+      "http_attempts": 11,
+      "strict_candidates": 11,
+      "candidate_attempts": 11,
+      "policy_conforming_candidates": 11,
+      "unsafe_changed_candidates": 0,
+      "safe_syntax_repairs": 3,
+      "unchanged_deferral_inputs": 4,
+      "semantic_accuracy": null
+    }
+  }
+]

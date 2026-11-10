@@ -1,0 +1,121 @@
+{
+  "status": "complete",
+  "catalog_sha256": "4bc96d674611d6a8e358d6d1c9c24b5640348b25a50f91dea80aec00b3800ba0",
+  "dataset_id": "external-issue-20261108-v1",
+  "provider_fingerprints": {
+    "deterministic": {
+      "schema_version": 1,
+      "provider": "fixture",
+      "skill_mode": "off",
+      "fixture_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+        "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+        "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+      }
+    },
+    "skill_1_0": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "on",
+      "skill_id": "doc-formula-verify",
+      "skill_sha256": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "590b360e07958c709b8c99b53f1f148c42ef73e169f53e83029fd7e83ad63769",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+        "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+        "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+      }
+    },
+    "skill_1_1": {
+      "schema_version": 1,
+      "provider": "openai-compatible",
+      "model": "minicpm-v4.7-35b-a3b-q4",
+      "skill_mode": "on",
+      "skill_id": "doc-formula-verify",
+      "skill_sha256": "905b9f5977d8df8c68a21b290c76763b451c2dbdf89d1937084775ad92d76d5c",
+      "endpoint_sha256": "e791f27fcd8c06d46256039af77f9b27c0f8e4ec3c7901e757db1710c1dd1e23",
+      "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+      "system_prompt_sha256": "6ed675d042063cfd8a50edd108923551f3f53642cd97e246f7a1ecb4a8f291bd",
+      "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+      "fewshot_sha256": "6463ed8b075859e4eab90fa11d76a91e19b3c093ee0c0d60703ffa25e3b7cda7",
+      "tool_sha256": {
+        "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+      },
+      "parameters": {
+        "temperature": 0,
+        "seed": 0,
+        "max_tokens": 1024,
+        "timeout_seconds": 120,
+        "formula_response_format": "text",
+        "enable_thinking": false
+      },
+      "implementation_sha256": {
+        "provider": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+        "skill_loader": "e98d82f0c6671844d51ffd29de782b8a50569778bac20b2572e15a3782148055",
+        "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+        "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+      }
+    }
+  },
+  "frozen_files": {
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/samples/research/external_issue_cases.json": "4bc96d674611d6a8e358d6d1c9c24b5640348b25a50f91dea80aec00b3800ba0",
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/scripts/evaluate_external_formulas.py": "cb106a3ef2aaaa8291fa6c37cae37357815e5bdd4c3172a72d973f95d9186b09",
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/harness/docforensics/pipeline.py": "fc4b55245daa567b50bfec2e9553997f9dbe5161e29693ead6ef5e19d46c91e8",
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/harness/docforensics/formula_repair.py": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/harness/docforensics/tex_context.py": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f",
+    "/Users/caciniep/Documents/Codex/2026-11-08/new-chat-5/texada-review/harness/docforensics/vlm.py": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+    "work/skill-control/baseline/doc-formula-verify/SKILL.md": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+    "skills/doc-formula-verify/SKILL.md": "905b9f5977d8df8c68a21b290c76763b451c2dbdf89d1937084775ad92d76d5c"
+  },
+  "semantic_accuracy": null,
+  "purpose": "actual host pipeline; external source excerpt sample; independent review pending",
+  "summary": {
+    "deterministic": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 0,
+      "semantic_accuracy": null
+    },
+    "skill_1_0": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 4,
+      "semantic_accuracy": null
+    },
+    "skill_1_1": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 4,
+      "semantic_accuracy": null
+    }
+  },
+  "files": {
+    "results.jsonl": "b2e8807239b5fa467c2083628dbf77ee91fd674f69b67b889da2d76eda7dc2b9",
+    "blind-review.csv": "969c578edb31979577f007cbc30dcb9448f932324e702dc65f5c7c926e917a49",
+    "deterministic/state.jsonl": "5b022f4dd2b20f0f16e1129208d884f729808e31aede54cd00e0f9d0ef1f5f8d",
+    "skill_1_0/state.jsonl": "99909b6126c2695e01d2834d10ba67a372bec5c7b0049a799bc9856d7dda365e",
+    "skill_1_1/state.jsonl": "e928ed82695ef880e7a4e4ed564c42537a839e384398350deef6bf2a97d93f17"
+  }
+}

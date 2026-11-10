@@ -20,6 +20,36 @@ def response(content='{"latex":"a_1"}', **extra):
 
 
 class ProviderRuntimeTest(unittest.TestCase):
+    def test_formula_schema_is_opt_in_and_does_not_constrain_planner(self):
+        for fmt in ('text', 'json_schema'):
+            provider = vlm.OpenAICompatibleProvider(formula_response_format=fmt)
+            with patch.object(vlm.urllib.request, 'urlopen', return_value=response()) as network:
+                provider.repair_formula({'data': {'latex': r'\frac{x}{2'}})
+            payload = json.loads(network.call_args.args[0].data)
+            self.assertEqual('response_format' in payload, fmt == 'json_schema')
+            if fmt == 'json_schema':
+                schema = payload['response_format']['json_schema']['schema']
+                self.assertFalse(schema['additionalProperties'])
+                self.assertEqual(schema['required'], ['latex'])
+            with patch.object(vlm.urllib.request, 'urlopen', return_value=response('{}')) as network:
+                provider.structured_decision('plan_action', {}, 'planner')
+            self.assertNotIn('response_format', json.loads(network.call_args.args[0].data))
+
+    def test_schema_failure_has_no_silent_fallback_and_reasoning_length_is_recorded(self):
+        provider = vlm.OpenAICompatibleProvider(formula_response_format='json_schema')
+        with patch.object(vlm.urllib.request, 'urlopen', side_effect=urllib.error.HTTPError(
+                'http://localhost', 400, 'unsupported', {}, None)) as network:
+            self.assertIsNone(provider.repair_formula({'data': {'latex': 'a_'}}))
+        self.assertEqual(network.call_count, 1)
+        self.assertEqual(provider.last_trace['reason'], 'http_error')
+        raw = {'choices': [{'finish_reason': 'length', 'message': {
+            'content': '', 'reasoning_content': 'private reasoning'}}]}
+        with patch.object(vlm.urllib.request, 'urlopen', return_value=io.BytesIO(json.dumps(raw).encode())):
+            self.assertIsNone(provider.repair_formula({'data': {'latex': 'a_'}}))
+        self.assertEqual(provider.last_trace['finish_reason'], 'length')
+        self.assertEqual(provider.last_trace['reasoning_characters'], 17)
+        self.assertNotIn('private reasoning', json.dumps(provider.last_trace))
+
     def setUp(self):
         environment = patch.dict(os.environ, {"VLM_API_KEY": ""})
         environment.start()
@@ -305,3 +335,4 @@ class FixtureRuntimeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

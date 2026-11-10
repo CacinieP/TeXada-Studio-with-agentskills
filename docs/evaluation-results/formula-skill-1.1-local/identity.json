@@ -1,0 +1,26 @@
+{
+  "status": "complete",
+  "model": "minicpm-v4.7-35b-a3b-q4",
+  "base": "http://127.0.0.1:18149",
+  "max_tokens": 1024,
+  "temperature": 0,
+  "seed": 0,
+  "response_format": "text",
+  "repeats": 1,
+  "skill_sha256": {
+    "baseline": "0d96fae549fc8ab7156f2f6fe676ab39936d6a614b9a2edef203612cbabe01ba",
+    "candidate": "905b9f5977d8df8c68a21b290c76763b451c2dbdf89d1937084775ad92d76d5c"
+  },
+  "checker_sha256": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae",
+  "implementation": {
+    "scripts/evaluate_skills.py": "330089dca887a6c686ae7891eee9fe609676efdc47b033291b8194b0ed15bc96",
+    "harness/docforensics/vlm.py": "6397b9274ce9f9961cf394d86a8ca46920d684d4ad0f84c84f025c73fe52816f",
+    "scripts/compare_formula_skills.py": "285d5653548789c88a783dba94f88170eec8a50eaac6e9df443f144e0b83605c",
+    "harness/docforensics/formula_repair.py": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+    "harness/docforensics/tex_context.py": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f",
+    "samples/research/smoke_cases.json": "24a2d42013d2539c5c0ad87f6f7267449003059b484239460e64b394e5d07c64",
+    "samples/research/active_calculus_cases.json": "f20217e08f7106dc5b34559468c7e26090082fec2e1f95710b278cd0a3b942f2",
+    "samples/research/skill_transfer_cases.json": "ffbf4eb9554a823dcee216cc19e5f97bb9cc5c25d63791bd96f500942ebdc0c0"
+  },
+  "purpose": "Skill-only source-preservation behavior; no independent semantic review"
+}

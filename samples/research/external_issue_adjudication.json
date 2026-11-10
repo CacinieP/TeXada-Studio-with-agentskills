@@ -1,0 +1,108 @@
+{
+  "status": "source-based provisional labels; not independent semantic review",
+  "cases": {
+    "K43": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/43"
+    },
+    "K69": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/69"
+    },
+    "K95": {
+      "source_category": "ambiguous",
+      "documented_reference": "a^{b^c}",
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/95"
+    },
+    "K138": {
+      "source_category": "documented_closer",
+      "documented_reference": "x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a}",
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/138",
+      "reference_basis_url": "https://github.com/KaTeX/KaTeX/issues/138#issuecomment-57315087"
+    },
+    "K2319": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/2319"
+    },
+    "K2612": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/2612"
+    },
+    "K433": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/433"
+    },
+    "K393": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/393"
+    },
+    "K1676": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/KaTeX/KaTeX/issues/1676"
+    },
+    "S15309": {
+      "source_category": "semantic_parser_report",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/sympy/sympy/issues/15309"
+    },
+    "S19075": {
+      "source_category": "unsupported_or_valid",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/sympy/sympy/issues/19075"
+    },
+    "S21537": {
+      "source_category": "semantic_parser_report",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/sympy/sympy/issues/21537"
+    },
+    "S21677": {
+      "source_category": "semantic_parser_report",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/sympy/sympy/issues/21677"
+    },
+    "S26220": {
+      "source_category": "semantic_parser_report",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://github.com/sympy/sympy/issues/26220"
+    },
+    "T498180": {
+      "source_category": "natural_grouping_error",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://tex.stackexchange.com/questions/498180/strange-error-in-latex-with-curly-brackets"
+    },
+    "T75331": {
+      "source_category": "natural_grouping_error",
+      "documented_reference": null,
+      "review_status": "pending",
+      "source_url": "https://tex.stackexchange.com/questions/75331/help-me-to-debug-long-latex-equations-with-errors",
+      "notes": "Public answers disagree on closer placement; no unique target is asserted.",
+      "reference_basis_urls": [
+        "https://tex.stackexchange.com/a/75333",
+        "https://tex.stackexchange.com/a/75345",
+        "https://tex.stackexchange.com/a/75351"
+      ]
+    }
+  }
+}

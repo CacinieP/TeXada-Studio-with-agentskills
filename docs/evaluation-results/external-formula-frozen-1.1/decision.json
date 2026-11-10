@@ -1,0 +1,38 @@
+{
+  "dataset_inputs": 16,
+  "guarded_observations": 48,
+  "all_arms_final_text_identical": true,
+  "semantic_accuracy": null,
+  "independent_semantic_review": "pending",
+  "conclusion": "No additional delivered repairs observed; no independent semantic or generalization benefit established.",
+  "summary": {
+    "deterministic": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 0,
+      "semantic_accuracy": null
+    },
+    "skill_1_0": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 4,
+      "semantic_accuracy": null
+    },
+    "skill_1_1": {
+      "inputs": 16,
+      "repaired": 0,
+      "human_review": 8,
+      "model_calls": 4,
+      "semantic_accuracy": null
+    }
+  },
+  "review_packet": "guarded/blind-review.csv",
+  "four_semantic_category_counts": {
+    "safe_repair": null,
+    "justified_deferral": null,
+    "incorrect_repair": null,
+    "missed_recoverable_repair": null
+  }
+}

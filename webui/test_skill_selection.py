@@ -58,7 +58,7 @@ class SkillSelectionTest(unittest.TestCase):
             catalog = load_catalog()
         self.assertEqual(set(catalog), {"doc-formula-verify", "doc-table-audit"})
         for name, capability in catalog.items():
-            self.assertEqual(capability.version, "1.0.0")
+            self.assertEqual(capability.version, "1.1.0" if name == "doc-formula-verify" else "1.0.0")
             self.assertEqual(capability.metadata_sha256, hashlib.sha256((ROOT / "skills" / name / "capability.json").read_bytes()).hexdigest())
         node = {"kind": "formula", "latex": "x+"}
         for choice, reason in (("doc-table-audit", "skill_not_applicable"), ("ocr-layout", "skill_not_allowed"), (None, "selection_declined")):
@@ -77,7 +77,8 @@ class SkillSelectionTest(unittest.TestCase):
                 self.assertEqual(loaded.sha256, hashlib.sha256((root / name / "SKILL.md").read_bytes()).hexdigest())
                 self.assertIsNotNone(loaded.checker_sha256)
             body = root / "doc-formula-verify" / "SKILL.md"
-            body.write_text(body.read_text().replace("version: 1.0.0", "version: 2.0.0"))
+            body.write_text(body.read_text().replace(
+                "version: " + catalog["doc-formula-verify"].version, "version: 2.0.0"))
             with self.assertRaisesRegex(ValueError, "skill_version_mismatch"):
                 load_selected_skill(catalog["doc-formula-verify"], skill_root=root)
             body.unlink()

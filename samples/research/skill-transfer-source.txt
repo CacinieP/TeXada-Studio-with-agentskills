@@ -1,0 +1,8 @@
+H01	\frac{u^3+v}{9
+H02	\sqrt{\frac{p}{q}
+H03	\left(r+s
+H04	\lim_{t\to c g(t)=M
+H05	h(z)+
+H06	b_+e
+H07	u+v}
+H08	r^2+s^2

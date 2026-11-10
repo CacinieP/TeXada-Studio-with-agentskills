@@ -25,6 +25,7 @@
     "The contract catalog does not measure model effects. A separate 12-input pilot has run; independent semantic review remains pending."
   ],
   "runtime_evidence": {
+    "skill_1_1_preservation_pilot": "../../../docs/evaluation-results/formula-skill-1.1-local/README.md",
     "tests": [
       "../../../harness/tests/test_skills_runtime.py",
       "../../../harness/tests/test_vlm.py"

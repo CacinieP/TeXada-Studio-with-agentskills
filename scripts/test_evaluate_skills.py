@@ -29,6 +29,39 @@ class Provider:
 
 
 class SkillsEvaluationTests(unittest.TestCase):
+    def test_explicit_snapshot_loads_only_into_skill_arm_and_records_exact_hash(self):
+        from docforensics.skills_runtime import file_sha256
+        payloads = []
+        def respond(request, timeout):
+            payloads.append(json.loads(request.data))
+            return io.BytesIO(json.dumps({'choices': [{'message': {'content': '{"latex":"a_+b"}'}}]}).encode())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'snapshot'
+            skill = root / 'doc-formula-verify'
+            (skill / 'scripts').mkdir(parents=True)
+            (skill / 'SKILL.md').write_text((evaluation.REPO / 'skills/doc-formula-verify/SKILL.md').read_text() + '\nSNAPSHOT_MARKER\n')
+            (skill / 'scripts/verify.py').write_bytes((evaluation.REPO / 'skills/doc-formula-verify/scripts/verify.py').read_bytes())
+            with patch('docforensics.vlm.urllib.request.urlopen', side_effect=respond), \
+                    patch.object(evaluation, 'run_verify', return_value={'status': 'RETRY'}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                out = Path(directory) / 'run'
+                self.assertEqual(evaluation.main(['run', '--cases', str(self.catalog_path), '--outdir', str(out),
+                    '--mode', 'model', '--base', 'http://example.invalid', '--model', 'test-model',
+                    '--skill-root', str(root)]), 0)
+            manifest = json.loads((out / 'manifest.json').read_text())
+            fingerprints = manifest['provider_fingerprints']
+            self.assertEqual(fingerprints['model_with_skill']['skill_sha256'], file_sha256(skill / 'SKILL.md'))
+            self.assertIsNone(fingerprints['model_without_skill']['skill_sha256'])
+            self.assertTrue(any('SNAPSHOT_MARKER' in p['messages'][0]['content'] for p in payloads))
+            self.assertTrue(any('SNAPSHOT_MARKER' not in p['messages'][0]['content'] for p in payloads))
+
+    def test_skill_snapshot_option_is_rejected_for_offline_runs(self):
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                evaluation.main(['run', '--cases', str(evaluation.REPO / 'samples/research/smoke_cases.json'),
+                                 '--outdir', str(Path(directory) / 'out'), '--skill-root', directory])
+            self.assertFalse((Path(directory) / 'out').exists())
+
     def setUp(self):
         self.catalog_path = evaluation.REPO / "samples/research/smoke_cases.json"
         self.catalog = evaluation.read_catalog(self.catalog_path)

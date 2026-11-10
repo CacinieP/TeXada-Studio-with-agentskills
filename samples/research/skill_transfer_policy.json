@@ -1,0 +1,13 @@
+{
+  "purpose": "predeclared deterministic policy expectations, not semantic truth",
+  "cases": {
+    "H01": "close_trailing",
+    "H02": "close_trailing",
+    "H03": "pair_left_right",
+    "H04": "preserve",
+    "H05": "preserve",
+    "H06": "preserve",
+    "H07": "preserve",
+    "H08": "initial_ok"
+  }
+}

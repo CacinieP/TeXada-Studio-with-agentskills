@@ -1,0 +1,109 @@
+{
+  "summary": {
+    "model_without_skill": {
+      "repair_inputs": 7,
+      "syntax_accepted": 5,
+      "source_preservation_allowed": 2,
+      "syntax_accepted_but_blocked": 3,
+      "blocked_reasons": {
+        "missing_operator_operand": 2,
+        "unauthorized_source_change": 1
+      },
+      "semantic_accuracy": null
+    },
+    "model_with_skill": {
+      "repair_inputs": 7,
+      "syntax_accepted": 5,
+      "source_preservation_allowed": 2,
+      "syntax_accepted_but_blocked": 3,
+      "blocked_reasons": {
+        "missing_operator_operand": 2,
+        "unauthorized_source_change": 1
+      },
+      "semantic_accuracy": null
+    }
+  },
+  "accepted_output_policy_audit": [
+    {
+      "case_id": "AC01-injected",
+      "group": "model_without_skill",
+      "original_latex": "s(t) = 16 - 16t^2+",
+      "output_latex": "s(t) = 16 - 16t^2",
+      "source_preservation_allowed": false,
+      "reason": "missing_operator_operand"
+    },
+    {
+      "case_id": "AC03-injected",
+      "group": "model_without_skill",
+      "original_latex": "\\lim_{x \\to a f(x) = L",
+      "output_latex": "\\lim_{x \\to a} f(x) = L",
+      "source_preservation_allowed": false,
+      "reason": "unauthorized_source_change"
+    },
+    {
+      "case_id": "AC04-injected",
+      "group": "model_without_skill",
+      "original_latex": "s(t) = 64 - 16t^2+",
+      "output_latex": "s(t) = 64 - 16t^2",
+      "source_preservation_allowed": false,
+      "reason": "missing_operator_operand"
+    },
+    {
+      "case_id": "AC05-injected",
+      "group": "model_without_skill",
+      "original_latex": "\\frac{f(a+h)-f(a)}{h",
+      "output_latex": "\\frac{f(a+h)-f(a)}{h}",
+      "source_preservation_allowed": true,
+      "reason": "deterministic_syntax_patch"
+    },
+    {
+      "case_id": "AC06-injected",
+      "group": "model_without_skill",
+      "original_latex": "m = \\frac{f(a+h) - f(a)}{h",
+      "output_latex": "m = \\frac{f(a+h) - f(a)}{h}",
+      "source_preservation_allowed": true,
+      "reason": "deterministic_syntax_patch"
+    },
+    {
+      "case_id": "AC01-injected",
+      "group": "model_with_skill",
+      "original_latex": "s(t) = 16 - 16t^2+",
+      "output_latex": "s(t) = 16 - 16t^2",
+      "source_preservation_allowed": false,
+      "reason": "missing_operator_operand"
+    },
+    {
+      "case_id": "AC03-injected",
+      "group": "model_with_skill",
+      "original_latex": "\\lim_{x \\to a f(x) = L",
+      "output_latex": "\\lim_{x \\to a} f(x) = L",
+      "source_preservation_allowed": false,
+      "reason": "unauthorized_source_change"
+    },
+    {
+      "case_id": "AC04-injected",
+      "group": "model_with_skill",
+      "original_latex": "s(t) = 64 - 16t^2+",
+      "output_latex": "s(t) = 64 - 16t^2",
+      "source_preservation_allowed": false,
+      "reason": "missing_operator_operand"
+    },
+    {
+      "case_id": "AC05-injected",
+      "group": "model_with_skill",
+      "original_latex": "\\frac{f(a+h)-f(a)}{h",
+      "output_latex": "\\frac{f(a+h)-f(a)}{h}",
+      "source_preservation_allowed": true,
+      "reason": "deterministic_syntax_patch"
+    },
+    {
+      "case_id": "AC06-injected",
+      "group": "model_with_skill",
+      "original_latex": "m = \\frac{f(a+h) - f(a)}{h",
+      "output_latex": "m = \\frac{f(a+h) - f(a)}{h}",
+      "source_preservation_allowed": true,
+      "reason": "deterministic_syntax_patch"
+    }
+  ],
+  "review_kind": "deterministic source-preservation policy; not independent semantic review"
+}

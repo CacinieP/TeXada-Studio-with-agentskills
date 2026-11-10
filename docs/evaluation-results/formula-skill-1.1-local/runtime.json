@@ -1,0 +1,17 @@
+{
+  "model_sha256": "9ecf91e814d7e9adc64325b1b65f8628a9b1bb8da4f61a92869ca7489bfd888e",
+  "model_bytes": 21166255008,
+  "backend_build": "b11669-620d2225c",
+  "context": 8192,
+  "slots": 1,
+  "chat_template_sha256": "36815ccc219dc5173ed85203d7bfc709139f6343260d0e39b3161f550e294a48",
+  "modalities": {
+    "vision": false,
+    "video": false,
+    "audio": false
+  },
+  "requested_gpu_layers": 99,
+  "actual_offload_layers": null,
+  "startup_until_loaded_seconds": 5.08,
+  "startup_note": "warm file cache; not a cold loading benchmark"
+}
