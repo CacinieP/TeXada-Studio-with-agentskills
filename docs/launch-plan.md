@@ -1,6 +1,6 @@
 # 发布与传播计划
 
-源码、报告、[B站实机视频](https://www.bilibili.com/video/BV16Kan6rEGv/)和[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)均已提供公开入口；尚未创建 tag 或 GitHub Release。
+源码、报告、[B站实机视频](https://www.bilibili.com/video/BV16Kan6rEGv/)和[微信公众号征文](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)均已提供公开入口。预发布 tag `v0.2.0-beta.2` 指向当前候选，GitHub Release 随该 tag 发布。
 
 ## 受众与主线
 

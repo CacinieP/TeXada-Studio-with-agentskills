@@ -1,6 +1,6 @@
 # 开源发布清单
 
-项目源码按 AGPL-3.0-only 开源，[B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/)已发布；尚未创建 tag 或 GitHub Release。准备状态见[开源审查](open-source-readiness.md)。
+项目源码按 AGPL-3.0-only 开源，[B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/)已发布。预发布 tag `v0.2.0-beta.2` 指向当前候选，GitHub Release 随该 tag 发布。准备状态见[开源审查](open-source-readiness.md)。
 
 ## 已完成
 
@@ -17,11 +17,11 @@
 
 ## 公开与版本发布
 
-- [ ] 选定发布提交，复查拟公开分支、标签、历史及附件；核对许可、教材来源和品牌资源。
-- [ ] 按[扫描复核](security-scan-notes.md)重扫该版本，检查新增图片与媒体中的部署信息、凭据和用户内容。
+- [x] 选定发布提交，复查拟公开分支、标签、历史及附件；核对许可、教材来源和品牌资源。
+- [x] 按[扫描复核](security-scan-notes.md)重扫该版本，检查新增图片与媒体中的部署信息、凭据和用户内容。
 - [ ] 确认部署版本与公开源码对应；有本地修改时一并提供，并更新界面源码链接。
 - [x] 仓库所有者已授权公开，项目报告、技术报告和演示入口已整理。
-- [ ] 核验 Private vulnerability reporting 入口，实际报告送达另行测试。
+- [x] 核验 Private vulnerability reporting 入口，实际报告送达另行测试。
 - [ ] 从选定提交生成源码包，核对媒体附件及 SHA256 清单，创建预发布 tag / Release。
 - [ ] 用未登录浏览器核验仓库、源码、演示、报告和微信公众号文章。
 - [ ] 邀请目标用户复现，记录失败步骤与有效反馈，再按[发布计划](launch-plan.md)开展传播。
@@ -30,6 +30,6 @@
 
 从仓库根目录执行 `bash scripts/package.sh`，源码包只包含当前提交的 Git tree，不含历史与运行数据。清理前的 bundle、旧 clone 和旧下载包保留在私有备份中，发布附件应从清理后的提交重新生成。
 
-发布说明写明提交号、运行环境、实际执行的检查及结果，链接对应证据。[验证记录](validation.md)区分契约测试、作者参考修订和真实模型运行；旧176.4秒讲解版及 `dff5fc6` 记录保留为历史，当前演示以[动态录屏](dynamic-demo.md)为准。
+当前候选说明见 [v0.2.0-beta.2 草稿](releases/v0.2.0-beta.2-draft.md)。tag `v0.2.0-beta.2` 指向包含该说明的提交，GitHub Release 随该 tag 发布。发布说明写明提交号、运行环境、实际执行的检查及结果，链接对应证据。[验证记录](validation.md)区分契约测试、作者参考修订和真实模型运行；旧176.4秒讲解版及 `dff5fc6` 记录保留为历史，当前演示以[动态录屏](dynamic-demo.md)为准。
 
 仓库已配置 [Studio regression](../.github/workflows/regression.yml)，覆盖 Python、JavaScript 与语法检查；实际通过状态以 GitHub 对应提交的运行结果为准。源码包现在附完整提交、逐文件 manifest 和 SHA256 清单，见[打包说明](source-package.md)。定时任务、公开试用服务、首次正式 Release 和外部试跑仍是独立后续工作。
