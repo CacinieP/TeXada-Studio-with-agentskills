@@ -5,7 +5,7 @@
 
 产物是一个薄壳 .app:可执行文件回指**当前仓库检出**与其 ``.venv``;
 移动仓库或重建虚拟环境后需重新生成。图标用 ``iconutil/sips`` 从
-``webui/static/brand/texada-agent-source.png`` 生成,非 macOS 或缺工具时用 ``--skip-icon``。
+``webui/static/brand/texada-studio-source.png`` 生成,非 macOS 或缺工具时用 ``--skip-icon``。
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-agent-source.png"
+BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 APP_NAME = "TeXada Studio"
 BUNDLE_ID = "local.texada.studio"
 
