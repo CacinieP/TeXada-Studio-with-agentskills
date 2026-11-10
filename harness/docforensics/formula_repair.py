@@ -28,6 +28,9 @@ _PAIRS = {"(": ")", "[": "]", r"\{": r"\}", r"\langle": r"\rangle"}
 _CLOSERS = frozenset(_PAIRS.values())
 _RELATIONS = frozenset({"=", "<", ">", "≤", "≥", "≠", r"\le", r"\leq", r"\ge", r"\geq",
                         r"\ne", r"\neq", r"\equiv", r"\approx", r"\sim", r"\simeq"})
+_TWO_ARGUMENT_COMMANDS = frozenset({
+    r"\frac", r"\dfrac", r"\tfrac", r"\binom", r"\dbinom", r"\tbinom",
+})
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,35 @@ def _parser_coverage_unsupported(tokens):
     return False
 
 
+def _skip_argument(tokens, index):
+    """Return the index after one TeX argument, or ``None`` when it is absent."""
+    if index >= len(tokens):
+        return None
+    if tokens[index].text != "{":
+        return index + 1
+    depth = 0
+    for cursor in range(index, len(tokens)):
+        if tokens[cursor].text == "{":
+            depth += 1
+        elif tokens[cursor].text == "}":
+            depth -= 1
+            if depth == 0:
+                return cursor + 1
+    return None
+
+
+def _missing_required_argument(text):
+    """True when a known two-argument command still lacks one after brace closing."""
+    tokens = _tokens(text)
+    for index, token in enumerate(tokens):
+        if token.text not in _TWO_ARGUMENT_COMMANDS:
+            continue
+        first = _skip_argument(tokens, index + 1)
+        if first is None or _skip_argument(tokens, first) is None:
+            return True
+    return False
+
+
 def repair_blocker(original):
     """Return a stable reason for source that must not be guessed, or ``None``."""
     if not isinstance(original, str) or not original.strip():
@@ -138,6 +170,12 @@ def repair_blocker(original):
         return "missing_delimiter_content"
     if _duplicate_script(tokens):
         return "duplicate_script"
+    # Closing the open groups must not be the repair when a command still lacks
+    # an argument that is not present in the source. Inventing one, or deleting
+    # a brace to manufacture it, would change the mathematics.
+    closed = text + "}" * depth
+    if _missing_required_argument(closed):
+        return "missing_command_argument"
     return None
 
 

@@ -139,6 +139,14 @@ class MathContextTests(unittest.TestCase):
         self.assertEqual([node["latex"] for node in result["nodes"]], ["good", "later"])
         self.assertEqual(result["diagnostics"][0]["code"], "unclosed_math")
 
+    def test_unclosed_display_does_not_swallow_the_next_display(self):
+        result = analyze_math("\\[\\section{定积分}\n\\[ \\int_0^1 x^2\\,dx = \\frac{{3} \\]")
+        self.assertEqual(result["diagnostics"][0]["code"], "unclosed_math")
+        self.assertNotIn("body_end", result["diagnostics"][0])
+        self.assertEqual([node["latex"] for node in result["nodes"]],
+                         [" \\int_0^1 x^2\\,dx = \\frac{{3} "])
+        self.assertTrue(result["nodes"][0]["checkable"])
+
     def test_mismatched_environment_recovers_without_editing_broken_region(self):
         result = analyze_math(r"\begin{equation}x\end{align} $later$")
         self.assertEqual([node["latex"] for node in result["nodes"]], ["later"])

@@ -58,7 +58,7 @@ class SkillSelectionTest(unittest.TestCase):
             catalog = load_catalog()
         self.assertEqual(set(catalog), {"doc-formula-verify", "doc-table-audit"})
         for name, capability in catalog.items():
-            self.assertEqual(capability.version, "1.1.0" if name == "doc-formula-verify" else "1.0.0")
+            self.assertEqual(capability.version, "1.1.1" if name == "doc-formula-verify" else "1.0.0")
             self.assertEqual(capability.metadata_sha256, hashlib.sha256((ROOT / "skills" / name / "capability.json").read_bytes()).hexdigest())
         node = {"kind": "formula", "latex": "x+"}
         for choice, reason in (("doc-table-audit", "skill_not_applicable"), ("ocr-layout", "skill_not_allowed"), (None, "selection_declined")):
