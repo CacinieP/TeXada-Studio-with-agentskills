@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 
-from . import state
+from . import anchor_guard, state
 from .vlm import FixtureProvider, OllamaProvider
 from .formula_repair import assess_candidate, deterministic_candidate, repair_blocker
 
@@ -256,8 +256,9 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
             candidate = deterministic_candidate(original)
             if candidate is not None:
                 scope = assess_candidate(original, candidate)
+                anchor = anchor_guard.anchor_drift(original, candidate)
                 state.append(run_dir, **common, action="DETERMINISTIC_REPAIR", candidate=candidate,
-                             scope=scope, model_calls=0)
+                             scope=scope, anchor=anchor, model_calls=0)
                 checked = check(candidate)
                 _record_check(run_dir, common, checked, "deterministic_candidate", 0, candidate=candidate)
                 if checked.get("status") == "OK" and scope["allowed"]:
@@ -298,18 +299,27 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
         result = check(candidate)
         _record_check(run_dir, common, result, "candidate", attempts, candidate=candidate)
         scope = assess_candidate(original, candidate) if kind == "formula" else {"allowed": True}
+        # Anchor findings name what a drifting candidate silently changed;
+        # they never authorize an edit that the preservation scope rejects.
+        anchor = anchor_guard.anchor_drift(original, candidate) if kind == "formula" else None
         accepted = result.get("status") == "OK" and scope["allowed"]
         if kind == "formula":
             state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,
-                         candidate=candidate, scope=scope)
+                         candidate=candidate, scope=scope, anchor=anchor)
         state.append(run_dir, **common, action="CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
                      attempt=attempts, candidate=candidate, checker_status=result.get("status"),
                      checker_reason=result.get("reason", ""), checker_detail=result.get("detail", ""),
-                     **({"scope": scope} if kind == "formula" else {}))
+                     **({"scope": scope} if kind == "formula" else {}),
+                     **({"anchor": anchor} if kind == "formula" else {}))
         if accepted:
             repaired = candidate
         elif kind == "formula" and result.get("status") != "NEEDS_ENV":
-            rejection_reason = scope["reason"] if not scope["allowed"] else result.get("reason", "checker_rejected")
+            if anchor and anchor["drift"]:
+                rejection_reason = anchor["reason"]
+            elif not scope["allowed"]:
+                rejection_reason = scope["reason"]
+            else:
+                rejection_reason = result.get("reason", "checker_rejected")
             previous_candidate = candidate
             # Syntax acceptance cannot erase a failed source-preservation check.
             result = {**result, "status": "RETRY", "reason": rejection_reason}
