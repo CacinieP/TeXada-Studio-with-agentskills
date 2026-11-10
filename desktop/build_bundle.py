@@ -16,7 +16,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -56,6 +58,29 @@ def build_icon(workdir: Path) -> Path | None:
     run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], capture_output=True)
     shutil.rmtree(iconset, ignore_errors=True)
     return icns if icns.exists() else None
+
+
+def install_app_icon(app: Path, icon: Path) -> None:
+    """Point the bundle at the brand icon. py2app leaves CFBundleIconFile on PythonApplet."""
+    resources = app / "Contents" / "Resources"
+    resources.mkdir(parents=True, exist_ok=True)
+    destination = resources / "AppIcon.icns"
+    if icon.resolve() != destination.resolve():
+        shutil.copy2(icon, destination)
+    plist_path = app / "Contents" / "Info.plist"
+    with plist_path.open("rb") as handle:
+        plist = plistlib.load(handle)
+    plist["CFBundleIconFile"] = "AppIcon"
+    with plist_path.open("wb") as handle:
+        plistlib.dump(plist, handle)
+
+
+def seal_app_bundle(app: Path) -> None:
+    """合入资源并改写 Info.plist 后,py2app 的签名失效,ad-hoc 重签整包。"""
+    subprocess.run(
+        ["codesign", "--force", "--deep", "--sign", "-", "--timestamp=none", str(app)],
+        check=True,
+    )
 
 
 SYSTEM_PREFIXES = ("/usr/lib", "/System")
@@ -154,6 +179,15 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
     return len(relocated)
 
 
+def tex_cache_manifest(cache: Path) -> str:
+    """按实际打进应用的缓存现写 SHA256 清单,避免换机器后沿用另一份缓存的记录。"""
+    lines = []
+    for path in sorted(item for item in cache.rglob("*") if item.is_file()):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(f"{digest}  {path.relative_to(cache).as_posix()}")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     """把运行所需源码与数据放进 staging(其后整体合并进 .app/Contents/Resources)。"""
     sizes = {}
@@ -190,6 +224,8 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
+    (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
+        tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")
     for area in ("webui", "tex-cache", "bin", "tools-lib"):
         path = staging / area
         if path.exists():
@@ -246,7 +282,8 @@ def main(argv=None) -> int:
     for item in staging.iterdir():
         shutil.move(str(item), str(resources / item.name))
     if icon is not None:
-        shutil.copy2(icon, resources / "AppIcon.icns")
+        install_app_icon(app, icon)
+    seal_app_bundle(app)
     shutil.rmtree(workdir, ignore_errors=True)
 
     total = sum(f.stat().st_size for f in app.rglob("*") if f.is_file())

@@ -134,6 +134,59 @@ class BuildTests(unittest.TestCase):
             self.assertIn(str(build_app.REPO_ROOT), shim.read_text(encoding="utf-8"))
             self.assertIn("local.texada.studio", plist.read_text(encoding="utf-8"))
 
+    def test_install_app_icon_replaces_py2app_default(self):
+        import plistlib
+        import build_bundle
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "TeXada Studio.app"
+            resources = app / "Contents" / "Resources"
+            resources.mkdir(parents=True)
+            plist_path = app / "Contents" / "Info.plist"
+            plist_path.write_bytes(plistlib.dumps({"CFBundleIconFile": "PythonApplet"}))
+            icon = Path(tmp) / "brand.icns"
+            icon.write_bytes(b"icns-bytes")
+            build_bundle.install_app_icon(app, icon)
+            saved = plistlib.loads(plist_path.read_bytes())
+            self.assertEqual(saved["CFBundleIconFile"], "AppIcon")
+            self.assertEqual((resources / "AppIcon.icns").read_bytes(), b"icns-bytes")
+
+    def test_seal_app_bundle_restores_signature_after_plist_edit(self):
+        import plistlib
+        import subprocess
+        import build_bundle
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "TeXada Studio.app"
+            macos = app / "Contents" / "MacOS"
+            macos.mkdir(parents=True)
+            binary = macos / "TeXada Studio"
+            binary.write_bytes(Path("/bin/echo").read_bytes())
+            binary.chmod(0o755)
+            plist_path = app / "Contents" / "Info.plist"
+            plist = {"CFBundleExecutable": "TeXada Studio", "CFBundleIconFile": "PythonApplet"}
+            plist_path.write_bytes(plistlib.dumps(plist))
+            subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True, capture_output=True)
+            plist["CFBundleIconFile"] = "AppIcon"
+            plist_path.write_bytes(plistlib.dumps(plist))
+            broken = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], capture_output=True)
+            self.assertNotEqual(broken.returncode, 0)
+            build_bundle.seal_app_bundle(app)
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True, capture_output=True)
+
+    def test_tex_cache_manifest_hashes_only_copied_files(self):
+        import hashlib
+        import build_bundle
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "tex-cache"
+            nested = cache / "bundles"
+            nested.mkdir(parents=True)
+            (nested / "a.tex").write_bytes(b"alpha")
+            (cache / "b.fmt").write_bytes(b"beta")
+            text = build_bundle.tex_cache_manifest(cache)
+            lines = text.splitlines()
+            self.assertEqual([line.split("  ", 1)[1] for line in lines], ["b.fmt", "bundles/a.tex"])
+            self.assertEqual(lines[0].split("  ", 1)[0], hashlib.sha256(b"beta").hexdigest())
+            self.assertTrue(text.endswith("\n"))
+
 
 if __name__ == "__main__":
     unittest.main()

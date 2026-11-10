@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Point the self-contained macOS app at `AppIcon.icns`. py2app left `CFBundleIconFile` on `PythonApplet`, so Finder showed the default applet icon.
+- Re-sign the self-contained app after the icon plist edit. Changing `Info.plist` invalidated the py2app signature, so `codesign --verify --deep --strict` failed on a fresh build.
+
 ### Added
 
 - Produce a notarized DMG in CI when signing secrets are configured: the bundle workflow imports a Developer ID Application certificate into a temporary keychain, signs the app with a hardened runtime and timestamp, notarizes and staples it, then builds/signs/notarizes/staples a UDZO disk image (with an /Applications symlink) and gates it through `spctl`; without secrets it falls back to the unsigned zip artifact.
