@@ -1,0 +1,39 @@
+{
+  "review_type": "agent_and_machine_not_independent_human",
+  "checks": [
+    {
+      "id": "closing-brace",
+      "candidate_status": "OK",
+      "reason": "",
+      "source_policy": {
+        "allowed": true,
+        "reason": "deterministic_syntax_patch",
+        "method": "close_trailing_braces"
+      },
+      "reference_match": true
+    },
+    {
+      "id": "missing-operand",
+      "candidate_status": "RETRY",
+      "reason": "parse error: LaTeXParsingError: Invalid LaTeX",
+      "source_policy": {
+        "allowed": true,
+        "reason": "unchanged_source",
+        "method": "unchanged"
+      },
+      "reference_match": null
+    },
+    {
+      "id": "unchanged-control",
+      "candidate_status": "OK",
+      "reason": "",
+      "source_policy": {
+        "allowed": true,
+        "reason": "unchanged_source",
+        "method": "unchanged"
+      },
+      "reference_match": true
+    }
+  ],
+  "additional_repairs_over_deterministic": 0
+}

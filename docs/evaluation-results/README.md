@@ -14,3 +14,5 @@
 - [2026-11-08 current-mainline integration acceptance](v47-mainline-integration-01/README.md): 473 Python tests, four JS suites, native local OCR/review boundary and fresh 35B provider measurements.
 
 - [2026-11-10 table repair contract pilot](table-repair-pilot-01/README.md): issue #25 `repair_table` + host scope guard on synthetic grids; MiniCPM-V 4.7 accepts authorized totals, MiniCPM5-1B truncates.
+
+- [2026-11-11 MiniCPM5-2B formula Skill and routing probe](minicpm5-routing-01/README.md): issue #23; three real Skill-loaded provider requests, separate zero-model host replay, and CLI routing audit. Independent human review remains pending; defaults unchanged.

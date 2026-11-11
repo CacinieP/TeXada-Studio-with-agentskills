@@ -1,0 +1,30 @@
+{
+  "doc": "minicpm5-routing-probe",
+  "source": "original synthetic text; no image/OCR claim",
+  "nodes": [
+    {
+      "id": "closing-brace",
+      "type": "formula",
+      "page": 1,
+      "data": {
+        "latex": "\\frac{a+b}{2"
+      }
+    },
+    {
+      "id": "missing-operand",
+      "type": "formula",
+      "page": 1,
+      "data": {
+        "latex": "a+b+"
+      }
+    },
+    {
+      "id": "unchanged-control",
+      "type": "formula",
+      "page": 1,
+      "data": {
+        "latex": "a+b"
+      }
+    }
+  ]
+}

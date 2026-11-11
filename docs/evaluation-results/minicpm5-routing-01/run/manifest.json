@@ -1,0 +1,75 @@
+{
+  "commit": "cb8c78230f03b659349363777180d5907380092c",
+  "model_identity": {
+    "name": "minicpm5-2b:latest",
+    "model": "minicpm5-2b:latest",
+    "modified_at": "2026-11-04T21:10:32.457835999+08:00",
+    "size": 2679710819,
+    "digest": "4534c4f133d8aff9c00e0256ee1d2699026650762236ace7307bb73e75b5fd17",
+    "details": {
+      "parent_model": "MiniCPM5-2B-Q8_0.gguf",
+      "format": "gguf",
+      "family": "llama",
+      "families": [
+        "llama"
+      ],
+      "parameter_size": "2.5B",
+      "quantization_level": "Q8_0",
+      "context_length": 131072,
+      "embedding_length": 2048,
+      "runner": "llamacpp"
+    },
+    "capabilities": [
+      "tools",
+      "thinking",
+      "completion"
+    ]
+  },
+  "python": "3.11.15",
+  "machine": "arm64",
+  "provider": {
+    "schema_version": 1,
+    "provider": "openai-compatible",
+    "model": "minicpm5-2b:latest",
+    "skill_mode": "on",
+    "skill_id": "doc-formula-verify",
+    "skill_sha256": "905b9f5977d8df8c68a21b290c76763b451c2dbdf89d1937084775ad92d76d5c",
+    "endpoint_sha256": "4886ae738074e065077acc1d98dce2b6e0d12b15ec96006c611f3b150572cdca",
+    "base_prompt_sha256": "d4902ede34c430633f80392c86a11e4d715872ac104c6ec61eff89f4c0d0a98d",
+    "system_prompt_sha256": "574becdba65ffe60c454f070f914d63a5b55dedf3a07a74e6817836aba2dfc92",
+    "user_template_sha256": "2698f0115a8ff9072634c3ada57f29999275d9673b0bf53cc5aaafab272f8342",
+    "fewshot_sha256": null,
+    "tool_sha256": {
+      "doc-formula-verify": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae"
+    },
+    "table": {
+      "system_prompt_sha256": "5efd8c48451a90a9ad4b69000e9d28429640be812e2f6200143018e708f26ed1",
+      "user_template_sha256": "d161c314e40b454a507c0e68e1d5e78a75e290ffe969a69deb03f51000d0841e",
+      "fewshot_sha256": null,
+      "skill_sha256": "ea05cfe54802f8eddf3cc650ea62cfdb0bcda63f5dc5c576de3c85f0dd0219f0",
+      "checker_sha256": "c9b6a78e6630e2e0e91463d08041476773e0e2ebdcef7410d34a39fc90d2f36b",
+      "limits": {
+        "rows": 64,
+        "cols": 32,
+        "cell": 256
+      }
+    },
+    "parameters": {
+      "temperature": 0,
+      "seed": 0,
+      "max_tokens": 1024,
+      "timeout_seconds": 120,
+      "formula_response_format": "text"
+    },
+    "implementation_sha256": {
+      "provider": "ff5ab0a45b4741ba62392d5061b5ff07b322d32a94421e4c27287b2b51de9b74",
+      "skill_loader": "7e8f9facd512002dda495686cb94cf7ffdcb835f4e28bd62da6f8621b62387e2",
+      "formula_repair": "952ddd1a752bd25b00d82e6b05cf30e5e0c04064159d4ad959ecfbbabda00bf0",
+      "table_repair": "6606298d886ffad267ef6d5e987fd3ca8340845be708dbd1edec076cc8b58a63",
+      "tex_context": "3fdada7d313e0628d9909bc6054ddbc12d0426e4d4ab50d7624c3acc5c14313f"
+    }
+  },
+  "timeout_seconds": 30,
+  "scope": "direct provider probe, not host delivery or accuracy benchmark",
+  "results_sha256": "cc15a3cf7c173b9ed79d17ac468fbc34a124ab29c30dd26e18def390be380487"
+}
