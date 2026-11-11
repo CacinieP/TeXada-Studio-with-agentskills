@@ -1,0 +1,13 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "a\u000bb"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "completion_tokens": 9
+  }
+}

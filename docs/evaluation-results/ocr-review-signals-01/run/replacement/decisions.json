@@ -1,0 +1,18 @@
+{
+  "record_sha256": "6da4f6c5ff7bdf705286918d972bfc440fcf6f8b33a952bac265372e85cb2f08",
+  "reviewer": "synthetic-protocol-test-operator",
+  "decisions": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "action": "accept",
+      "type": "text"
+    },
+    {
+      "start_line": 2,
+      "end_line": 2,
+      "action": "accept",
+      "type": "text"
+    }
+  ]
+}

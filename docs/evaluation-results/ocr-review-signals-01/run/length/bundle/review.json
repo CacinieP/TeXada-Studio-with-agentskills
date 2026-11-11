@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "NEEDS_HUMAN",
+  "record_sha256": "c1458a3f7db8cb397732708f7d5fe9e0f3c7ce954d522f1a8583224b85ee868f",
+  "layout": null,
+  "review_items": [
+    {
+      "reason": "ocr_not_ok",
+      "ocr_status": "NEEDS_HUMAN",
+      "ocr_reason": "incomplete_output"
+    },
+    {
+      "reason": "incomplete_output",
+      "scope": "record"
+    }
+  ],
+  "rejected_lines": [],
+  "diagnostic_excerpt": "partial fraction",
+  "diagnostic_excerpt_truncated": false
+}

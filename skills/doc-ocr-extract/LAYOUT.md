@@ -3,7 +3,13 @@
 `ocr_to_layout.py` is an offline converter. It neither calls a model nor changes
 an existing document or harness journal. Its input is **one** JSON record from
 `ocr_extract.py`; a multi-record JSONL stream must be split into page records.
-A record's `status=OK` only means OCR text exists, not that it is correct.
+A record's `status=OK` only means complete candidate text exists, not that it is
+correct. [Objective extraction review signals](REVIEW_SIGNALS.md) are copied into
+the conversion review bundle, together with the specific OCR cause and a bounded
+diagnostic excerpt. Non-OK records, nonempty review_items or an explicitly false/
+unknown output_complete field block layout creation even with accept decisions;
+the review file cannot approve missing or unconfirmed text into a document.
+Legacy OK archives without those new fields still use the original review gate.
 
 ## Review gate
 

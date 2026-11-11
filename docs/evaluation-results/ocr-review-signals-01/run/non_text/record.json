@@ -1,0 +1,25 @@
+{
+  "id": "non_text",
+  "status": "NEEDS_HUMAN",
+  "reason": "non_text_marker",
+  "raw_response": "first\n[Non-text]",
+  "response_truncated": false,
+  "model": "fixture-not-real-ocr",
+  "eval_count": 9,
+  "output_complete": true,
+  "finish_reason": "stop",
+  "review_items": [
+    {
+      "reason": "non_text_marker",
+      "scope": "line",
+      "line": 2,
+      "text": "[Non-text]"
+    }
+  ],
+  "elapsed_seconds": 1.9e-05,
+  "candidate_lines": [
+    "first",
+    "[Non-text]"
+  ],
+  "candidate_lines_truncated": false
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "status": "OK",
+  "record_sha256": "b591cdc3b76130518bfe3c51bb236c3af395e5aadef988d94ee47e3d49bdd2b5",
+  "layout": {
+    "doc": "protocol-openai_complete",
+    "source": "reviewed OCR text candidates",
+    "ocr_record_sha256": "b591cdc3b76130518bfe3c51bb236c3af395e5aadef988d94ee47e3d49bdd2b5",
+    "reviewer": "synthetic-protocol-test-operator",
+    "nodes": [
+      {
+        "id": "ocr-0001-0001",
+        "type": "text",
+        "page": 1,
+        "data": {
+          "text": "$x+1$"
+        },
+        "ocr_source": {
+          "record_sha256": "b591cdc3b76130518bfe3c51bb236c3af395e5aadef988d94ee47e3d49bdd2b5",
+          "start_line": 1,
+          "end_line": 1,
+          "text": [
+            "$x+1$"
+          ],
+          "reviewer": "synthetic-protocol-test-operator"
+        }
+      }
+    ]
+  },
+  "review_items": [],
+  "rejected_lines": []
+}

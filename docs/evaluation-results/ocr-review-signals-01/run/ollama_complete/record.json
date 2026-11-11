@@ -1,0 +1,16 @@
+{
+  "id": "ollama_complete",
+  "status": "OK",
+  "reason": "",
+  "raw_response": "$x+1$",
+  "response_truncated": false,
+  "model": "fixture-not-real-ocr",
+  "eval_count": 7,
+  "output_complete": true,
+  "finish_reason": null,
+  "review_items": [],
+  "elapsed_seconds": 2.1e-05,
+  "lines": [
+    "$x+1$"
+  ]
+}

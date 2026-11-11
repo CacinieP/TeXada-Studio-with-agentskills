@@ -22,3 +22,5 @@
 - [2026-11-11 operator-provided OCR source regions](ocr-source-regions-01/README.md): issue #24; PNG identity and explicit pixel boxes, with source-byte checks before harness resume. Synthetic geometry evidence; no automatic detection or human image-validation claim.
 
 - [2026-11-11 portable OCR source-region reports](ocr-region-report-01/README.md): source snapshots, boxed/zoom vector views, original OCR text, and input-bound events retained on resume. Offline report rebuild and local Chromium rendering verified on the synthetic fixture.
+
+- [2026-11-11 objective OCR review signals](ocr-review-signals-01/README.md): dedicated CLI termination, sentinel and character diagnostics propagate to a blocked review bundle. Ten offline protocol fixtures; no model inference or confidence/accuracy claim.

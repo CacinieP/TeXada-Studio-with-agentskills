@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "NEEDS_HUMAN",
+  "record_sha256": "6daf037ac8c0175a72dd3cc8d0abb03f4a97ef5370982d95741271d906bbe5e9",
+  "layout": null,
+  "review_items": [
+    {
+      "reason": "ocr_not_ok",
+      "ocr_status": "NEEDS_HUMAN",
+      "ocr_reason": "non_text_marker"
+    },
+    {
+      "reason": "non_text_marker",
+      "scope": "line",
+      "line": 2,
+      "text": "[Non-text]"
+    }
+  ],
+  "rejected_lines": [],
+  "diagnostic_excerpt": "first\n[Non-text]",
+  "diagnostic_excerpt_truncated": false
+}

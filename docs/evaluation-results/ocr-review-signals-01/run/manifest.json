@@ -1,0 +1,104 @@
+{
+  "kind": "offline_provider_protocol_fixtures_not_model_measurements",
+  "baseline_commit": "ddb2b0bc1e2e20019aaf9afadbf3bdaaba4e4406",
+  "python": "3.11.15",
+  "model_requests": 0,
+  "source_image": "samples/ocr/source-regions-01/source.png",
+  "source_image_sha256": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+  "results": [
+    {
+      "case": "openai_complete",
+      "transport": "openai",
+      "extract_exit": 0,
+      "convert_exit": 0,
+      "layout_created": true,
+      "reason": "",
+      "output_complete": true
+    },
+    {
+      "case": "ollama_complete",
+      "transport": "ollama",
+      "extract_exit": 0,
+      "convert_exit": 0,
+      "layout_created": true,
+      "reason": "",
+      "output_complete": true
+    },
+    {
+      "case": "length",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "incomplete_output",
+      "output_complete": false
+    },
+    {
+      "case": "unfinished",
+      "transport": "ollama",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "incomplete_output",
+      "output_complete": false
+    },
+    {
+      "case": "non_text",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "non_text_marker",
+      "output_complete": true
+    },
+    {
+      "case": "replacement",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "replacement_character",
+      "output_complete": true
+    },
+    {
+      "case": "missing_completion",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "completion_unconfirmed",
+      "output_complete": null
+    },
+    {
+      "case": "excerpt_only",
+      "transport": "openai",
+      "extract_exit": 0,
+      "convert_exit": 0,
+      "layout_created": true,
+      "reason": "",
+      "output_complete": true
+    },
+    {
+      "case": "control",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "control_character",
+      "output_complete": true
+    },
+    {
+      "case": "refusal",
+      "transport": "openai",
+      "extract_exit": 1,
+      "convert_exit": 1,
+      "layout_created": false,
+      "reason": "refused_output",
+      "output_complete": true
+    }
+  ],
+  "implementation_sha256": {
+    "skills/doc-ocr-extract/scripts/ocr_extract.py": "4a8a952311cbc8831a481211bfc48a73378f14a5f3f24fb6a10076bba7decbf6",
+    "skills/doc-ocr-extract/scripts/ocr_to_layout.py": "14246ecf76030b3758e420c951277a5c487d6aef7e08f2e7859f3edbb69cda3a"
+  }
+}
