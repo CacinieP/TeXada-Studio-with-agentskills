@@ -7,12 +7,13 @@
 输入（二选一）:
   - 命令行参数: ocr_extract.py image.png
   - stdin JSONL: {"id": "img-01", "image": "<base64 PNG>"}  每行一条
-输出: JSONL  {"id", "status", "lines", "raw_response", "response_truncated",
+输出: JSONL  {"id", "status", "lines" 或诊断 "candidate_lines", "review_items",
+             "raw_response", "response_truncated", "output_complete", "finish_reason",
              "model", "eval_count", "elapsed_seconds", "reason"}
 
 约定（与 doc-formula-verify/scripts/verify.py 一致）:
   - OK           模型返回了可审阅的非空文本行（候选质量由人工判断）
-  - NEEDS_HUMAN  模型没有给出可用的文本内容（空响应、无文本图）
+  - NEEDS_HUMAN  空/非文本、截断/结束状态未知、拒绝或客观异常字符等需人工处理
   - NEEDS_ENV    端点、网络、依赖或图片读取失败（环境问题，不视为候选）
 
 预处理: 原始字节直传（raw 保色）。二值化/放大在消融中有已知信息损失，
@@ -30,6 +31,8 @@ import urllib.request
 
 EXIT_OK = 0
 RESPONSE_EXCERPT_LIMIT = 1024
+MAX_LINES = 4096
+MAX_LINE_CHARS = 32768
 DEFAULT_BASE = os.environ.get("OCR_BASE", "http://127.0.0.1:11434").rstrip("/")
 DEFAULT_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 # 统一协议面：默认走 OpenAI 兼容 /v1/chat/completions（与修复线一致），
@@ -89,26 +92,75 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
     except Exception:
         return "NEEDS_ENV", "provider_error", {}
 
+    if not isinstance(body, dict):
+        return "NEEDS_ENV", "bad_response_shape", {}
+    refusal = False
     if transport == "openai":
         try:
-            content = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
+            choice = body["choices"][0]
+            message = choice["message"]
+            content = message.get("content")
+            finish = choice.get("finish_reason")
+            refusal = bool(message.get("refusal")) or finish == "content_filter"
+        except (KeyError, IndexError, TypeError, AttributeError):
             return "NEEDS_ENV", "bad_response_shape", {}
-        counter = (body.get("usage") or {}).get("completion_tokens")
+        usage = body.get("usage")
+        counter = usage.get("completion_tokens") if isinstance(usage, dict) else None
+        complete = True if finish == "stop" else False if finish == "length" else None
     else:
-        content = (body.get("message") or {}).get("content")
+        message = body.get("message")
+        if not isinstance(message, dict):
+            return "NEEDS_ENV", "bad_response_shape", {}
+        content = message.get("content")
         counter = body.get("eval_count")
-    if not isinstance(content, str):
+        finish = body.get("done_reason")
+        complete = (False if finish == "length" or body.get("done") is False else
+                    True if body.get("done") is True and finish in (None, "stop") else None)
+    if finish is not None and not isinstance(finish, str):
         return "NEEDS_ENV", "bad_response_shape", {}
+    if not isinstance(content, str):
+        if refusal and content is None:
+            content = ""
+        else:
+            return "NEEDS_ENV", "bad_response_shape", {}
+    if type(counter) is not int or counter < 0:
+        counter = None
     lines = [line.strip() for line in content.splitlines() if line.strip()]
+    items = []
+    if refusal:
+        items.append({"reason": "refused_output", "scope": "record"})
+    elif complete is False:
+        items.append({"reason": "incomplete_output", "scope": "record"})
+    elif complete is None:
+        items.append({"reason": "completion_unconfirmed", "scope": "record"})
     if not lines:
-        return "NEEDS_HUMAN", "no_text", {"raw_response": "", "response_truncated": False,
-                                          "model": model, "eval_count": counter,
-                                          "elapsed_seconds": round(time.monotonic() - started, 6)}
+        items.append({"reason": "no_text", "scope": "record"})
+    over_limit = len(lines) > MAX_LINES or any(len(line) > MAX_LINE_CHARS for line in lines)
+    if over_limit:
+        items.append({"reason": "text_limits_exceeded", "scope": "record"})
+    if any(ord(char) < 32 and char not in "\t\r\n" or ord(char) == 127 for char in content):
+        items.append({"reason": "control_character", "scope": "record"})
+    for number, line in enumerate(lines[:MAX_LINES], 1):
+        reasons = []
+        if line.casefold() in {"[non-text]", "[no text]"}:
+            reasons.append("non_text_marker")
+        if "\ufffd" in line:
+            reasons.append("replacement_character")
+        for reason in reasons:
+            items.append({"reason": reason, "scope": "line", "line": number,
+                          "text": line[:RESPONSE_EXCERPT_LIMIT]})
     excerpt, truncated = _excerpt(content)
-    return "OK", "", {"lines": lines, "raw_response": excerpt, "response_truncated": truncated,
-                      "model": model, "eval_count": counter,
-                      "elapsed_seconds": round(time.monotonic() - started, 6)}
+    payload = {"raw_response": excerpt, "response_truncated": truncated,
+               "model": model, "eval_count": counter, "output_complete": complete,
+               "finish_reason": finish, "review_items": items,
+               "elapsed_seconds": round(time.monotonic() - started, 6)}
+    if items:
+        # Partial/suspect text is diagnostic material, never success-path lines.
+        payload["candidate_lines"] = [line[:MAX_LINE_CHARS] for line in lines[:MAX_LINES]]
+        payload["candidate_lines_truncated"] = over_limit
+        return "NEEDS_HUMAN", items[0]["reason"], payload
+    payload["lines"] = lines
+    return "OK", "", payload
 
 
 def run_record(record, *, model: str, base: str, prompt: str,

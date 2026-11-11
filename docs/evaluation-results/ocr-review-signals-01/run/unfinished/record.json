@@ -1,0 +1,22 @@
+{
+  "id": "unfinished",
+  "status": "NEEDS_HUMAN",
+  "reason": "incomplete_output",
+  "raw_response": "partial",
+  "response_truncated": false,
+  "model": "fixture-not-real-ocr",
+  "eval_count": null,
+  "output_complete": false,
+  "finish_reason": null,
+  "review_items": [
+    {
+      "reason": "incomplete_output",
+      "scope": "record"
+    }
+  ],
+  "elapsed_seconds": 2.2e-05,
+  "candidate_lines": [
+    "partial"
+  ],
+  "candidate_lines_truncated": false
+}

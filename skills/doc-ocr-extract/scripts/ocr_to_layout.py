@@ -97,6 +97,33 @@ def _validate_bbox(bbox, image):
         raise ValueError("bbox_outside_source_image")
 
 
+def _ocr_review_items(record):
+    """Copy only bounded, objective OCR diagnostics; never import confidence."""
+    items = record.get("review_items", [])
+    if not isinstance(items, list) or len(items) > MAX_LINES + 8:
+        raise ValueError("invalid_ocr_review_items")
+    result = []
+    for item in items:
+        if (not isinstance(item, dict) or not isinstance(item.get("reason"), str)
+                or not item["reason"].strip() or len(item["reason"]) > 200):
+            raise ValueError("invalid_ocr_review_item")
+        scope = item.get("scope", "line" if "line" in item else "record")
+        if scope not in ("record", "line"):
+            raise ValueError("invalid_ocr_review_scope")
+        copied = {"reason": item["reason"], "scope": scope}
+        if scope == "line":
+            number = item.get("line")
+            if type(number) is not int or not 1 <= number <= MAX_LINES:
+                raise ValueError("invalid_ocr_review_line")
+            copied["line"] = number
+        if "text" in item:
+            if not isinstance(item["text"], str) or len(item["text"]) > MAX_LINE_CHARS:
+                raise ValueError("invalid_ocr_review_text")
+            copied["text"] = item["text"]
+        result.append(copied)
+    return result
+
+
 def convert(record, review=None, *, doc, page=1, source_image=None):
     """Return candidate layout only when every OCR line has a valid decision.
 
@@ -125,8 +152,39 @@ def convert(record, review=None, *, doc, page=1, source_image=None):
             raise ValueError("source_image_required_for_regions")
         if source_image is not None and review.get("source_image_sha256") != source_image["sha256"]:
             raise ValueError("stale_source_image_review")
-    if record.get("status") != "OK":
-        result["review_items"] = [{"reason": "ocr_not_ok", "ocr_status": record.get("status")}]
+    signals = _ocr_review_items(record)
+    if "output_complete" in record and record["output_complete"] is not None and type(record["output_complete"]) is not bool:
+        raise ValueError("invalid_ocr_completion_metadata")
+    if "candidate_lines_truncated" in record and type(record["candidate_lines_truncated"]) is not bool:
+        raise ValueError("invalid_ocr_diagnostic_metadata")
+    finish = record.get("finish_reason")
+    if finish is not None and not isinstance(finish, str):
+        raise ValueError("invalid_ocr_finish_reason")
+    derived = []
+    if "output_complete" in record and record["output_complete"] is not True:
+        derived.append("incomplete_output" if record["output_complete"] is False else "completion_unconfirmed")
+    if record.get("candidate_lines_truncated") is True:
+        derived.append("text_limits_exceeded")
+    if finish == "length":
+        derived.append("incomplete_output")
+    elif finish == "content_filter":
+        derived.append("refused_output")
+    elif finish not in (None, "stop"):
+        derived.append("completion_unconfirmed")
+    for cause in derived:
+        if not any(item["reason"] == cause for item in signals):
+            signals.append({"reason": cause, "scope": "record"})
+    if record.get("status") != "OK" or signals:
+        reason = record.get("reason")
+        summary = {"reason": "ocr_not_ok" if record.get("status") != "OK" else "ocr_review_required",
+                   "ocr_status": record.get("status")}
+        if isinstance(reason, str) and reason:
+            summary["ocr_reason"] = reason[:200]
+        result["review_items"] = [summary, *signals]
+        excerpt = record.get("raw_response")
+        if isinstance(excerpt, str):
+            result["diagnostic_excerpt"] = excerpt[:1024]
+            result["diagnostic_excerpt_truncated"] = len(excerpt) > 1024 or record.get("response_truncated") is True
         return result
     lines = record.get("lines")
     if (not isinstance(lines, list) or not 1 <= len(lines) <= MAX_LINES

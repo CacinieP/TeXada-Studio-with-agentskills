@@ -1,0 +1,13 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "partial fraction"
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "completion_tokens": 9
+  }
+}

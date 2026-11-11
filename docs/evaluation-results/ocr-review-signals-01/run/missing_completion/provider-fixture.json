@@ -1,0 +1,12 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "unconfirmed"
+      }
+    }
+  ],
+  "usage": {
+    "completion_tokens": 9
+  }
+}

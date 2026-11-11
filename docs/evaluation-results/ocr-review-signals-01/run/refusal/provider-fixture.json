@@ -1,0 +1,14 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": null,
+        "refusal": "fixture refusal"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "completion_tokens": 9
+  }
+}

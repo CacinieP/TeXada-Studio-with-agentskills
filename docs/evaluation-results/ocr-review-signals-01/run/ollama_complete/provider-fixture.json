@@ -1,0 +1,7 @@
+{
+  "message": {
+    "content": "$x+1$"
+  },
+  "done": true,
+  "eval_count": 7
+}
