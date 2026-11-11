@@ -1,0 +1,9 @@
+{
+  "baseline_commit": "09b9b27e1ea937a878aa135356ff39f5cd137764",
+  "python": "3.11.15",
+  "sha256": {
+    "harness/docforensics/pipeline.py": "02c042963b39d258823c699b1f18eed4423c80ee757ce7aba07279a188df70b9",
+    "harness/docforensics/__main__.py": "0ea6e2c7cf188691c60747abe6fea5003c977032cc4b3395b8c81b1795b60a40",
+    "harness/docforensics/source_report.py": "c1aa65f24d5ec8bf2a91b921e1a8b9f84977d7864a7cfeb3c3cfee033d43372d"
+  }
+}

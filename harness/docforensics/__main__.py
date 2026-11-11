@@ -10,7 +10,7 @@ import re
 import sys
 import uuid
 
-from . import pipeline, state
+from . import pipeline, source_report, state
 
 DEFAULT_REPAIR_MODEL = "minicpm-v4.7-35b-a3b-q4"
 
@@ -148,6 +148,26 @@ def _block(value, language="json"):
     return [fence + language, text, fence, ""]
 
 
+def _source_region_section(run_dir, payload, shown_images):
+    lines = ["#### 来源图与区域（操作者标注）", "",
+             "坐标来自操作者标注；范围和来源哈希通过校验不代表区域内容已核验。", ""]
+    try:
+        assets = source_report.report_assets(run_dir, payload)
+    except (OSError, ValueError):
+        return lines + ["⚠️ 来源图片或区域证据不可用、缺失或摘要不匹配；未生成预览。", ""]
+    lines += [f"[原图]({assets['image']}) · [带框标注图]({assets['annotated']}) · "
+              f"[区域放大图]({assets['zoom']})", ""]
+    if assets["image"] not in shown_images:
+        lines += [f"![来源原图]({assets['image']})", ""]
+        shown_images.add(assets["image"])
+    lines += _block({key: payload.get(key) for key in
+                     ("image_sha256", "bbox", "coordinate_system", "annotation_source", "page", "reviewer")})
+    text = payload.get("source_text")
+    if isinstance(text, list) and all(isinstance(line, str) for line in text):
+        lines += ["对应 OCR 原文（不是候选修订）：", *_block("\n".join(text), "text")]
+    return lines
+
+
 def write_run_report(run_dir, provider, events, run_id):
     current = [e for e in events if e.get("run_id") == run_id]
     lines = ["# 质检报告", "", f"运行：`{run_id}`", f"提供方：{provider.name}", "",
@@ -173,6 +193,7 @@ def write_run_report(run_dir, provider, events, run_id):
     if any(e.get("action") == "RUN_START" for e in current) and not any(e.get("action") == "RUN_END" for e in current):
         lines += ["本次运行没有结束记录；以下展示已保存的部分证据，不表示全部节点已经处理。", ""]
     docs = list(dict.fromkeys(e["doc"] for e in current if e.get("doc")))
+    shown_images = set()
     for doc in docs:
         scoped = [e for e in current if e.get("doc") == doc]
         final = {}
@@ -196,8 +217,20 @@ def write_run_report(run_dir, provider, events, run_id):
                                  and e.get("run_id") == event.get("reused_run_id")
                                  and e.get("input_sha256") == event.get("input_sha256")
                                  and e.get("context_sha256") == event.get("context_sha256")), event)
+            source_event = next((e for e in reversed(events) if e.get("action") == "SOURCE_REGION"
+                                 and event.get("input_sha256") and event.get("context_sha256")
+                                 and (e.get("run_id") == run_id or
+                                      (event.get("action") == "SKIP" and event.get("reused_run_id") is not None
+                                       and e.get("run_id") == event["reused_run_id"]))
+                                 and e.get("doc") == doc and e.get("node_id") == nid
+                                 and e.get("input_sha256") == event.get("input_sha256")
+                                 and e.get("context_sha256") == event.get("context_sha256")), None)
+            if source_event is not None:
+                lines += _source_region_section(run_dir, source_event.get("source_region"), shown_images)
             if terminal.get("repaired"):
-                lines += [f"证据：{terminal.get('evidence') or '⚠️ 缺失'}", "",
+                evidence = terminal.get("evidence") or ("未提供；来源原图与标注区域见上方" if source_event else "⚠️ 缺失")
+                label = "独立裁剪证据" if source_event else "证据"
+                lines += [f"{label}：{evidence}", "",
                           "以下为通过检查的候选，未写回源文件。", ""]
                 if "original_rows" in terminal and "candidate_rows" in terminal:
                     original = json.dumps(terminal["original_rows"], ensure_ascii=False, indent=2).splitlines()
@@ -219,8 +252,11 @@ def write_run_report(run_dir, provider, events, run_id):
         for nid in unfinished:
             history = [e for e in scoped if e.get("node_id") == nid]
             lines += [f"### 节点 {nid}", "",
-                      "未完成：已保存事件中没有终态。不计入 OK 或 NEEDS_HUMAN，也不推断请求或修复成功。", "",
-                      "#### 已保存的检查与候选记录", "", *_block(history)]
+                      "未完成：已保存事件中没有终态。不计入 OK 或 NEEDS_HUMAN，也不推断请求或修复成功。", ""]
+            source_event = next((e for e in reversed(history) if e.get("action") == "SOURCE_REGION"), None)
+            if source_event is not None:
+                lines += _source_region_section(run_dir, source_event.get("source_region"), shown_images)
+            lines += ["#### 已保存的检查与候选记录", "", *_block(history)]
     path = os.path.join(run_dir, "report.md")
     with open(path, "w", encoding="utf-8") as stream:
         stream.write("\n".join(lines))

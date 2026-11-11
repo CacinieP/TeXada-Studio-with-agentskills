@@ -22,7 +22,7 @@ PYTHONPATH=harness .venv/bin/python -m docforensics run samples \
 - 节点 `id` 在文档内唯一。公式用 `type="formula"`、`data.latex`；表格用 `type="table"`、`data.rows` 和可选 `data.expected`。
 - 其他节点类型按 `pass-through` 记录，并标记未检查；其 `OK` 不是公式或表格验证结论。
 - 可选 `data.crop` 相对当前工作目录解析，仓库样本应从仓库根目录运行。已有 crop 的内容哈希副本可进入报告，文本模型不会查看该图片。
-- OCR 转换器可另外绑定操作者标注的原图区域：`source_image` 指向样本目录内的 `source.png`，节点 `ocr_source.region` 保存像素框。管线在检查或复用节点前核对原图哈希、尺寸和坐标范围；图片变化或缺失时拒绝运行。此信息不是 `data.crop`，不代表自动检测或图像内容验收，详见[来源区域契约](../skills/doc-ocr-extract/LAYOUT.md#optional-operator-provided-source-regions)。
+- OCR 转换器可另外绑定操作者标注的原图区域：`source_image` 指向样本目录内的 `source.png`，节点 `ocr_source.region` 保存像素框。管线在检查或复用节点前核对原图哈希、尺寸和坐标范围；图片变化或缺失时拒绝运行。报告将原图快照及区域预览保存在运行目录，提供原图、带框标注图、放大图和 OCR 原文；来源事件绑定节点输入、上下文及 revision，续跑同样保留。这些预览不是独立 `data.crop` 或图像内容验收，详见[来源区域契约](../skills/doc-ocr-extract/LAYOUT.md#optional-operator-provided-source-regions)。
 
 ```text
 state/quickstart/
@@ -30,6 +30,8 @@ state/quickstart/
 ├── state.jsonl    # 追加保存各轮事件
 └── crops/         # 可用 crop 的内容哈希副本
 ```
+
+带 OCR 区域来源的运行还生成 `sources/`，包含哈希命名的原图 PNG 和带框/放大 SVG。移动或分享报告时保留整个运行目录；报告重建只读取这些快照，不要求原样本仍在。快照缺失或摘要不符时显示不可用，不生成预览。
 
 样本 crop 为占位图，不是识别证据。CLI 不运行 Studio 的 TeX 源码扫描器或整篇编译；布局树需由调用方提供。退出码 `0` 表示管线完成，`2` 表示参数、输入或配置错误；节点是否通过以报告为准。
 

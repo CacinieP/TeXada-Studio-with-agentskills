@@ -1,0 +1,12 @@
+[
+  {
+    "case": "first",
+    "exit_code": 0,
+    "stdout": "source-region-fixture: OK=1 NEEDS_HUMAN=0\nreport: docs/evaluation-results/ocr-region-report-01/host-run/report.md\n"
+  },
+  {
+    "case": "resume",
+    "exit_code": 0,
+    "stdout": "source-region-fixture: OK=1 NEEDS_HUMAN=0\nreport: docs/evaluation-results/ocr-region-report-01/host-run/report.md\n"
+  }
+]
