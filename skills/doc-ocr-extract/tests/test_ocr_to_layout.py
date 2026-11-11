@@ -182,6 +182,20 @@ class LayoutTest(unittest.TestCase):
             text = next(e for e in events if e['action'] == 'TERMINAL' and e['node_id'] == 'ocr-0002-0002')
             self.assertFalse(text['validated'])
             self.assertFalse(any(e['action'] == 'PROVIDER_START' for e in events))
+            # A new OCR record with identical formulas must not reuse evidence
+            # from the previous source. Re-review binds every node to its digest.
+            changed = {**source, 'id': 'different-source-page'}
+            rebound = converter.convert(changed, review(changed), doc='reviewed-ocr')
+            (sample / 'layout.json').write_text(json.dumps(rebound['layout']))
+            third = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(third.returncode, 0, third.stderr)
+            events = [json.loads(line) for line in (state / 'state.jsonl').read_text().splitlines()]
+            run_id = next(e['run_id'] for e in reversed(events) if e['action'] == 'RUN_START')
+            current = [e for e in events if e.get('run_id') == run_id]
+            self.assertFalse(any(e['action'] == 'SKIP' for e in current))
+            terminals = [e for e in current if e['action'] == 'TERMINAL']
+            self.assertEqual(len(terminals), 4)
+            self.assertTrue(all(e['revision'] == 1 for e in terminals))
 
 
 if __name__ == '__main__':
