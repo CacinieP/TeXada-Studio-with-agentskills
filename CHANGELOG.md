@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Keep a failed Tectonic run in the preview and repair logs when its output is not valid text for the process locale. Non-UTF-8 bytes are replaced instead of aborting the request with `UnicodeDecodeError` or HTTP 500.
 - Point the self-contained macOS app at `AppIcon.icns`. py2app left `CFBundleIconFile` on `PythonApplet`, so Finder showed the default applet icon.
 - Re-sign the self-contained app after the icon plist edit. Changing `Info.plist` invalidated the py2app signature, so `codesign --verify --deep --strict` failed on a fresh build.
 

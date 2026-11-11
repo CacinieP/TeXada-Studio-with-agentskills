@@ -135,6 +135,69 @@ class AppTest(unittest.TestCase):
                 self.assertIsNone(response.json()["png"])
                 self.assertTrue(response.json()["log"])
 
+    def test_timeout_preserves_partial_compiler_diagnostics(self):
+        timeout = subprocess.TimeoutExpired("tectonic", 120, output=b"running TeX",
+                                            stderr="中文诊断".encode("utf-8") + b"\xff")
+        with patch.object(studio.subprocess, "run", side_effect=timeout):
+            response = self.client.post("/api/studio/preview", params=self.auth,
+                                        json={"name": "example.tex", "content": "synthetic"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["compile_ok"])
+        self.assertIn("120 秒", body["log"])
+        self.assertIn("running TeX", body["log"])
+        self.assertIn("中文诊断\ufffd", body["log"])
+
+    def test_non_utf8_compiler_output_stays_in_the_preview_log(self):
+        stderr = ("Runaway argument?\n! File ended while scanning use of \\frac .\n"
+                  "\\section {二项式展开}\n").encode("utf-8") + b"\xff"
+
+        def run(command, **kwargs):
+            self.assertTrue(kwargs.get("capture_output"))
+            self.assertFalse(kwargs.get("text"))
+            self.assertFalse(kwargs.get("universal_newlines"))
+            self.assertIsNone(kwargs.get("encoding"))
+            self.assertIsNone(kwargs.get("errors"))
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=stderr)
+
+        with patch.object(studio.subprocess, "run", side_effect=run):
+            response = self.client.post("/api/studio/preview", params=self.auth,
+                                        json={"name": "example.tex", "content": "synthetic"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["ok"])
+        self.assertFalse(body["compile_ok"])
+        self.assertIn("File ended while scanning use of \\frac", body["log"])
+        self.assertIn("二项式展开", body["log"])
+        self.assertIn("\ufffd", body["log"])
+
+    def test_failed_compile_log_reaches_the_repair_job(self):
+        job_id = "e" * 32
+        failure = {"ok": False, "compile_ok": False, "log": "! File ended while scanning use of \\frac ."}
+        success = {"ok": True, "compile_ok": True, "log": "noise that must stay out of the job log", "png": None}
+
+        class Provider:
+            name = "test"
+            model = "test-model"
+
+            def fingerprint(self):
+                return {"kind": "test"}
+
+        with patch.object(studio, "STUDIO_STATE", str(self.base / "jobs")), \
+                patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None, "name": "example.tex",
+                                                   "created_at": 1, "planner_mode": False, "skill_selection": False}}, clear=True), \
+                patch.object(studio, "_new_provider", return_value=Provider()), \
+                patch.object(studio, "_apply_fixes", return_value=("synthetic", [])), \
+                patch.object(studio, "_analyze", return_value=[]), \
+                patch.object(studio, "_studio_compile", side_effect=[failure, success]):
+            studio._studio_job("example.tex", "synthetic", job_id)
+            loaded = studio._read_job(job_id)
+        self.assertIsNone(loaded.get("error"))
+        self.assertTrue(loaded["done"])
+        self.assertIn("! File ended while scanning use of \\frac .", loaded["log"])
+        self.assertNotIn("noise that must stay out of the job log", loaded["log"])
+        self.assertNotIn("UnicodeDecodeError", "\n".join(loaded["log"]))
+
     def test_missing_preview_converter_is_reported(self):
         output = Path(studio.STUDIO_STATE) / "example" / "test"
         output.mkdir(parents=True)

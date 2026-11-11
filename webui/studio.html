@@ -402,7 +402,7 @@ $("btnFix").onclick = async () => {
     while (!done) {
       await new Promise(r => setTimeout(r, 1200));
       const s = await j(`/api/studio/fixstatus?token=${T}&id=${d0.job}`);
-      $("joblog").innerHTML = s.log.map(lineStyle).join("<br>");
+      $("joblog").innerHTML = renderJobLog(s);
       $("joblog").scrollTop = 1e9;
       done = s.done;
       if(s.done&&s.error){toast('修复任务未完成：'+s.error,true);$('joblog').innerHTML+=("<br>"+lineStyle(s.error));toggleBottomPanel('log',true,$('btnFix'));return;}
@@ -416,6 +416,17 @@ $("btnFix").onclick = async () => {
     $("btnFix").disabled = false; setToolLabel("btnFix","修复候选"); updateSaveState(); loadJobs().catch(() => {});
   }
 };
+
+function renderJobLog(status) {
+  const recent = (status.log || []).map(lineStyle).join("<br>");
+  if (!status.done || !status.result) return recent;
+  const diagnostics = [
+    ["修复前编译诊断", status.result.compile_before],
+    ["修复后编译诊断", status.result.compile_after],
+  ].filter(([, outcome]) => outcome && !(outcome.compile_ok ?? outcome.ok) && outcome.log)
+    .map(([label, outcome]) => `<details><summary>${label}</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(outcome.log)}</pre></details>`);
+  return recent + diagnostics.join("");
+}
 
 function lineStyle(l) {
   if (/拒绝|失败|出错|✗/.test(l)) return `<span class="err">${esc(l)}</span>`;
@@ -703,7 +714,7 @@ async function loadJobs() {
 async function restoreJob(id,name) {
   if (busy) return;
   const d = await j(`/api/studio/fixstatus?token=${encodeURIComponent(T)}&id=${encodeURIComponent(id)}`);
-  $("joblog").innerHTML=(d.log||[]).map(lineStyle).join('<br>');closeDialog('historyDialog');toggleBottomPanel('log',true,$('btnHistory'));
+  $("joblog").innerHTML=renderJobLog(d);closeDialog('historyDialog');toggleBottomPanel('log',true,$('btnHistory'));
   if (!d.done) return toast("此任务仍在运行，完成后可重新打开记录。");
   if (d.error) return toast(d.error,true);
   if (!d.result) return toast("此记录没有可恢复的候选。");
