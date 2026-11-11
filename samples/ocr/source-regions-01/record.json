@@ -1,0 +1,8 @@
+{
+  "status": "OK",
+  "id": "synthetic-known-glyphs",
+  "model": "fixture-not-ocr",
+  "lines": [
+    "$x+1$"
+  ]
+}

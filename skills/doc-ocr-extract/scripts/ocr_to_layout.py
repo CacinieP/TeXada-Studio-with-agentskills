@@ -5,7 +5,9 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import struct
 import sys
+import zlib
 
 MAX_BYTES = 4 * 1024 * 1024
 MAX_LINES = 4096
@@ -56,7 +58,46 @@ def _table(lines, separator):
     return rows
 
 
-def convert(record, review=None, *, doc, page=1):
+def read_source_image(path):
+    """Bind bounded PNG bytes and IHDR dimensions, without decoding/cropping.
+
+    IHDR validation is not a full image-integrity or pixel-content check.
+    """
+    with open(path, "rb") as stream:
+        image = stream.read(24 * 1024 * 1024 + 1)
+    if len(image) > 24 * 1024 * 1024:
+        raise ValueError("source_image_too_large")
+    if (len(image) < 33 or image[:8] != b"\x89PNG\r\n\x1a\n"
+            or image[8:16] != b"\x00\x00\x00\x0dIHDR"
+            or zlib.crc32(image[12:29]) != struct.unpack(">I", image[29:33])[0]):
+        raise ValueError("source_image_requires_png_ihdr")
+    width, height = struct.unpack(">II", image[16:24])
+    metadata = {"sha256": hashlib.sha256(image).hexdigest(), "width": width,
+                "height": height, "format": "png", "file": "source.png"}
+    _validate_image(metadata)
+    return image, metadata
+
+
+def _validate_image(image):
+    if (not isinstance(image, dict) or image.get("format") != "png"
+            or image.get("file") != "source.png"
+            or not isinstance(image.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", image["sha256"])
+            or any(type(image.get(key)) is not int or not 1 <= image[key] <= 32768
+                   for key in ("width", "height"))):
+        raise ValueError("invalid_source_image_metadata")
+
+
+def _validate_bbox(bbox, image):
+    if (not isinstance(bbox, list) or len(bbox) != 4
+            or any(type(value) is not int for value in bbox)):
+        raise ValueError("bbox_requires_four_integer_pixels")
+    x0, y0, x1, y1 = bbox
+    if not (0 <= x0 < x1 <= image["width"] and 0 <= y0 < y1 <= image["height"]):
+        raise ValueError("bbox_outside_source_image")
+
+
+def convert(record, review=None, *, doc, page=1, source_image=None):
     """Return candidate layout only when every OCR line has a valid decision.
 
     Review is an operator attestation, not proof of a person's identity or of
@@ -71,6 +112,19 @@ def convert(record, review=None, *, doc, page=1):
     digest = record_digest(record)
     result = {"schema_version": 1, "status": "NEEDS_HUMAN", "record_sha256": digest,
               "layout": None, "review_items": [], "rejected_lines": []}
+    if source_image is not None:
+        _validate_image(source_image)
+        result["source_image"] = dict(source_image)
+    if review is not None:
+        if not isinstance(review, dict):
+            raise ValueError("invalid_or_stale_review")
+        decisions = review.get("decisions")
+        has_regions = "source_image_sha256" in review or (isinstance(decisions, list) and any(
+            isinstance(item, dict) and "bbox" in item for item in decisions))
+        if source_image is None and has_regions:
+            raise ValueError("source_image_required_for_regions")
+        if source_image is not None and review.get("source_image_sha256") != source_image["sha256"]:
+            raise ValueError("stale_source_image_review")
     if record.get("status") != "OK":
         result["review_items"] = [{"reason": "ocr_not_ok", "ocr_status": record.get("status")}]
         return result
@@ -101,12 +155,20 @@ def convert(record, review=None, *, doc, page=1):
             raise ValueError("overlapping_review_ranges")
         covered |= indices
         selected = lines[start - 1:end]
+        if "bbox" in decision:
+            _validate_bbox(decision["bbox"], source_image)
         if action == "reject":
             reason = decision.get("reason")
             if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
                 raise ValueError("rejection_reason_required")
             result["rejected_lines"].append({"start_line": start, "end_line": end,
                                              "text": selected, "reason": reason})
+            if "bbox" in decision:
+                result["rejected_lines"][-1]["bbox"] = list(decision["bbox"])
+            continue
+        if source_image is not None and "bbox" not in decision:
+            result["review_items"].append({"start_line": start, "end_line": end,
+                                            "text": selected, "reason": "source_region_required"})
             continue
         kind = decision.get("type")
         if kind not in ("formula", "table", "text"):
@@ -127,6 +189,11 @@ def convert(record, review=None, *, doc, page=1):
         nodes.append({"id": f"ocr-{start:04d}-{end:04d}", "type": kind, "page": page, "data": data,
                       "ocr_source": {"record_sha256": digest, "start_line": start, "end_line": end,
                                      "text": selected, "reviewer": review["reviewer"]}})
+        if source_image is not None:
+            nodes[-1]["ocr_source"]["region"] = {
+                "image_sha256": source_image["sha256"], "bbox": list(decision["bbox"]),
+                "coordinate_system": "top_left_pixel_xyxy_half_open",
+                "annotation_source": "operator_provided"}
     result["review_items"].extend({"line": i, "text": text, "reason": "unreviewed"}
                                   for i, text in enumerate(lines, 1) if i not in covered)
     if not nodes and not result["review_items"]:
@@ -135,6 +202,8 @@ def convert(record, review=None, *, doc, page=1):
         result.update(status="OK", layout={"doc": doc, "source": "reviewed OCR text candidates",
                       "ocr_record_sha256": digest, "reviewer": review["reviewer"],
                       "nodes": sorted(nodes, key=lambda node: node["ocr_source"]["start_line"])})
+        if source_image is not None:
+            result["layout"]["source_image"] = dict(source_image)
     return result
 
 
@@ -161,6 +230,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", help="one OCR JSON record (a single JSONL record is also valid)")
     parser.add_argument("--review", help="hash-bound operator review JSON; omit to generate a review template")
+    parser.add_argument("--source-image", type=Path, help="optional source PNG; enables hash-bound operator pixel regions")
     parser.add_argument("--doc", required=True, help="stable ASCII document id")
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--output-dir", type=Path, required=True, help="new sample directory; never overwritten")
@@ -168,14 +238,19 @@ def main(argv=None):
     try:
         record = _load(args.record)
         review = _load(args.review) if args.review else None
-        result = convert(record, review, doc=args.doc, page=args.page)
+        image_bytes, image_metadata = read_source_image(args.source_image) if args.source_image else (None, None)
+        result = convert(record, review, doc=args.doc, page=args.page, source_image=image_metadata)
         args.output_dir.mkdir(parents=True, exist_ok=False)
         def save(name, value):
             (args.output_dir / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         save("review.json", result)
+        if image_bytes is not None:
+            (args.output_dir / "source.png").write_bytes(image_bytes)
         if review is None:
-            save("review-template.json", {"record_sha256": result["record_sha256"],
-                                          "reviewer": "", "decisions": []})
+            template = {"record_sha256": result["record_sha256"], "reviewer": "", "decisions": []}
+            if image_metadata is not None:
+                template["source_image_sha256"] = image_metadata["sha256"]
+            save("review-template.json", template)
         if result["layout"] is not None:
             save("layout.json", result["layout"])
         print(json.dumps({"status": result["status"], "review_items": len(result["review_items"]),

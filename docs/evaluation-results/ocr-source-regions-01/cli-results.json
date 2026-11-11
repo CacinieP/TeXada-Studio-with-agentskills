@@ -1,0 +1,20 @@
+[
+  {
+    "case": "first",
+    "exit_code": 0,
+    "stdout": "source-region-fixture: OK=1 NEEDS_HUMAN=0\nreport: docs/evaluation-results/ocr-source-regions-01/host-run/report.md\n",
+    "stderr": ""
+  },
+  {
+    "case": "resume",
+    "exit_code": 0,
+    "stdout": "source-region-fixture: OK=1 NEEDS_HUMAN=0\nreport: docs/evaluation-results/ocr-source-regions-01/host-run/report.md\n",
+    "stderr": ""
+  },
+  {
+    "case": "changed-image",
+    "exit_code": 2,
+    "stdout": "",
+    "stderr": "invalid input or unavailable run directory: ValueError\n"
+  }
+]

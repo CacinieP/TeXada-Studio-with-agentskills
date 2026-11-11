@@ -18,3 +18,5 @@
 - [2026-11-11 MiniCPM5-2B formula Skill and routing probe](minicpm5-routing-01/README.md): issue #23; three real Skill-loaded provider requests, separate zero-model host replay, and CLI routing audit. Independent human review remains pending; defaults unchanged.
 
 - [2026-11-11 reviewed OCR layout conversion](ocr-layout-01/README.md): issue #24; explicit hash-bound review decisions, formula/table/text nodes, unresolved-span blocking and real CLI resume. Offline synthetic conversion and archived real-OCR parsing boundary; no new OCR-quality claim.
+
+- [2026-11-11 operator-provided OCR source regions](ocr-source-regions-01/README.md): issue #24; PNG identity and explicit pixel boxes, with source-byte checks before harness resume. Synthetic geometry evidence; no automatic detection or human image-validation claim.

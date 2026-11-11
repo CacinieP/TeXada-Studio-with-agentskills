@@ -54,6 +54,50 @@ proof of independent human review. Do not fill it with a person's name unless
 that person actually reviewed the source. Synthetic tests explicitly use a test
 operator. Never use a successful conversion as a mathematical accuracy claim.
 
+## Optional operator-provided source regions
+
+Add `--source-image page.png` to both draft and final conversion commands to
+bind a source PNG. The converter snapshots at most 24 MiB, hashes the actual
+bytes and reads the raw raster dimensions from the PNG IHDR header (including
+its CRC). This is header validation, **not complete PNG/pixel decoding**.
+It copies those exact bytes to `source.png` in the new output directory.
+
+The draft template adds `source_image_sha256`. Keep that field in the completed
+review and add a `bbox` to each accepted decision:
+
+```json
+{"start_line": 1, "end_line": 1, "action": "accept", "type": "formula", "bbox": [10, 20, 300, 80]}
+```
+
+Coordinates are **integer raw-image pixels**, top-left origin, `[x0,y0,x1,y1]`,
+with right/bottom exclusive: `0 <= x0 < x1 <= width` and
+`0 <= y0 < y1 <= height`. No normalized coordinates, rotation or EXIF orientation
+transform is applied. These coordinates are supplied by the operator, never
+inferred from text; metadata explicitly says `annotation_source=operator_provided`.
+They need comparison against the actual image; passing bounds checks does not
+prove that a box encloses the right formula. The reviewer field remains an
+attestation, not verified human identity. Rejected lines do not require a box;
+any provided box is validated and retained in the rejection list.
+
+Missing accepted boxes keep the conversion pending. A changed image hash
+invalidates the review even if the raster dimensions and OCR text are identical.
+Supplying a review with regions without `--source-image` fails rather than
+silently discarding geometry. Text-only conversion remains available when no
+image or region fields are provided.
+
+A successful layout embeds source image metadata and each node's region/source
+hash. The harness checks the sample's `source.png` hash, declared dimensions and
+all region bounds **before checking nodes or reusing terminals**; missing,
+replaced or mismatched source bytes fail the run. The source filename is resolved
+relative to the sample directory. Source-linked regions cannot omit the image
+metadata to bypass this check.
+
+This does not crop, copy a region to `data.crop`, auto-detect regions, assign OCR
+confidence or independently validate image content. Existing reports still use
+their crop-evidence behavior; inspect `layout.json` and `source.png` for these
+new annotations. PNG is currently the only bound-source format; render a PDF
+page or explicitly convert another image upstream before annotating it.
+
 ## Node contract and limits
 
 - `formula`: exactly one source line. Only a complete surrounding `$...$`,
@@ -73,9 +117,10 @@ operator. Never use a successful conversion as a mathematical accuracy claim.
 
 Node ids derive from source line ranges, node order follows source order, and
 `ocr_source` records the OCR digest, range, original text and reviewer. Page is
-provided explicitly by the operator, not inferred from a model. Image boxes,
-confidence scores and image-grounded correctness are not fabricated. Source
-images/crops must be retained separately; text provenance is not a crop.
+  provided explicitly by the operator, not inferred from a model. Without the
+  optional source-image contract, image boxes remain unavailable. Confidence
+  scores and image-grounded correctness are not fabricated. Source images/crops
+  must be retained separately; text provenance is not a crop.
 
 Inputs are capped at 4 MiB each, 4096 lines and 32768 characters per line.
 Exit codes: 0 = layout created; 1 = review required (review bundle only);

@@ -11,6 +11,7 @@ import json
 import math
 import os
 import shutil
+import struct
 import subprocess
 import sys
 
@@ -366,6 +367,45 @@ def process_table(run_dir, doc, node, provider, run_id=None, input_sha256=None,
                     context_sha256, revision)
 
 
+def _validate_ocr_source(layout, sample_path):
+    """Check bound source bytes before any terminal can be reused."""
+    if "source_image" not in layout:
+        if any(isinstance(node.get("ocr_source"), dict) and "region" in node["ocr_source"]
+               for node in layout["nodes"]):
+            raise ValueError("OCR regions require source image metadata")
+        return
+    image = layout["source_image"]
+    if (not isinstance(image, dict) or image.get("file") != "source.png"
+            or image.get("format") != "png" or not isinstance(image.get("sha256"), str)
+            or len(image["sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in image["sha256"])
+            or any(type(image.get(key)) is not int or not 1 <= image[key] <= 32768
+                   for key in ("width", "height"))):
+        raise ValueError("invalid OCR source image metadata")
+    path = os.path.join(sample_path, "source.png")
+    if _file_sha256(path) != image["sha256"]:
+        raise ValueError("OCR source image changed or unavailable")
+    with open(path, "rb") as stream:
+        header = stream.read(24)
+    if (len(header) != 24 or header[:16] != b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR"
+            or struct.unpack(">II", header[16:24]) != (image["width"], image["height"])):
+        raise ValueError("OCR source image dimensions do not match")
+    for node in layout["nodes"]:
+        provenance = node.get("ocr_source")
+        region = provenance.get("region") if isinstance(provenance, dict) else None
+        if (not isinstance(region, dict) or region.get("image_sha256") != image["sha256"]
+                or region.get("annotation_source") != "operator_provided"
+                or region.get("coordinate_system") != "top_left_pixel_xyxy_half_open"):
+            raise ValueError("OCR region source mismatch")
+        bbox = region.get("bbox")
+        if (not isinstance(bbox, list) or len(bbox) != 4
+                or any(type(value) is not int for value in bbox)):
+            raise ValueError("invalid OCR source region")
+        x0, y0, x1, y1 = bbox
+        if not (0 <= x0 < x1 <= image["width"] and 0 <= y0 < y1 <= image["height"]):
+            raise ValueError("OCR source region outside image")
+
+
 def run(sample_path, run_dir, provider, run_id=None):
     """Run one validated layout; a caller may share run_id across several documents."""
     with open(os.path.join(sample_path, "layout.json"), encoding="utf-8") as f:
@@ -383,6 +423,7 @@ def run(sample_path, run_dir, provider, run_id=None):
         if node["id"] in seen:
             raise ValueError("duplicate node id in layout")
         seen.add(node["id"])
+    _validate_ocr_source(layout, sample_path)
     run_id = run_id or state.new_run_id()
     events = state.load_events(run_dir)
     counts = {"OK": 0, "NEEDS_HUMAN": 0}

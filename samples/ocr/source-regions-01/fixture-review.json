@@ -1,0 +1,19 @@
+{
+  "record_sha256": "72e1e79f5731df1c91b712b742299c9e1f8dec418d19d821cd56481c83e4d73f",
+  "source_image_sha256": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+  "reviewer": "synthetic-rendering-fixture-not-human",
+  "decisions": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "action": "accept",
+      "type": "formula",
+      "bbox": [
+        3,
+        5,
+        30,
+        14
+      ]
+    }
+  ]
+}
