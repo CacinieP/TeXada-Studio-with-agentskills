@@ -1,0 +1,2 @@
+minicpm5-routing-probe: OK=2 NEEDS_HUMAN=1
+report: docs/evaluation-results/minicpm5-routing-01/host-run/report.md

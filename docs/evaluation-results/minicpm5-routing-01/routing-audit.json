@@ -1,0 +1,41 @@
+{
+  "kind": "offline_cli_parser_provider_selection_no_inference",
+  "cases": [
+    {
+      "case": "repair-env-wins",
+      "environment": {
+        "REPAIR_MODEL": "minicpm5-2b:latest",
+        "VLM_MODEL": "unused"
+      },
+      "extra_cli_args": [],
+      "selected_model": "minicpm5-2b:latest",
+      "skill_loaded": true,
+      "model_calls": 0
+    },
+    {
+      "case": "explicit-cli-wins",
+      "environment": {
+        "REPAIR_MODEL": "unused",
+        "VLM_MODEL": "also-unused"
+      },
+      "extra_cli_args": [
+        "--vlm-model",
+        "minicpm5-2b:latest"
+      ],
+      "selected_model": "minicpm5-2b:latest",
+      "skill_loaded": true,
+      "model_calls": 0
+    },
+    {
+      "case": "legacy-env-fallback",
+      "environment": {
+        "REPAIR_MODEL": "  ",
+        "VLM_MODEL": "minicpm5-2b:latest"
+      },
+      "extra_cli_args": [],
+      "selected_model": "minicpm5-2b:latest",
+      "skill_loaded": true,
+      "model_calls": 0
+    }
+  ]
+}
