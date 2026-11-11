@@ -9,5 +9,9 @@
     "harness/docforensics/source_report.py": "c1aa65f24d5ec8bf2a91b921e1a8b9f84977d7864a7cfeb3c3cfee033d43372d",
     "desktop/setup_bundle.py": "18c97457ff6101d034ec7dadd3ee224f42d56c7a41e7c5bf1d80d2f771968334"
   },
-  "scope": "Original-page local smoke and agent source comparison; not independent human adjudication."
+  "scope": "Original-page local smoke and agent source comparison; not independent human adjudication.",
+  "distribution_sha256": {
+    "desktop/staple_bundle.py": "74b835854b5b655ba6ba228d3ee6c13d691f3fe43a464a36e83ab0c596085d63",
+    ".github/workflows/bundle-build.yml": "335a9dc25b6508c48f451ba1d2c1a19136e9e69e154a8e69680091849641ccc5"
+  }
 }

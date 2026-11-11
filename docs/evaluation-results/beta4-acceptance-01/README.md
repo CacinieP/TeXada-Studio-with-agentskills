@@ -92,11 +92,16 @@ separately from the genuine raw-candidate compilation failure.
 
 ## Verification and reproduction
 
-583 local Python tests pass: harness 172, workbench 181, scripts 82, desktop 15,
+587 local Python tests pass: harness 172, workbench 181, scripts 82, desktop 19,
 LaTeX cleanup 77, OCR 56. Four JavaScript suites pass. [verification.json](verification.json)
 records those software checks; they are not model accuracy counts.
 The app build number is 4. Tagged signed/notarized DMG validation and final
 release assets are recorded separately in the publishing PR and GitHub Release.
+The first PR bundle run passed Apple notarization but failed while fetching the
+staple ticket (NSURLErrorDomain -1005, exit 68). The release workflow now uses a
+shared bounded helper for staple and validate: only exit 68 is retried (three
+attempts, 20 seconds apart), while permanent failures remain failures. Four new
+desktop tests cover this behavior; the desktop suite was rerun after that fix.
 
 Real capture/replay entry points (run from repo root with the project Python env):
 
