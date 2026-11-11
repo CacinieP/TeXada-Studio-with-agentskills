@@ -135,6 +135,19 @@ class AppTest(unittest.TestCase):
                 self.assertIsNone(response.json()["png"])
                 self.assertTrue(response.json()["log"])
 
+    def test_timeout_preserves_partial_compiler_diagnostics(self):
+        timeout = subprocess.TimeoutExpired("tectonic", 120, output=b"running TeX",
+                                            stderr="中文诊断".encode("utf-8") + b"\xff")
+        with patch.object(studio.subprocess, "run", side_effect=timeout):
+            response = self.client.post("/api/studio/preview", params=self.auth,
+                                        json={"name": "example.tex", "content": "synthetic"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["compile_ok"])
+        self.assertIn("120 秒", body["log"])
+        self.assertIn("running TeX", body["log"])
+        self.assertIn("中文诊断\ufffd", body["log"])
+
     def test_non_utf8_compiler_output_stays_in_the_preview_log(self):
         stderr = ("Runaway argument?\n! File ended while scanning use of \\frac .\n"
                   "\\section {二项式展开}\n").encode("utf-8") + b"\xff"
