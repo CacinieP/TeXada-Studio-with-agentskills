@@ -1,0 +1,19 @@
+{
+  "reviewer": "agent-source-comparison-not-independent-human",
+  "changes": [
+    {
+      "line": 20,
+      "removed": "<table>",
+      "reason": "model-added wrapper/unmatched brace absent from source"
+    },
+    {
+      "line": 30,
+      "removed": "   }",
+      "reason": "model-added wrapper/unmatched brace absent from source"
+    }
+  ],
+  "numeric_edits": 0,
+  "raw_sha256": "cf8691d4481038ce378df4454806827b279bd6a109770aa17ba61f018b7b9bb8",
+  "reviewed_sha256": "4b54bfddd79eaab2ede916943edeceb4428ce597969d6adacaa6fb4da088d9f3",
+  "diff": "--- raw-candidate\n+++ agent-reviewed\n@@ -17,7 +17,6 @@\n \n Reference table\n \n-<table>\n    \\begin{tabular}{|c|c|}\n       \\hline\n       Item & Units \\\\\n@@ -27,7 +26,6 @@\n       total & 20 \\\\\n       \\hline\n      \\end{tabular}\n-   }\n \n Printed values are source data.\n \n"
+}

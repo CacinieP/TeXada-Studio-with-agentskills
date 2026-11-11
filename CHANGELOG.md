@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.2.0-beta.4 — 2026-11-11
+
+### Added
+
+- Convert explicitly reviewed OCR lines into formula/table/text layouts with source hashes, pending-item blocking and resumable CLI checks.
+- Bind operator-provided pixel regions to original PNG bytes, and retain source snapshots, annotated/zoom previews and original transcription in portable review reports.
+- Route truncated, unconfirmed, refused, non-text and suspect-character OCR output into structured review items without inventing confidence scores.
+- Offer an explicit `--profile minicpm-ocr` for official recognition prompts/decoding, while retaining generic transport defaults.
+- Retry transient stapler exit 68 for both ticket stapling and validation, up to three attempts; permanent failures retain their exit status.
+- Archive a real local dedicated-OCR and separate Studio V4.7 smoke run on an original mixed-content page, including manual formatting/syntax review, rejected/accepted table repair, source-change blocking and exports.
+
+### Distribution and validation
+
+- Set the macOS app build number to 4; short version remains 0.2.0.
+- 587 local Python tests and four JavaScript suites pass. Full observations and limitations: [beta.4 acceptance](docs/evaluation-results/beta4-acceptance-01/README.md). One synthetic page and agent review do not establish OCR accuracy or independent human adjudication.
+
+## Earlier development log
+
 ### Fixed
 
 - Keep a failed Tectonic run in the preview and repair logs when its output is not valid text for the process locale. Non-UTF-8 bytes are replaced instead of aborting the request with `UnicodeDecodeError` or HTTP 500.

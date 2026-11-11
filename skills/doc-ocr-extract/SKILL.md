@@ -12,6 +12,14 @@ description: Turn a page image into plain-text candidate lines with a local visi
 3. Output is one JSONL record per input: `status`, `lines` (candidate text lines), a bounded `raw_response` excerpt with an explicit truncation flag, `model`, `eval_count` (ollama) or `completion_tokens` surfaced as the same counter (openai), and `elapsed_seconds`. `OK` means nonempty candidates with confirmed backend termination exist for review; it does not certify correctness. Backend truncation, unconfirmed completion, refusal, explicit non-text markers and suspect characters produce `NEEDS_HUMAN` with `review_items` and diagnostic `candidate_lines`, never success-path `lines`. See [objective review signals](REVIEW_SIGNALS.md); no confidence score is inferred.
 4. Reviewers compare `lines` against the image. Low-fidelity lines shape a human-review list and must not be silently adopted. The separate offline `scripts/ocr_to_layout.py` converter binds explicit line decisions to the OCR record hash and produces a CLI `layout.json` only after all lines are accepted or rejected and accepted spans parse. Unreviewed/ambiguous spans produce a pending list with no layout; see [the reviewed layout contract](LAYOUT.md). This is separate from Studio's existing `.tex` adopt workflow; the extraction script itself never writes those states.
 5. Model and endpoint are environment-driven: `OCR_MODEL` (default `minicpm-ocr:latest`) and `OCR_BASE` (default `http://127.0.0.1:11434`). Any OpenAI-compatible local server (Ollama, vLLM, llama.cpp) can serve the model; cloud endpoints are protocol-compatible but never the default.
+6. For the dedicated MiniCPM-OCR service, explicitly choose `--profile minicpm-ocr`: official `Text Recognition:` task prompt by default, image-before-task order, temperature 0.01 / top_p 0.001 / top_k 1 / repeat_penalty 1.0 and a 4096-token output budget. OpenAI transport uses flat decoding fields; native Ollama uses `options`/`num_predict` and `think=false`. Generic requests remain the default. `--prompt` can explicitly choose another supported task, but its output still needs task-specific review/postprocessing. The native profile has contract tests; this beta's real dedicated-model observation uses llama.cpp/OpenAI.
+
+```bash
+python skills/doc-ocr-extract/scripts/ocr_extract.py page.png \
+  --base http://127.0.0.1:18499 --model minicpm-ocr --profile minicpm-ocr
+```
+
+The server must already be available; the CLI does not start/download it. The official profile does not send vLLM-only `chat_template_kwargs` or `mm_processor_kwargs`. Real beta.4 request/response and source-comparison evidence is in `docs/evaluation-results/beta4-acceptance-01/`.
 
 ## Boundaries
 

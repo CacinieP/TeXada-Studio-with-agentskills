@@ -38,6 +38,9 @@ DEFAULT_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 # 统一协议面：默认走 OpenAI 兼容 /v1/chat/completions（与修复线一致），
 # Ollama 原生 /api/chat 保留为显式回退。
 DEFAULT_TRANSPORT = os.environ.get("OCR_TRANSPORT", "openai")
+MINICPM_PROMPT = "Text Recognition:"
+MINICPM_SAMPLING = {"temperature": 0.01, "top_p": 0.001, "top_k": 1, "repeat_penalty": 1.0}
+MINICPM_MAX_TOKENS = 4096
 DEFAULT_PROMPT = ("Extract the text lines (including formulas as plain text) "
                   "from this image. Return only the extracted text, one line "
                   "per source line. Do not translate, repair or comment.")
@@ -49,13 +52,15 @@ def _excerpt(text: str):
 
 
 def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
-            transport: str = DEFAULT_TRANSPORT, timeout: int = 180):
+            transport: str = DEFAULT_TRANSPORT, timeout: int = 180, profile: str = "generic"):
     """请求一次 vision 模型。返回 (status, reason, payload)。
 
     transport="openai" 走 /v1/chat/completions + image_url(data URL)，
     transport="ollama" 走原生 /api/chat + images。两者候选契约一致，
     默认 openai 与修复线统一在同一协议面上。
     """
+    if profile not in ("generic", "minicpm-ocr"):
+        return "NEEDS_ENV", "bad_profile", {}
     try:
         encoded = base64.b64encode(image_bytes).decode("ascii")
     except (TypeError, ValueError):
@@ -67,10 +72,17 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
                        {"type": "image_url",
                         "image_url": {"url": "data:image/png;base64," + encoded}}]}]}
         path = "/v1/chat/completions"
+        if profile == "minicpm-ocr":
+            payload.update(MINICPM_SAMPLING)
+            payload["max_tokens"] = MINICPM_MAX_TOKENS
+            payload["messages"][0]["content"].reverse()  # Official image-then-task order.
     elif transport == "ollama":
         payload = {"model": model, "stream": False,
                    "messages": [{"role": "user", "content": prompt, "images": [encoded]}]}
         path = "/api/chat"
+        if profile == "minicpm-ocr":
+            payload["options"] = {**MINICPM_SAMPLING, "num_predict": MINICPM_MAX_TOKENS}
+            payload["think"] = False
     else:
         return "NEEDS_ENV", "bad_transport", {}
     request = urllib.request.Request(base + path,
@@ -151,7 +163,7 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
                           "text": line[:RESPONSE_EXCERPT_LIMIT]})
     excerpt, truncated = _excerpt(content)
     payload = {"raw_response": excerpt, "response_truncated": truncated,
-               "model": model, "eval_count": counter, "output_complete": complete,
+               "model": model, "eval_count": counter, "request_profile": profile, "output_complete": complete,
                "finish_reason": finish, "review_items": items,
                "elapsed_seconds": round(time.monotonic() - started, 6)}
     if items:
@@ -164,7 +176,7 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
 
 
 def run_record(record, *, model: str, base: str, prompt: str,
-               transport: str = DEFAULT_TRANSPORT) -> int:
+               transport: str = DEFAULT_TRANSPORT, profile: str = "generic") -> int:
     """处理一条 {id, image|image_path} 记录，返回该条的退出码贡献。"""
     record_id = record.get("id") if isinstance(record.get("id"), str) else None
     image, path = record.get("image"), record.get("image_path")
@@ -190,7 +202,7 @@ def run_record(record, *, model: str, base: str, prompt: str,
                                     "reason": "bad_input"}, ensure_ascii=False) + "\n")
         return 1
     status, reason, payload = extract(image_bytes, model=model, base=base, prompt=prompt,
-                                      transport=transport)
+                                      transport=transport, profile=profile)
     sys.stdout.write(json.dumps({"id": record_id, "status": status, "reason": reason, **payload},
                                 ensure_ascii=False) + "\n")
     return {"OK": 0}.get(status, {"NEEDS_HUMAN": 1}.get(status, 2))
@@ -204,14 +216,17 @@ def main() -> int:
     parser.add_argument("--transport", choices=["openai", "ollama"], default=DEFAULT_TRANSPORT,
                         help="openai: /v1/chat/completions (default, unified with the repair "
                              "line); ollama: native /api/chat fallback")
-    parser.add_argument("--prompt", default=DEFAULT_PROMPT)
+    parser.add_argument("--profile", choices=["generic", "minicpm-ocr"], default="generic",
+                        help="minicpm-ocr: official recognition sampling; uses Text Recognition: unless --prompt is supplied")
+    parser.add_argument("--prompt", default=None)
     parser.add_argument("--id", default="argv")
     args = parser.parse_args()
+    prompt = args.prompt if args.prompt is not None else (MINICPM_PROMPT if args.profile == "minicpm-ocr" else DEFAULT_PROMPT)
     code = EXIT_OK
     if args.image:
         code = run_record({"id": args.id, "image_path": args.image},
-                          model=args.model, base=args.base, prompt=args.prompt,
-                          transport=args.transport)
+                          model=args.model, base=args.base, prompt=prompt,
+                          transport=args.transport, profile=args.profile)
     else:
         for line in sys.stdin:
             line = line.strip()
@@ -230,7 +245,7 @@ def main() -> int:
                 code = max(code, 1)
                 continue
             code = max(code, run_record(record, model=args.model, base=args.base,
-                                        prompt=args.prompt, transport=args.transport))
+                                        prompt=prompt, transport=args.transport, profile=args.profile))
     return code
 
 

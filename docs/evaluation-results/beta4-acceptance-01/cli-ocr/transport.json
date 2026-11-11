@@ -1,0 +1,9 @@
+{
+  "request_wire_sha256": "c22ad75f1d22f0c45f29d28f71eeab1e44be982768ce4e5eb407d76b180eb945",
+  "response_wire_sha256": "4a509d2209ecf72d6b332e76903dda2bbaa4e4f73e4083ff0930db1be467fe5c",
+  "kind": "real_local_network_not_fixture",
+  "source_image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+  "exit_code": 0,
+  "request_profile": "minicpm-ocr",
+  "implementation_sha256": "1b3aab16d276c3623a2f10142f099a86c5b689596c2fe9fbf054b52f3895d98a"
+}

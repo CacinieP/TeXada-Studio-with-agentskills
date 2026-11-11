@@ -1,0 +1,44 @@
+{
+  "kind": "software_regression_not_model_accuracy",
+  "python_tests": 587,
+  "javascript_suites": 4,
+  "results": [
+    {
+      "suite": "harness",
+      "tests": 172,
+      "passed": true
+    },
+    {
+      "suite": "webui",
+      "tests": 181,
+      "passed": true
+    },
+    {
+      "suite": "scripts",
+      "tests": 82,
+      "passed": true
+    },
+    {
+      "suite": "desktop",
+      "tests": 19,
+      "passed": true,
+      "previous_tests": 15,
+      "rerun_reason": "Added bounded retry tests after observed stapler network failure"
+    },
+    {
+      "suite": "cleanup",
+      "tests": 77,
+      "passed": true
+    },
+    {
+      "suite": "ocr",
+      "tests": 56,
+      "passed": true
+    },
+    {
+      "suite": "node",
+      "tests": null,
+      "passed": true
+    }
+  ]
+}

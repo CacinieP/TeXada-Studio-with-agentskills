@@ -1,0 +1,33 @@
+1
+TeXada beta.4 validation sheet
+Original synthetic sample. Reference code: SAMPLE-B4.
+Formula A
+1 1
+5
++ =
+2 3
+6
+Formula B
+∫ 1
+x2 dx =
+0
+
+Reference table
+Item Units
+Alpha
+
+12
+
+Beta
+
+7
+
+total
+19
+Printed values are source data.
+End of original validation sheet.
+
+1
+3
+
+

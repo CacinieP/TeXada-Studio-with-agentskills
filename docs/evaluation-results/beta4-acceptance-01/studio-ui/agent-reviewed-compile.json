@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "compile_ok": true,
+  "preview_ok": true,
+  "png": "/api/studio/preview/beta4-agent-reviewed.tex/live-b7d9dfc75b5f4c8e98e4c3f4491ec45e?page=1",
+  "pages": [
+    "/api/studio/preview/beta4-agent-reviewed.tex/live-b7d9dfc75b5f4c8e98e4c3f4491ec45e?page=1"
+  ],
+  "pdf": "/api/studio/pdf/beta4-agent-reviewed.tex/live-b7d9dfc75b5f4c8e98e4c3f4491ec45e",
+  "tag": "live-b7d9dfc75b5f4c8e98e4c3f4491ec45e",
+  "content_sha256": "4b54bfddd79eaab2ede916943edeceb4428ce597969d6adacaa6fb4da088d9f3",
+  "log": "note: using only cached resource files\nnote: Running TeX ...\nnote: Rerunning TeX because \"main.aux\" changed ...\nnote: Running xdvipdfmx ...\nnote: Writing `${STUDIO_STATE}/beta4-agent-reviewed/live-b7d9dfc75b5f4c8e98e4c3f4491ec45e/main.pdf` (11.830078125 KiB)\nnote: Writing `${STUDIO_STATE}/beta4-agent-reviewed/live-b7d9dfc75b5f4c8e98e4c3f4491ec45e/main.log` (14.8515625 KiB)\nnote: Skipped writing 1 intermediate files (use --keep-intermediates to keep them)\n",
+  "page_count": 1,
+  "path_redaction": "local state prefix only; saved JSON is not a wire-format transcript"
+}
