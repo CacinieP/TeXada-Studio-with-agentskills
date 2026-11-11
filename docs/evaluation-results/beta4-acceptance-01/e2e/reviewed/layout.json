@@ -1,0 +1,315 @@
+{
+  "doc": "beta4-source",
+  "source": "reviewed OCR text candidates",
+  "ocr_record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+  "reviewer": "agent-source-comparison-not-independent-human",
+  "nodes": [
+    {
+      "id": "ocr-0001-0001",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "TeXada beta.4 validation sheet"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 1,
+        "end_line": 1,
+        "text": [
+          "TeXada beta.4 validation sheet"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            253,
+            783,
+            299
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0002-0002",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "Original synthetic sample. Reference code: SAMPLE-B4."
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 2,
+        "end_line": 2,
+        "text": [
+          "Original synthetic sample. Reference code: SAMPLE-B4."
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            310,
+            849,
+            344
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0003-0003",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "Formula A"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 3,
+        "end_line": 3,
+        "text": [
+          "Formula A"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            357,
+            366,
+            392
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0004-0004",
+      "type": "formula",
+      "page": 1,
+      "data": {
+        "latex": "\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6}"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 4,
+        "end_line": 4,
+        "text": [
+          "\\(\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6}\\)"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            576,
+            426,
+            695,
+            491
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0005-0005",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "Formula B"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 5,
+        "end_line": 5,
+        "text": [
+          "Formula B"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            490,
+            365,
+            524
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0006-0006",
+      "type": "formula",
+      "page": 1,
+      "data": {
+        "latex": "\\int_{0}^{1} x^{2} \\, dx = \\frac{1}{3}"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 6,
+        "end_line": 6,
+        "text": [
+          "\\(\\int_{0}^{1} x^{2} \\, dx = \\frac{1}{3}\\)"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            559,
+            540,
+            709,
+            632
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0007-0007",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "Reference table"
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 7,
+        "end_line": 7,
+        "text": [
+          "Reference table"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            633,
+            426,
+            667
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0008-0011",
+      "type": "table",
+      "page": 1,
+      "data": {
+        "rows": [
+          [
+            "Item",
+            "Units"
+          ],
+          [
+            "Alpha",
+            "12"
+          ],
+          [
+            "Beta",
+            "7"
+          ],
+          [
+            "total",
+            "20"
+          ]
+        ]
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 8,
+        "end_line": 11,
+        "text": [
+          "Item|Units",
+          "Alpha|12",
+          "Beta|7",
+          "total|20"
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            662,
+            408,
+            812
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0012-0012",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "Printed values are source data."
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 12,
+        "end_line": 12,
+        "text": [
+          "Printed values are source data."
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            812,
+            565,
+            847
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    },
+    {
+      "id": "ocr-0013-0013",
+      "type": "text",
+      "page": 1,
+      "data": {
+        "text": "End of original validation sheet."
+      },
+      "ocr_source": {
+        "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+        "start_line": 13,
+        "end_line": 13,
+        "text": [
+          "End of original validation sheet."
+        ],
+        "reviewer": "agent-source-comparison-not-independent-human",
+        "region": {
+          "image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+          "bbox": [
+            226,
+            860,
+            578,
+            894
+          ],
+          "coordinate_system": "top_left_pixel_xyxy_half_open",
+          "annotation_source": "operator_provided"
+        }
+      }
+    }
+  ],
+  "source_image": {
+    "sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+    "width": 1275,
+    "height": 1650,
+    "format": "png",
+    "file": "source.png"
+  }
+}

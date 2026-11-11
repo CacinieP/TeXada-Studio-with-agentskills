@@ -19,7 +19,7 @@ OPTIONS = {
         "CFBundleDisplayName": "TeXada Studio",
         "CFBundleIdentifier": "local.texada.studio",
         "CFBundleShortVersionString": "0.2.0",
-        "CFBundleVersion": "2",
+        "CFBundleVersion": "4",
         "LSMinimumSystemVersion": "15.0",
         "NSHighResolutionCapable": True,
         "NSSupportsAutomaticTermination": False,

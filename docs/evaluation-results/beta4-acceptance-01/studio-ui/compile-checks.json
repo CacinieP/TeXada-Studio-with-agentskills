@@ -1,0 +1,12 @@
+[
+  {
+    "stage": "raw",
+    "compile_ok": false,
+    "preview_ok": false
+  },
+  {
+    "stage": "agent-reviewed",
+    "compile_ok": true,
+    "preview_ok": true
+  }
+]

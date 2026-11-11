@@ -1,0 +1,129 @@
+{
+  "record_sha256": "eede39e1959260bf8dcd82037e0b10ac646cdd9f1887a32b01a78bc9ff83f632",
+  "source_image_sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+  "reviewer": "agent-source-comparison-not-independent-human",
+  "coordinate_origin": "authored PDF reference geometry; not OCR detection",
+  "decisions": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        253,
+        783,
+        299
+      ]
+    },
+    {
+      "start_line": 2,
+      "end_line": 2,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        310,
+        849,
+        344
+      ]
+    },
+    {
+      "start_line": 3,
+      "end_line": 3,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        357,
+        366,
+        392
+      ]
+    },
+    {
+      "start_line": 4,
+      "end_line": 4,
+      "action": "accept",
+      "type": "formula",
+      "bbox": [
+        576,
+        426,
+        695,
+        491
+      ]
+    },
+    {
+      "start_line": 5,
+      "end_line": 5,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        490,
+        365,
+        524
+      ]
+    },
+    {
+      "start_line": 6,
+      "end_line": 6,
+      "action": "accept",
+      "type": "formula",
+      "bbox": [
+        559,
+        540,
+        709,
+        632
+      ]
+    },
+    {
+      "start_line": 7,
+      "end_line": 7,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        633,
+        426,
+        667
+      ]
+    },
+    {
+      "start_line": 8,
+      "end_line": 11,
+      "action": "accept",
+      "type": "table",
+      "separator": "pipe",
+      "bbox": [
+        226,
+        662,
+        408,
+        812
+      ]
+    },
+    {
+      "start_line": 12,
+      "end_line": 12,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        812,
+        565,
+        847
+      ]
+    },
+    {
+      "start_line": 13,
+      "end_line": 13,
+      "action": "accept",
+      "type": "text",
+      "bbox": [
+        226,
+        860,
+        578,
+        894
+      ]
+    }
+  ]
+}

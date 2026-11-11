@@ -1,0 +1,30 @@
+{
+  "kind": "real_ui_agent_automation_not_independent_human_review",
+  "observations": {
+    "ocr_dialog_requires_explicit_create": true,
+    "user_documents_before_create": [],
+    "raw_candidate_compile_ok": false,
+    "agent_syntax_review_compile_ok": true,
+    "syntax_review_numeric_edits": 0,
+    "rejected_total_preserved": "20",
+    "accepted_repair_total": "19",
+    "saved_and_reloaded": true,
+    "pdf_and_tex_downloaded_via_ui": true
+  },
+  "automation_note": "Initial rejection assertion ran before async completion; final check waited for the completed review hint and passed.",
+  "decision_actor": "agent exercising UI on original synthetic source; not a named human",
+  "job_decisions": [
+    "accept",
+    "reject"
+  ],
+  "job_model_http_requests": [
+    0,
+    0
+  ],
+  "final_source_sha256": "7ac717586f865b34e7484a302eeded45253fdc462adaeaa0671991cbe9c3c329",
+  "final_pdf_sha256": "5ca9b49fc9e1bf06ebe8f3fd233d3f445dbe4aecbb9bc6e3edc2787aef18f836",
+  "file_response_wire_sha256": "b542e00040bf50e9c033e94bee54e29a9c8f8f6e7577b3521edc5237fbea0536",
+  "printed_source_total": "20",
+  "arithmetic_sum": "19",
+  "note": "Changing 20 to 19 is an explicit accepted arithmetic repair, not OCR fidelity or source copying."
+}

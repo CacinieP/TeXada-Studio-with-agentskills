@@ -1,0 +1,13 @@
+{
+  "baseline_commit": "8dbe9881069faf791cf7a90223d9159146351b39",
+  "runtime_sha256": {
+    "skills/doc-ocr-extract/scripts/ocr_extract.py": "1b3aab16d276c3623a2f10142f099a86c5b689596c2fe9fbf054b52f3895d98a",
+    "skills/doc-ocr-extract/scripts/ocr_to_layout.py": "14246ecf76030b3758e420c951277a5c487d6aef7e08f2e7859f3edbb69cda3a",
+    "webui/local_runtime.py": "9e24fc67e28b2e29889e356ff19a1b2576e8a925651bfe69a3e802181d2ba7ed",
+    "webui/app.py": "3a15e3c7a54211852ce6dc7fc5f8c372ce83ce4019b9436a55692b17d1c5a43b",
+    "harness/docforensics/pipeline.py": "02c042963b39d258823c699b1f18eed4423c80ee757ce7aba07279a188df70b9",
+    "harness/docforensics/source_report.py": "c1aa65f24d5ec8bf2a91b921e1a8b9f84977d7864a7cfeb3c3cfee033d43372d",
+    "desktop/setup_bundle.py": "18c97457ff6101d034ec7dadd3ee224f42d56c7a41e7c5bf1d80d2f771968334"
+  },
+  "scope": "Original-page local smoke and agent source comparison; not independent human adjudication."
+}

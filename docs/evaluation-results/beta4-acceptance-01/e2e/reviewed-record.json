@@ -1,0 +1,60 @@
+{
+  "id": "beta4-original-page-agent-delimiter-review",
+  "status": "OK",
+  "reason": "",
+  "raw_response": "TeXada beta.4 validation sheet\nOriginal synthetic sample. Reference code: SAMPLE-B4.\nFormula A\n\\(\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6}\\)\nFormula B\n\\(\\int_{0}^{1} x^{2} \\, dx = \\frac{1}{3}\\)\nReference table\nItem Units\nAlpha 12\nBeta 7\ntotal 20\nPrinted values are source data.\nEnd of original validation sheet.",
+  "response_truncated": false,
+  "model": "minicpm-ocr",
+  "eval_count": 114,
+  "request_profile": "minicpm-ocr",
+  "output_complete": true,
+  "finish_reason": "stop",
+  "review_items": [],
+  "elapsed_seconds": 6.619707,
+  "lines": [
+    "TeXada beta.4 validation sheet",
+    "Original synthetic sample. Reference code: SAMPLE-B4.",
+    "Formula A",
+    "\\(\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6}\\)",
+    "Formula B",
+    "\\(\\int_{0}^{1} x^{2} \\, dx = \\frac{1}{3}\\)",
+    "Reference table",
+    "Item|Units",
+    "Alpha|12",
+    "Beta|7",
+    "total|20",
+    "Printed values are source data.",
+    "End of original validation sheet."
+  ],
+  "record_kind": "agent-reviewed-format-normalization-not-model-output",
+  "normalization": {
+    "original_record_sha256": "0c95fd177bfca7bd1cdb67d88caff3c7697575676b3bd337a7b72f66788a9726",
+    "operator": "agent-source-comparison-not-independent-human",
+    "changes": [
+      {
+        "line": 8,
+        "before": "Item Units",
+        "after": "Item|Units",
+        "reason": "explicit delimiter only; printed values unchanged"
+      },
+      {
+        "line": 9,
+        "before": "Alpha 12",
+        "after": "Alpha|12",
+        "reason": "explicit delimiter only; printed values unchanged"
+      },
+      {
+        "line": 10,
+        "before": "Beta 7",
+        "after": "Beta|7",
+        "reason": "explicit delimiter only; printed values unchanged"
+      },
+      {
+        "line": 11,
+        "before": "total 20",
+        "after": "total|20",
+        "reason": "explicit delimiter only; printed values unchanged"
+      }
+    ]
+  }
+}

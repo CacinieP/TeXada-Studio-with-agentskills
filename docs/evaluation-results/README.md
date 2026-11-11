@@ -24,3 +24,5 @@
 - [2026-11-11 portable OCR source-region reports](ocr-region-report-01/README.md): source snapshots, boxed/zoom vector views, original OCR text, and input-bound events retained on resume. Offline report rebuild and local Chromium rendering verified on the synthetic fixture.
 
 - [2026-11-11 objective OCR review signals](ocr-review-signals-01/README.md): dedicated CLI termination, sentinel and character diagnostics propagate to a blocked review bundle. Ten offline protocol fixtures; no model inference or confidence/accuracy claim.
+
+- [2026-11-11 beta.4 real end-to-end acceptance](beta4-acceptance-01/README.md): original mixed page, real dedicated OCR and separate V4.7 Studio import, explicit review/corrections, source-bound CLI resume, arithmetic accept/reject and PDF/TeX exports. Failures retained; single-page agent smoke, not independent human quality validation.

@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "compile_ok": false,
+  "preview_ok": false,
+  "png": null,
+  "pages": [],
+  "pdf": null,
+  "tag": "live-bdcbc340aa8d43b7977f8a5072357e47",
+  "content_sha256": "cf8691d4481038ce378df4454806827b279bd6a109770aa17ba61f018b7b9bb8",
+  "log": "error: main.tex:30: Too many }'s\nerror: something bad happened inside XeTeX; its output follows:\n\n===============================================================================\n(main.tex\nLaTeX2e <2021-11-15> patch level 1\nL3 programming layer <2022-02-24> (ctexart.cls (ctexbackend.cfg) (expl3.sty\n(l3backend-xetex.def))\nDocument Class: ctexart 2021/12/12 v2.5.8 Chinese adapter for class article (CT\nEX)\n(xparse.sty) (l3keys2e.sty) (ctexhook.sty) (ctexpatch.sty) (fix-cm.sty\n(ts1enc.def)) (ctexopts.cfg) (article.cls\nDocument Class: article 2021/10/04 v1.4n Standard LaTeX document class\n(size10.clo)) (ctex-engine-xetex.def (xeCJK.sty (xtemplate.sty) (fontspec.sty\n(fontspec-xetex.sty (fontenc.sty) (fontspec.cfg))) (xeCJK.cfg))) (zhnumber.sty\n(zhnumber-utf8.cfg)) (ctex-scheme-chinese-article.def (ctex-name-utf8.cfg))\n(ctex-c5size.clo) (ctex-fontset-fandol.def)) (ctex.cfg) (amsmath.sty\nFor additional information on amsmath, use the `?' option.\n(amstext.sty (amsgen.sty)) (amsbsy.sty) (amsopn.sty)) (amssymb.sty\n(amsfonts.sty)) (graphicx.sty (keyval.sty) (graphics.sty (trig.sty)\n(graphics.cfg) (xetex.def))) (booktabs.sty)\nNo file main.aux.\n(umsa.fd) (umsb.fd)\n! Too many }'s.\nl.30    }\n         \nNo pages of output.\nTranscript written on main.log.\n===============================================================================\nerror: the XeTeX engine had an unrecoverable error\ncaused by: halted on potentially-recoverable error as specified\n",
+  "path_redaction": "local state prefix only; saved JSON is not a wire-format transcript"
+}

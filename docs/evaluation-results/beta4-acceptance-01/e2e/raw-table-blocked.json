@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "status": "NEEDS_HUMAN",
+  "record_sha256": "0c95fd177bfca7bd1cdb67d88caff3c7697575676b3bd337a7b72f66788a9726",
+  "layout": null,
+  "review_items": [
+    {
+      "start_line": 8,
+      "end_line": 11,
+      "text": [
+        "Item Units",
+        "Alpha 12",
+        "Beta 7",
+        "total 20"
+      ],
+      "reason": "ambiguous_table_delimiter"
+    }
+  ],
+  "rejected_lines": [],
+  "source_image": {
+    "sha256": "75e07aed9b61c717362a2c76e6059a81cbe4b56919f0cde99e5172704389613e",
+    "width": 1275,
+    "height": 1650,
+    "format": "png",
+    "file": "source.png"
+  }
+}
