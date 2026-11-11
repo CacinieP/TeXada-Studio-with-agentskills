@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "NEEDS_HUMAN",
+  "record_sha256": "64b9afabd0fb70966a8d58a624947e78146eecf2c6cae0f3f23506658fa51c00",
+  "layout": null,
+  "review_items": [
+    {
+      "start_line": 3,
+      "end_line": 6,
+      "text": [
+        "Item Value",
+        "Alpha 45",
+        "Beta 60",
+        "Sum 105"
+      ],
+      "reason": "ambiguous_table_delimiter"
+    }
+  ],
+  "rejected_lines": []
+}

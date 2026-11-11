@@ -1,0 +1,11 @@
+{
+  "base_commit": "6aef3aa5c4678497395fb459b6827c52b303f755",
+  "python": "3.11.15",
+  "scope": "offline conversion; no new OCR inference or independent human review",
+  "sha256": {
+    "skills/doc-ocr-extract/scripts/ocr_to_layout.py": "740da2da6f77641642dc5695b39c0e916c7f926c0fbe5eed5c86747e217e7ead",
+    "skills/doc-formula-verify/scripts/verify.py": "d82a5a386cd16fca097211bbcda7df4d8e22bdeaafe88b2e020bac200e2092ae",
+    "harness/docforensics/pipeline.py": "afa693113ef27d67d0ba2caf6a81c154fa6aec4f41ad8b58b9cf525119421dcf",
+    "harness/docforensics/state.py": "7215b2e82f729807d62b39fe465f2da6ef221ca7228d20d06a214b17a28a18eb"
+  }
+}

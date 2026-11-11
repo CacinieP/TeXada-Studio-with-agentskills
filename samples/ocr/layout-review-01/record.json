@@ -1,0 +1,14 @@
+{
+  "id": "layout-review-synthetic-01",
+  "status": "OK",
+  "model": "fixture-not-real-ocr",
+  "lines": [
+    "$\\frac{1}{2}$",
+    "Synthetic title",
+    "item|amount",
+    "A|1",
+    "B|2",
+    "total|3",
+    "a+b+"
+  ]
+}
