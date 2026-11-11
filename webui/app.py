@@ -387,8 +387,12 @@ def _studio_compile(content: str, name: str, tag: str):
                    "-o", str(directory), str(texf)]
         try:
             run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120)
-        except subprocess.TimeoutExpired:
-            return {**result, "log": "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"}
+        except subprocess.TimeoutExpired as exc:
+            log = "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"
+            for stream in (exc.stdout, exc.stderr):
+                if stream:
+                    log += "\n" + _subprocess_text(stream)[-1200:]
+            return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
         log = (_subprocess_text(run.stderr) or _subprocess_text(run.stdout))[-2400:]
