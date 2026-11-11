@@ -1,0 +1,31 @@
+{
+  "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+  "reviewer": "synthetic-test-operator",
+  "decisions": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "action": "accept",
+      "type": "formula"
+    },
+    {
+      "start_line": 2,
+      "end_line": 2,
+      "action": "accept",
+      "type": "text"
+    },
+    {
+      "start_line": 3,
+      "end_line": 6,
+      "action": "accept",
+      "type": "table",
+      "separator": "pipe"
+    },
+    {
+      "start_line": 7,
+      "end_line": 7,
+      "action": "accept",
+      "type": "formula"
+    }
+  ]
+}

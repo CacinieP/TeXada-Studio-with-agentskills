@@ -1,0 +1,11 @@
+{
+  "docs/evaluation-results/ocr-layout-01/README.md": "f21d2466dc7b70acd88b58025068de4f8e21cd653c637d28160d41373506ffab",
+  "docs/evaluation-results/ocr-layout-01/archived-ocr-boundary.json": "053860174e1ed4ba4c218b2c8499234ed6854461428aab68646cc4cd950cf3e0",
+  "docs/evaluation-results/ocr-layout-01/host-run/report.md": "025fc8f6ac7f4d1fa529c7cadb9cefa262c30fe584ddf6c45a6d86ffde42f43f",
+  "docs/evaluation-results/ocr-layout-01/host-run/state.jsonl": "9efc010daf4066ad9ca2ad4b7a6a396c2d1d2f684469061ff4becb1044bcace1",
+  "docs/evaluation-results/ocr-layout-01/implementation.json": "1ec7a4deba5ff47f7d907363e5c3f7b708b88f703d2e04866b659572074c7971",
+  "docs/evaluation-results/ocr-layout-01/reviewed/layout.json": "1fa654172bcd5bc5b65f8bbb0b3115f92999c9195d1a8245d9546a6f7b192619",
+  "docs/evaluation-results/ocr-layout-01/reviewed/review.json": "2cc0d999907afc68c3dbb159628f89ab567addd02ce2ed9b291863061e1e4f4e",
+  "samples/ocr/layout-review-01/record.json": "4c8566c36185382401e9d16b91854b2dacf699497d60ebd2a05a3af6e8493965",
+  "samples/ocr/layout-review-01/fixture-review.json": "0640513f4f62a7ac73f5e0928551ffcad50070a015d4127478631ceab1cad1ac"
+}

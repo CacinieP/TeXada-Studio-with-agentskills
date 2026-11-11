@@ -1,6 +1,6 @@
 # CLI 质检管线
 
-CLI 读取已有 `layout.json`，逐节点检查公式与表格，生成候选审阅报告，不写回输入。原始 `.tex` 的编辑、保存、PDF 预览和图片识别使用[本地 Studio WebUI](../docs/local-studio.md)。CLI 不提供 OCR 或 PDF 布局提取；已有 crop 只作为报告证据保留。
+CLI 读取已有 `layout.json`，逐节点检查公式与表格，生成候选审阅报告，不写回输入。原始 `.tex` 的编辑、保存、PDF 预览和图片识别使用[本地 Studio WebUI](../docs/local-studio.md)。CLI 不提供 OCR 或 PDF 布局提取；已有 crop 只作为报告证据保留。已有 OCR 文本行可先通过[独立审阅转换器](../skills/doc-ocr-extract/LAYOUT.md)生成输入：逐行决定绑定 OCR 内容哈希，未审阅或无法解析的内容会阻止 `layout.json` 生成，不推断区域框或置信度。
 
 ## 跑通一个样本
 

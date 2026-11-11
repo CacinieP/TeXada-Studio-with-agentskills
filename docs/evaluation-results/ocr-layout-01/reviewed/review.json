@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "status": "OK",
+  "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+  "layout": {
+    "doc": "ocr-layout-synthetic-01",
+    "source": "reviewed OCR text candidates",
+    "ocr_record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+    "reviewer": "synthetic-test-operator",
+    "nodes": [
+      {
+        "id": "ocr-0001-0001",
+        "type": "formula",
+        "page": 1,
+        "data": {
+          "latex": "\\frac{1}{2}"
+        },
+        "ocr_source": {
+          "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+          "start_line": 1,
+          "end_line": 1,
+          "text": [
+            "$\\frac{1}{2}$"
+          ],
+          "reviewer": "synthetic-test-operator"
+        }
+      },
+      {
+        "id": "ocr-0002-0002",
+        "type": "text",
+        "page": 1,
+        "data": {
+          "text": "Synthetic title"
+        },
+        "ocr_source": {
+          "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+          "start_line": 2,
+          "end_line": 2,
+          "text": [
+            "Synthetic title"
+          ],
+          "reviewer": "synthetic-test-operator"
+        }
+      },
+      {
+        "id": "ocr-0003-0006",
+        "type": "table",
+        "page": 1,
+        "data": {
+          "rows": [
+            [
+              "item",
+              "amount"
+            ],
+            [
+              "A",
+              "1"
+            ],
+            [
+              "B",
+              "2"
+            ],
+            [
+              "total",
+              "3"
+            ]
+          ]
+        },
+        "ocr_source": {
+          "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+          "start_line": 3,
+          "end_line": 6,
+          "text": [
+            "item|amount",
+            "A|1",
+            "B|2",
+            "total|3"
+          ],
+          "reviewer": "synthetic-test-operator"
+        }
+      },
+      {
+        "id": "ocr-0007-0007",
+        "type": "formula",
+        "page": 1,
+        "data": {
+          "latex": "a+b+"
+        },
+        "ocr_source": {
+          "record_sha256": "67500c4506765751b67de278173f39aa9bff52325d79c85b4e2ea4140152fadb",
+          "start_line": 7,
+          "end_line": 7,
+          "text": [
+            "a+b+"
+          ],
+          "reviewer": "synthetic-test-operator"
+        }
+      }
+    ]
+  },
+  "review_items": [],
+  "rejected_lines": []
+}
