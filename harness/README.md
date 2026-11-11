@@ -22,6 +22,7 @@ PYTHONPATH=harness .venv/bin/python -m docforensics run samples \
 - 节点 `id` 在文档内唯一。公式用 `type="formula"`、`data.latex`；表格用 `type="table"`、`data.rows` 和可选 `data.expected`。
 - 其他节点类型按 `pass-through` 记录，并标记未检查；其 `OK` 不是公式或表格验证结论。
 - 可选 `data.crop` 相对当前工作目录解析，仓库样本应从仓库根目录运行。已有 crop 的内容哈希副本可进入报告，文本模型不会查看该图片。
+- OCR 转换器可另外绑定操作者标注的原图区域：`source_image` 指向样本目录内的 `source.png`，节点 `ocr_source.region` 保存像素框。管线在检查或复用节点前核对原图哈希、尺寸和坐标范围；图片变化或缺失时拒绝运行。此信息不是 `data.crop`，不代表自动检测或图像内容验收，详见[来源区域契约](../skills/doc-ocr-extract/LAYOUT.md#optional-operator-provided-source-regions)。
 
 ```text
 state/quickstart/

@@ -1,0 +1,15 @@
+{
+  "docs/evaluation-results/ocr-source-regions-01/README.md": "3bb63acbac2a212ad230d2440f52117271f62ef483fa0da6edf8f7d3933795fe",
+  "docs/evaluation-results/ocr-source-regions-01/cli-results.json": "b54c09d137f3903c40e8996f2ed8100a27b54e68025781265193c9a3b0a4f2b0",
+  "docs/evaluation-results/ocr-source-regions-01/host-run/report.md": "4dcfb0db42b941bbb73ffcc4f6650ef19d43d689941750a128304c052f170545",
+  "docs/evaluation-results/ocr-source-regions-01/host-run/state.jsonl": "b3edb4479208b1c59c2d2640e422e82c7b28264392071de8debeabb4009aea4e",
+  "docs/evaluation-results/ocr-source-regions-01/implementation.json": "540aad35d68e62fb36238c872e260b361dd6b5a292a1250390693810c561ad69",
+  "docs/evaluation-results/ocr-source-regions-01/reviewed/layout.json": "40420e1aeedceca7cba4901cf756a09159685d90f3c64ba0134652ed28384024",
+  "docs/evaluation-results/ocr-source-regions-01/reviewed/review.json": "1880ddc2e560d92df21dd8de23665bc19a0a954deb9a417e40bc53f464c13d1c",
+  "docs/evaluation-results/ocr-source-regions-01/reviewed/source.png": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+  "samples/ocr/source-regions-01/record.json": "da4981367c27d20564a2ca45dfdad9f3e3ea775d02e26abebb8fc096a4ce0548",
+  "samples/ocr/source-regions-01/fixture-review.json": "24bf10f64cb50b79b0eb21f93995930481c61e45ca6892c355c509b59d13e936",
+  "samples/ocr/source-regions-01/generate.py": "57a8ecc10c5ab82a85c46bb0fd2b0c04fe00a0fe21ada9df990867fea68a2c5e",
+  "samples/ocr/source-regions-01/README.md": "24d37f648c12ed99ea0bc1b37dfc21ca8d53223491e259c2f54ca66f8e9ad22a",
+  "samples/ocr/source-regions-01/source.png": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f"
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "status": "OK",
+  "record_sha256": "72e1e79f5731df1c91b712b742299c9e1f8dec418d19d821cd56481c83e4d73f",
+  "layout": {
+    "doc": "source-region-fixture",
+    "source": "reviewed OCR text candidates",
+    "ocr_record_sha256": "72e1e79f5731df1c91b712b742299c9e1f8dec418d19d821cd56481c83e4d73f",
+    "reviewer": "synthetic-rendering-fixture-not-human",
+    "nodes": [
+      {
+        "id": "ocr-0001-0001",
+        "type": "formula",
+        "page": 1,
+        "data": {
+          "latex": "x+1"
+        },
+        "ocr_source": {
+          "record_sha256": "72e1e79f5731df1c91b712b742299c9e1f8dec418d19d821cd56481c83e4d73f",
+          "start_line": 1,
+          "end_line": 1,
+          "text": [
+            "$x+1$"
+          ],
+          "reviewer": "synthetic-rendering-fixture-not-human",
+          "region": {
+            "image_sha256": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+            "bbox": [
+              3,
+              5,
+              30,
+              14
+            ],
+            "coordinate_system": "top_left_pixel_xyxy_half_open",
+            "annotation_source": "operator_provided"
+          }
+        }
+      }
+    ],
+    "source_image": {
+      "sha256": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+      "width": 40,
+      "height": 20,
+      "format": "png",
+      "file": "source.png"
+    }
+  },
+  "review_items": [],
+  "rejected_lines": [],
+  "source_image": {
+    "sha256": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+    "width": 40,
+    "height": 20,
+    "format": "png",
+    "file": "source.png"
+  }
+}

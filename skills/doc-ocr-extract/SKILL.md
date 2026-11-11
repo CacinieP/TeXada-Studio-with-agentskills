@@ -16,7 +16,7 @@ description: Turn a page image into plain-text candidate lines with a local visi
 ## Boundaries
 
 - Divide and conquer: OCR proposes candidate text; checkers, repair and state ownership live in the text-side harness (`doc-formula-verify`, `doc-table-audit`). This script has no access to any ledger or document state.
-- Do not invent confidence scores, line boxes or semantic validation. Record only what the model returned, plus objective counters from the endpoint.
+- Do not invent confidence scores, line boxes or semantic validation. Record only what the model returned, plus objective counters from the endpoint. The separate layout converter can bind operator-provided pixel regions to an actual PNG SHA256; these are explicit annotations, not model detection or independent image verification.
 - Do not send document images to any cloud provider. The endpoint is a local Ollama-compatible service.
 - A `[Non-text]`-style or empty response yields `NEEDS_HUMAN`, not an error retry loop; environment failures yield `NEEDS_ENV`.
 

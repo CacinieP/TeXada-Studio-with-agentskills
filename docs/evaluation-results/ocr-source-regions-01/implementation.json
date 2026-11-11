@@ -1,0 +1,7 @@
+{
+  "baseline_commit": "7ddc01b8f77bc1b72fabe6fb2bbf1e58212e395f",
+  "sha256": {
+    "skills/doc-ocr-extract/scripts/ocr_to_layout.py": "00256eae4049a044804b1021653f3c40eebb19858262a19382bb4ddd333fc76a",
+    "harness/docforensics/pipeline.py": "791c63d4c11963f13684dd2e70d4473ed69bf030d11e36dd525ffd27c4344840"
+  }
+}
