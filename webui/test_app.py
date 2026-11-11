@@ -153,6 +153,11 @@ class AppTest(unittest.TestCase):
                   "\\section {二项式展开}\n").encode("utf-8") + b"\xff"
 
         def run(command, **kwargs):
+            self.assertTrue(kwargs.get("capture_output"))
+            self.assertFalse(kwargs.get("text"))
+            self.assertFalse(kwargs.get("universal_newlines"))
+            self.assertIsNone(kwargs.get("encoding"))
+            self.assertIsNone(kwargs.get("errors"))
             return SimpleNamespace(returncode=1, stdout=b"", stderr=stderr)
 
         with patch.object(studio.subprocess, "run", side_effect=run):

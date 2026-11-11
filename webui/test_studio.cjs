@@ -831,6 +831,25 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('logPane').classList.contains('hide'),false);
   assert.match(get('joblog').innerHTML,/persistent historical failure details/);
 
+  const compilerStatus = {
+    done: true,
+    log: Array.from({length: 30}, (_, index) => `later activity ${index}`),
+    result: {
+      compile_before: {compile_ok: false, log: "original <TeX> diagnostic"},
+      compile_after: {compile_ok: false, log: "candidate compiler diagnostic"},
+    },
+  };
+  context.compilerStatusWire = async url => url.includes('/fixstatus?') ? compilerStatus
+    : url.includes('/fix?') ? {job: 'c'.repeat(32)} : {jobs: []};
+  run('j=compilerStatusWire;globalThis.savedApplyResult=applyResult;applyResult=async()=>{};');
+  await pageFixHandler();
+  const liveJobLog = get('joblog').innerHTML;
+  assert.match(liveJobLog, /修复前编译诊断.*original &lt;TeX&gt; diagnostic/);
+  assert.match(liveJobLog, /修复后编译诊断.*candidate compiler diagnostic/);
+  await pageRestoreJob('c'.repeat(32),'check.tex');
+  assert.equal(get('joblog').innerHTML, liveJobLog);
+  run('applyResult=savedApplyResult;');
+
   // Floating Agent review traps keyboard focus and restores the invoking control.
   context.window.innerWidth=900;
   get('btnAgent').focus();get('btnAgent').click();
