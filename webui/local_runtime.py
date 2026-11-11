@@ -389,6 +389,8 @@ class LocalRuntime:
         with self._lock:
             settings = self._settings()
         import_id = uuid.uuid4().hex
+        extensions = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "application/pdf": ".pdf"}
+        extension = extensions[mime]
         self.state_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ocr-", dir=self.state_dir) as temporary:
             directory = Path(temporary)
@@ -401,6 +403,8 @@ class LocalRuntime:
                 result = self._transcribe(image, settings)
                 pages.append({"page": image["page"], "width": image["width"], "height": image["height"],
                               "image_sha256": hashlib.sha256(image["data"]).hexdigest(),
+                              "image_file": f"pages/page-{image['page']:06d}.png" if mime == "application/pdf" else "source" + extension,
+                              "image_mime_type": image["mime_type"],
                               "body": _page_body(result["text"]), **result})
         content = _document(pages)
         safe_stem = re.sub(r"[^\w.-]", "-", Path(name).stem).strip(".-")[:100] or "document"
@@ -412,15 +416,65 @@ class LocalRuntime:
                   "model": settings["model"], "provider": "local-openai-compatible", "local_mode": True,
                   "requires_review": True, "created_at": time.time(),
                   "notice": "这是本地模型的转写候选。请对照原图检查；语法或编译通过不代表转写正确。"}
-        directory = self.state_dir / "imports" / import_id
-        directory.mkdir(parents=True, exist_ok=False)
-        extension = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "application/pdf": ".pdf"}[mime]
-        for path, payload in ((directory / ("source" + extension), data),
-                              (directory / "candidate.json", json.dumps(record, ensure_ascii=False, indent=2).encode())):
-            with open(path, "xb") as stream:
-                os.chmod(path, 0o600)
-                stream.write(payload)
+        imports = self.state_dir / "imports"
+        imports.mkdir(parents=True, exist_ok=True, mode=0o700)
+        directory = imports / import_id
+        staging = Path(tempfile.mkdtemp(prefix=".pending-", dir=imports))
+        try:
+            files = [(staging / ("source" + extension), data)]
+            if mime == "application/pdf":
+                files.extend((staging / page["image_file"], image["data"]) for page, image in zip(pages, images))
+            files.append((staging / "candidate.json", json.dumps(record, ensure_ascii=False, indent=2).encode()))
+            for path, payload in files:
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with open(path, "xb") as stream:
+                    os.chmod(path, 0o600)
+                    stream.write(payload)
+            if directory.exists():
+                raise FileExistsError(directory)
+            os.rename(staging, directory)
+        except OSError:
+            raise LocalRuntimeError("import_evidence_write_failed", "无法保存识别证据，未创建导入记录。", 500) from None
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
         return record
+
+    def get_page_evidence(self, import_id, page):
+        """Read the exact persisted input image; never regenerate or call a model."""
+        if not isinstance(import_id, str) or re.fullmatch(r"[0-9a-f]{32}", import_id) is None:
+            raise LocalRuntimeError("invalid_import_id", "导入记录编号无效。")
+        if type(page) is not int or page < 1:
+            raise LocalRuntimeError("invalid_page_range", "原图页码必须是正整数。")
+        directory = self.state_dir / "imports" / import_id
+        if directory.is_symlink():
+            raise LocalRuntimeError("invalid_import_evidence", "原图证据路径无效。", 409)
+        try:
+            record = json.loads((directory / "candidate.json").read_text(encoding="utf-8"))
+            entry = next((item for item in record["pages"] if item["page"] == page), None)
+            if entry is None:
+                raise LocalRuntimeError("source_page_not_found", "该页不在本次导入范围内。", 404)
+            mime = entry["image_mime_type"]
+            extension = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[mime]
+            expected = f"pages/page-{page:06d}{extension}" if record["source_mime_type"] == "application/pdf" else "source" + extension
+            if record["id"] != import_id or entry["image_file"] != expected:
+                raise LocalRuntimeError("invalid_import_evidence", "原图证据与导入记录不匹配。", 409)
+            path = directory / expected
+            if path.is_symlink() or not path.resolve().is_relative_to(directory.resolve()):
+                raise LocalRuntimeError("invalid_import_evidence", "原图证据路径无效。", 409)
+            data = path.read_bytes()
+            if len(data) > MAX_FILE_BYTES or hashlib.sha256(data).hexdigest() != entry["image_sha256"]:
+                raise LocalRuntimeError("source_evidence_changed", "原图证据已变更，不能用于原候选核验。", 409)
+            dimensions = validate_image(data, mime)
+            if dimensions != {"width": entry["width"], "height": entry["height"]}:
+                raise LocalRuntimeError("source_evidence_changed", "原图尺寸与记录不匹配。", 409)
+            return {"data": data, "mime_type": mime, "sha256": entry["image_sha256"], "page": page, **dimensions}
+        except LocalRuntimeError:
+            raise
+        except FileNotFoundError:
+            raise LocalRuntimeError("source_evidence_unavailable", "未找到保存的原图证据。", 404) from None
+        except (OSError, ValueError, KeyError, TypeError):
+            raise LocalRuntimeError("invalid_import_evidence", "无法读取原图证据记录。", 409) from None
 
 
 def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=0, max_tokens=300):
