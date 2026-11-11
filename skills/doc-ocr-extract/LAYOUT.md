@@ -92,11 +92,26 @@ replaced or mismatched source bytes fail the run. The source filename is resolve
 relative to the sample directory. Source-linked regions cannot omit the image
 metadata to bypass this check.
 
-This does not crop, copy a region to `data.crop`, auto-detect regions, assign OCR
-confidence or independently validate image content. Existing reports still use
-their crop-evidence behavior; inspect `layout.json` and `source.png` for these
-new annotations. PNG is currently the only bound-source format; render a PDF
-page or explicitly convert another image upstream before annotating it.
+This does not crop, auto-detect regions, assign OCR confidence or independently
+validate image content. `data.crop` remains a separate evidence channel. The
+harness archives the original PNG by content hash under the run's `sources/`
+directory and records input/context/revision-bound `SOURCE_REGION` events for
+checked, pass-through and reused nodes. `report.md` shows the source image once
+per page, original OCR text, coordinates and operator attestation, with links to
+a boxed full-page SVG and a region zoom SVG. These are linked vector views of
+the same original PNG, not new raster crops or detection results.
+
+Open the linked SVG files directly in a local browser; the original PNG is also
+linked/embedded as a fallback. SVGs reference their same-directory PNG, so move
+or share the **whole run directory**, including `sources/`, rather than the
+Markdown/SVG alone. No new image library, browser script, remote URL or image
+upload is used. A valid source snapshot allows offline report regeneration
+after the original sample is removed. Missing, changed or dimension-mismatched
+snapshots produce an explicit unavailable message without preview links; rerun
+against a still-valid original sample can restore a damaged snapshot/cache.
+
+PNG is currently the only bound-source format; render a PDF page or explicitly
+convert another image upstream before annotating it.
 
 ## Node contract and limits
 

@@ -15,7 +15,7 @@ import struct
 import subprocess
 import sys
 
-from . import anchor_guard, state
+from . import anchor_guard, source_report, state
 from .vlm import FixtureProvider, OllamaProvider
 from .formula_repair import assess_candidate, deterministic_candidate, repair_blocker
 from .table_repair import assess_table_candidate
@@ -126,6 +126,7 @@ def node_identity(node, provider, kind=None):
         "table_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "table_repair.py")),
         "tex_context_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "tex_context.py")),
         "state_sha256": _file_sha256(state.__file__),
+        "source_report_sha256": _file_sha256(source_report.__file__) if node.get("ocr_source") else None,
         "python": list(sys.version_info[:3]), "dependencies": versions,
         "max_retries": MAX_RETRIES, "provider": _provider_context(provider),
     }
@@ -424,6 +425,8 @@ def run(sample_path, run_dir, provider, run_id=None):
             raise ValueError("duplicate node id in layout")
         seen.add(node["id"])
     _validate_ocr_source(layout, sample_path)
+    source_image = (source_report.snapshot(run_dir, sample_path, layout["source_image"])
+                    if "source_image" in layout else None)
     run_id = run_id or state.new_run_id()
     events = state.load_events(run_dir)
     counts = {"OK": 0, "NEEDS_HUMAN": 0}
@@ -437,6 +440,9 @@ def run(sample_path, run_dir, provider, run_id=None):
         common = {"run_id": run_id, "doc": doc, "node_id": nid,
                   "input_sha256": input_sha256, "context_sha256": context_sha256,
                   "revision": revision}
+        if source_image is not None:
+            state.append(run_dir, **common, action="SOURCE_REGION",
+                         source_region=source_report.node_region(source_image, node))
         done = state.terminal_event(events, doc, nid, input_sha256, context_sha256)
         if done:
             counts[done["status"]] += 1

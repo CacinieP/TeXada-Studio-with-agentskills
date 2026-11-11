@@ -20,3 +20,5 @@
 - [2026-11-11 reviewed OCR layout conversion](ocr-layout-01/README.md): issue #24; explicit hash-bound review decisions, formula/table/text nodes, unresolved-span blocking and real CLI resume. Offline synthetic conversion and archived real-OCR parsing boundary; no new OCR-quality claim.
 
 - [2026-11-11 operator-provided OCR source regions](ocr-source-regions-01/README.md): issue #24; PNG identity and explicit pixel boxes, with source-byte checks before harness resume. Synthetic geometry evidence; no automatic detection or human image-validation claim.
+
+- [2026-11-11 portable OCR source-region reports](ocr-region-report-01/README.md): source snapshots, boxed/zoom vector views, original OCR text, and input-bound events retained on resume. Offline report rebuild and local Chromium rendering verified on the synthetic fixture.

@@ -1,0 +1,10 @@
+{
+  "docs/evaluation-results/ocr-region-report-01/README.md": "125a7636419927957e4a0df1a9b60250d081f905b7f6b7457c92c61949c9d164",
+  "docs/evaluation-results/ocr-region-report-01/cli-results.json": "ffbb3a00f20b122fe31851593b9d46272a3a9ce1239e5902ffe80c1e9cc8fb51",
+  "docs/evaluation-results/ocr-region-report-01/host-run/report.md": "f2880723a402ffb9563b7432febfdb5b4b76d5fa1926282b315a5321c363e8a5",
+  "docs/evaluation-results/ocr-region-report-01/host-run/sources/76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f.png": "76a5da13c45607466a2bb77d424e346a87388d0454785db8c6e8e7f9c986713f",
+  "docs/evaluation-results/ocr-region-report-01/host-run/sources/c9c3204e647bb85efe2f6489b00b54d128b0f4ecf6b54af34373b5818467c140-annotated.svg": "c8a252e158fa265a450c3cfe96e1103d5478ea6d97b3b514f58b910d34fb3aef",
+  "docs/evaluation-results/ocr-region-report-01/host-run/sources/c9c3204e647bb85efe2f6489b00b54d128b0f4ecf6b54af34373b5818467c140-zoom.svg": "d065ebbf6c11ff1a6e7db6333ba69dd470e8d876c58c59e8bbb12093dd480e7b",
+  "docs/evaluation-results/ocr-region-report-01/host-run/state.jsonl": "05b62f9c4528244baeb22031278dd411ec6ba64177e112bf54345b14a067c3c3",
+  "docs/evaluation-results/ocr-region-report-01/implementation.json": "e4f2761cddb3565d2e57cefd2f9e187791f2cc34b50da5120f95403147b678be"
+}
