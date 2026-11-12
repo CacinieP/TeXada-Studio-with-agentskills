@@ -9,8 +9,13 @@
 
 ### Added
 
+- E2E release acceptance driver `scripts/e2e_release_check.py`: preflight (venv Python, LaTeX toolchain, served model names must match the contract names exactly), E2E-1 compile scenario (real tectonic build + PDF fetch), E2E-2 repair scenario with real model criteria (job completion, landed edit with hash change, checker verification, `model_calls >= 1`), and evidence records under `docs/evaluation-results/e2e-release-01/`.
 - Model-routing contract tests: `OCR_MODEL` environment routing and the `--model` CLI default in doc-ocr-extract, `REPAIR_MODEL` priority through the Studio provider/pipeline surface, and default-literal consistency across the repair, Studio and OCR lines.
 - Native integration verification for termination: a real Cocoa window receives SIGTERM and must exit gracefully within bounds (including via the window-closer cleanup path), plus watchdog unit tests for deadline and second-signal behavior.
+
+### Changed
+
+- Formula repair scope guard (user ruling B, 2026-11-12): `assess_candidate` now also authorizes exactly one bounded token (up to 8 letters/digits, optionally brace-wrapped) filling an **empty** subscript/superscript slot (`single_token_gap_fill` / `fill_empty_script_token`), so real model repairs can land after checker verification; every other invented content stays unauthorized. `doc-formula-verify` skill v1.2.0 (`capability.json` 1.2.0) aligns the doctrine: an empty script slot is the single fillable gap, while trailing operators, missing `\frac` arguments and ambiguous groups still abstain. The repair system prompt and MiniCPM few-shot now teach the gap-fill repair (example `x^+1` → `x^2+1`); landed edits remain adoption-gated (`checker_accepted_not_user_adopted`).
 
 ## 0.2.0-beta.4 — 2026-11-11
 

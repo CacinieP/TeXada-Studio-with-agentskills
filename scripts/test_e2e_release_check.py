@@ -14,6 +14,7 @@ from e2e_release_check import (
     probe_python,
     probe_models,
     run_e2e1_compile,
+    run_e2e2_repair,
     write_evidence,
 )
 
@@ -68,7 +69,7 @@ class PreflightTests(unittest.TestCase):
                       probe_models=probe_models)
 
     def test_probe_models_accepts_latest_tag_suffixes(self):
-        # 钉住的破坏：required 名单匹配不上 ollama 的 :latest 后缀 id。
+        # 钉住的破坏：required 名与 ollama 的 :latest 后缀 id 对不上（归一化匹配）。
         def _fake_urlopen(_url, timeout=0):
             class _Resp:
                 def read(self):
@@ -84,8 +85,27 @@ class PreflightTests(unittest.TestCase):
 
             return _Resp()
 
-        models = probe_models(DEAD, urlopen=_fake_urlopen)
+        models = probe_models(DEAD, ("openbmb/minicpm-v4.7", "minicpm-ocr"), urlopen=_fake_urlopen)
         self.assertEqual(models, ["openbmb/minicpm-v4.7:latest", "minicpm-ocr:latest"])
+
+    def test_probe_models_rejects_unserved_model_name(self):
+        # 钉住的破坏：子串匹配放行「端点不服务该名字」（如 minicpm-v4.7 ≠ minicpm-v4.7-35b-a3b-q4）。
+        def _fake_urlopen(_url, timeout=0):
+            class _Resp:
+                def read(self):
+                    return json.dumps({"object": "list", "data": [{"id": "minicpm-v4.7:latest"}]}).encode()
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+            return _Resp()
+
+        with self.assertRaises(PreflightError) as ctx:
+            probe_models(DEAD, ("minicpm-v4.7-35b-a3b-q4",), urlopen=_fake_urlopen)
+        self.assertIn("minicpm-v4.7-35b-a3b-q4", str(ctx.exception))
 
 
 class WriteEvidenceTests(unittest.TestCase):
@@ -197,6 +217,83 @@ class E2E1CompileTests(unittest.TestCase):
 
         result = run_e2e1_compile(call, self.fixture_dir)
         self.assertFalse(result["passed"])
+
+
+class E2E2RepairTests(unittest.TestCase):
+    """修复场景四判据：job 完成、落稿编辑（哈希变化）、复核全绿、NEEDS_HUMAN/失败=不过。"""
+
+    MODEL = "minicpm-v4.7-35b-a3b-q4"
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.case_path = Path(tmp.name) / "smoke_cases.json"
+        self.case_path.write_text(json.dumps({"cases": [
+            {"id": "S01", "case_kind": "control", "original_latex": "x+1"},
+            {"id": "S02", "case_kind": "injected", "original_latex": "a_+b",
+             "reference_latex": "a_1+b"},
+        ]}), encoding="utf-8")
+
+    @staticmethod
+    def _result(**overrides):
+        result = {"fixed_content": "\\[ a_1+b \\]", "edits": [
+            {"line": 4, "before": "a_+b", "after": "a_1+b", "skill": "doc-formula-verify"}],
+            "compile_before": {"ok": True}, "compile_after": {"ok": True},
+            "problems_after": [], "model": E2E2RepairTests.MODEL,
+            "configured_model": E2E2RepairTests.MODEL, "model_calls": 2,
+            "original_sha256": "00", "candidate_sha256": "11"}
+        result.update(overrides)
+        return result
+
+    def _run(self, *, result=None, jobs_entry=None, analyze_problems=None):
+        outer = self
+        analyze_problems = (analyze_problems if analyze_problems is not None
+                            else [{"id": "f-003-1", "type": "formula", "status": "RETRY"}])
+        jobs_entry = jobs_entry or {"id": "j1", "done": True, "error": None}
+        result = result if result is not None else self._result()
+
+        def call(path, payload=None):
+            if path == "/api/studio/analyze":
+                return {"problems": analyze_problems, "summary": {"formula": 1, "table": 0}}
+            if path == "/api/studio/fix":
+                outer.assertEqual(payload["name"], "S02.tex")
+                outer.assertIn("a_+b", payload["content"])
+                return {"job": "j1"}
+            if path == "/api/studio/jobs":
+                return {"jobs": [jobs_entry]}
+            if path == "/api/studio/fixstatus?id=j1":
+                return {"done": True, "result": result, "error": None}
+            outer.fail(f"unexpected path {path}")
+
+        return run_e2e2_repair(call, self.case_path)
+
+    def test_repair_scenario_passes_all_four_criteria(self):
+        out = self._run()
+        self.assertTrue(out["passed"])
+        self.assertEqual(out["id"], "E2E-2")
+        self.assertEqual(sorted(out), ["detail", "elapsed_seconds", "id", "passed"])
+        self.assertIn("repair_model=" + self.MODEL, out["detail"])
+        self.assertIn("S02", out["detail"])
+
+    def test_repair_scenario_fails_on_needs_human(self):
+        out = self._run(result=self._result(
+            problems_after=[{"id": "f-1", "type": "formula", "status": "NEEDS_HUMAN"}]))
+        self.assertFalse(out["passed"])
+        self.assertIn("NEEDS_HUMAN", out["detail"])
+
+    def test_repair_scenario_fails_on_job_error(self):
+        out = self._run(jobs_entry={"id": "j1", "done": True, "error": "任务失败（RuntimeError）"})
+        self.assertFalse(out["passed"])
+        self.assertIn("RuntimeError", out["detail"])
+
+    def test_repair_scenario_fails_without_landed_edit(self):
+        out = self._run(result=self._result(edits=[], original_sha256="00", candidate_sha256="00"))
+        self.assertFalse(out["passed"])
+
+    def test_repair_scenario_fails_when_analyze_finds_no_problem(self):
+        out = self._run(analyze_problems=[])
+        self.assertFalse(out["passed"])
+        self.assertIn("analyze", out["detail"])
 
 
 if __name__ == "__main__":

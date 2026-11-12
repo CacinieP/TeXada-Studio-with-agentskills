@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "id": "E2E-1",
+      "passed": true,
+      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-94787c6eaba2488dae84f666eb071f40）",
+      "elapsed_seconds": 0.22671890258789062
+    },
+    {
+      "id": "E2E-2",
+      "passed": true,
+      "detail": "case=S02 edits=1 model_calls=1 repair_model=minicpm-v4.7",
+      "elapsed_seconds": 4.189511060714722
+    }
+  ],
+  "all_passed": true
+}

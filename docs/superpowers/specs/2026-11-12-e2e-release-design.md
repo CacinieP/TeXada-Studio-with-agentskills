@@ -100,3 +100,23 @@
 4. **发布渠道？**——GitHub Release（公开仓库）；若用户要其他渠道属其拍板项，默认 GitHub。
 
 其余（fixture、超时、证据格式、清单措辞）为 §6 已显式留给实施者的部分，可自决。
+
+## 8. 裁决补记（执行期，2026-11-12）
+
+E2E-2 真跑暴露一个设计级事实：`assess_candidate` 范围门卫原本只放行「原文不动」或
+「deterministic 补括号 patch」，系统提示词与 doc-formula-verify SKILL 又明令「never
+invent a missing operand or index」——按原设计，模型候选**永远无法落稿**，与本文
+「真实 MiniCPM 落稿」的验收语义冲突。三选项呈报后**用户裁决 B**：扩权范围门卫。
+
+**裁决 B 内容**（已实施，详见 CHANGELOG Unreleased/Changed）：
+
+- `assess_candidate` 新增唯一发明通道：`single_token_gap_fill` / `fill_empty_script_token`
+  ——仅空 script 槽（`_`/`^` 后无任何可作参数的 token）允许填一个 ≤8 字母数字 token
+  （可 `{...}` 包裹）；行尾空槽仍被 `repair_blocker=missing_script_operand` 拦截；
+  尾操作数、缺 `\frac` 参数、歧义组等一律保持「不臆造」。
+- 修复系统提示词与 MiniCPM few-shot 教该填充（样例 `x^+1`→`x^2+1`，刻意与 E2E fixture
+  异形以证明泛化）；doc-formula-verify SKILL v1.2.0（capability.json 同步）教义对齐。
+- 落稿编辑仍受人工采纳门约束（`checker_accepted_not_user_adopted`）——「防篡改」语义不变。
+
+真跑证据（2026-11-12）：真 MiniCPM 对 `a_+b` 泛化产出 `a_1+b`（未抄样例），checker 复核 ✓，
+门卫 `single_token_gap_fill` 放行，落稿 1 处，`model_calls=1`，E2E-2 通过。

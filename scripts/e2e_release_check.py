@@ -15,7 +15,10 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-REQUIRED_MODELS = ("openbmb/minicpm-v4.7", "minicpm-ocr")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
+from docforensics.__main__ import repair_model_default  # noqa: E402  # #23 契约同源
+
+REQUIRED_MODELS = (repair_model_default(), "minicpm-ocr")
 DEFAULT_MODELS_BASE = "http://127.0.0.1:11434/v1"
 
 
@@ -40,8 +43,14 @@ def probe_latex_tools(tools=("tectonic", "pdfinfo"), which=None):
     return list(tools)
 
 
-def probe_models(models_base, required=REQUIRED_MODELS, urlopen=None, timeout=2.0):
-    """模型端点必须可达且含修复线与 OCR 线所需模型；失败必须响亮。"""
+def _served_name(name):
+    """去掉 :tag 后缀（如 minicpm-ocr:latest → minicpm-ocr）；其余原样。"""
+    return name.rsplit(":", 1)[0] if ":" in name.split("/")[-1] else name
+
+
+def probe_models(models_base, required=None, *, urlopen=None, timeout=2.0):
+    """模型端点必须可达且确切服务修复线与 OCR 线的模型名；失败必须响亮。"""
+    required = required or REQUIRED_MODELS
     urlopen = urlopen or urllib.request.urlopen
     url = models_base.rstrip("/") + "/models"
     try:
@@ -51,19 +60,21 @@ def probe_models(models_base, required=REQUIRED_MODELS, urlopen=None, timeout=2.
     except Exception as exc:
         raise PreflightError(
             f"模型端点不可达或响应异常：{models_base}（{exc}；确认 Ollama 正在 11434 端口运行）") from exc
+    served = {_served_name(mid) for mid in ids}
     for req in required:
-        if not any(req in mid for mid in ids):
-            raise PreflightError(f"模型 {req} 不在端点 {models_base}（现有：{ids}）")
+        if _served_name(req) not in served:
+            raise PreflightError(
+                f"模型 {req} 未在端点 {models_base} 服务（现有：{ids}；Ollama 请用在册名，或 `ollama cp` 建别名）")
     return ids
 
 
-def preflight(skip_model=False, *, models_base=DEFAULT_MODELS_BASE,
+def preflight(skip_model=False, *, models_base=DEFAULT_MODELS_BASE, required=None,
               probe_python=probe_python, probe_latex_tools=probe_latex_tools,
               probe_models=probe_models):
     """真实 E2E 前置检查；skip_model 仅供日常开发，发布运行禁用。"""
     python = probe_python()
     latex_tools = probe_latex_tools()
-    models = [] if skip_model else probe_models(models_base)
+    models = [] if skip_model else probe_models(models_base, required)
     return {"python": python, "latex_tools": list(latex_tools), "models": list(models)}
 
 
@@ -125,17 +136,68 @@ def run_e2e1_compile(call, fixture_dir):
             "detail": f"{src.name} → {len(pdf)} 字节 PDF（tag={tag}）", "elapsed_seconds": elapsed}
 
 
+def run_e2e2_repair(call, case_path):
+    """E2E-2：真实修复链路落稿并过复核（首个 injected 用例；jobs 判 done + fixstatus 取 result）。"""
+    t0 = time.time()
+    cases = json.loads(Path(case_path).read_text(encoding="utf-8"))["cases"]
+    case = next((c for c in cases if c.get("case_kind") == "injected"), cases[0])
+    content = ("\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n\\[\n"
+               + case["original_latex"] + "\n\\]\n\\end{document}\n")
+    name = f"{case['id']}.tex"
+
+    def fail(detail):
+        return {"id": "E2E-2", "passed": False, "detail": detail,
+                "elapsed_seconds": time.time() - t0}
+
+    problems = call("/api/studio/analyze", {"name": name, "content": content}).get("problems") or []
+    if not problems:
+        return fail(f"analyze 未发现可修问题（case={case['id']}）")
+    job = call("/api/studio/fix", {"name": name, "content": content})["job"]
+    deadline = time.time() + 600
+    entry = None
+    while time.time() < deadline:
+        entry = next((e for e in call("/api/studio/jobs").get("jobs", []) if e["id"] == job), None)
+        if entry is None or entry["done"]:
+            break
+        time.sleep(2)
+    if entry is None or not entry["done"]:
+        return fail(f"job 未完成（{job}）")
+    if entry.get("error"):
+        return fail(f"job 失败：{entry['error']}")
+    result = call(f"/api/studio/fixstatus?id={job}").get("result") or {}
+    model = result.get("configured_model") or result.get("model") or "?"
+    edits = result.get("edits") or []
+    problems_after = result.get("problems_after") or []
+    if any(p.get("status") == "NEEDS_HUMAN" for p in problems_after):
+        return fail(f"NEEDS_HUMAN 残留（repair_model={model}）")
+    if not edits:
+        return fail(f"无落稿编辑（repair_model={model}）")
+    if result.get("original_sha256") == result.get("candidate_sha256"):
+        return fail(f"内容哈希未变化（repair_model={model}）")
+    if not (result.get("compile_after") or {}).get("ok"):
+        return fail(f"修复后编译失败（repair_model={model}）")
+    if problems_after:
+        return fail(f"修复后仍有问题（repair_model={model}）")
+    if not result.get("model_calls"):
+        return fail(f"未调用真实模型（repair_model={model}）")
+    return {"id": "E2E-2", "passed": True,
+            "detail": f"case={case['id']} edits={len(edits)} "
+                      f"model_calls={result.get('model_calls')} repair_model={model}",
+            "elapsed_seconds": time.time() - t0}
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-def boot_backend(token, *, python=None, cwd=None):
+def boot_backend(token, *, python=None, cwd=None, env_extra=None):
     """起真实 uvicorn 后端；返回 (popen, base_url)。"""
     port = _free_port()
     env = dict(os.environ)
     env["DEMO_TOKEN"] = token
+    env.update(env_extra or {})
     proc = subprocess.Popen(
         [python or sys.executable, "-m", "uvicorn", "app:app",
          "--host", "127.0.0.1", "--port", str(port), "--app-dir", "webui"],
@@ -162,21 +224,29 @@ def main(argv=None):
     ap.add_argument("--skip-model", action="store_true",
                     help="跳过模型预检（仅供日常开发，发布运行禁用）")
     ap.add_argument("--evidence-dir", default="docs/evaluation-results/e2e-release-01")
+    ap.add_argument("--models-base", default=DEFAULT_MODELS_BASE,
+                    help="OpenAI 兼容模型端点（默认本机 Ollama）")
+    ap.add_argument("--repair-model", default=None,
+                    help="修复线模型名（默认取契约 repair_model_default()）")
+    ap.add_argument("--ocr-model", default="minicpm-ocr")
     args = ap.parse_args(argv)
+    repair_model = args.repair_model or repair_model_default()
 
     def want(sid):
         return not args.only or sid in args.only
 
     try:
-        summary = preflight(skip_model=args.skip_model)
+        summary = preflight(skip_model=args.skip_model, models_base=args.models_base,
+                            required=(repair_model, args.ocr_model))
     except PreflightError as exc:
         print(f"[e2e] 预检失败：{exc}", file=sys.stderr)
         return 2
     print(f"[e2e] 预检通过：python={summary['python']} tools={summary['latex_tools']} "
-          f"models={len(summary['models'])} 个")
+          f"models={len(summary['models'])} 个 repair_model={repair_model}")
 
     token = uuid.uuid4().hex + uuid.uuid4().hex
-    proc, base_url = boot_backend(token)
+    proc, base_url = boot_backend(
+        token, env_extra={"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})
     results = []
     try:
         call = make_call(base_url, token)
@@ -184,6 +254,9 @@ def main(argv=None):
         if want("E2E-1"):
             print("[e2e] E2E-1 编译场景…")
             results.append(run_e2e1_compile(call, Path("samples/docs")))
+        if want("E2E-2"):
+            print("[e2e] E2E-2 修复场景（真实模型，可能较久）…")
+            results.append(run_e2e2_repair(call, Path("samples/research/smoke_cases.json")))
     finally:
         proc.terminate()
         try:

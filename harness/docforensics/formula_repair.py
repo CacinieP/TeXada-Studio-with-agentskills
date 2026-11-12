@@ -31,6 +31,8 @@ _RELATIONS = frozenset({"=", "<", ">", "≤", "≥", "≠", r"\le", r"\leq", r"\
 _TWO_ARGUMENT_COMMANDS = frozenset({
     r"\frac", r"\dfrac", r"\tfrac", r"\binom", r"\dbinom", r"\tbinom",
 })
+_GAP_FILL_INSERT = re.compile(r"[0-9A-Za-z]{1,8}|\{[0-9A-Za-z]{1,8}\}")
+_GAP_ARG_START = re.compile(r"[0-9A-Za-z{\\]")
 
 
 @dataclass(frozen=True)
@@ -250,12 +252,35 @@ def deterministic_candidate(original):
     return _deterministic_patch(original)[0]
 
 
-def assess_candidate(original, candidate):
-    """Authorize only an unchanged body or the same deterministic syntax patch.
+def _gap_fill_insertion(before, after):
+    """True when ``after`` is ``before`` plus one bounded token at an empty script slot."""
+    limit = min(len(before), len(after))
+    prefix_end = 0
+    while prefix_end < limit and before[prefix_end] == after[prefix_end]:
+        prefix_end += 1
+    suffix_len = 0
+    while (suffix_len < len(before) - prefix_end and suffix_len < len(after) - prefix_end
+           and before[len(before) - 1 - suffix_len] == after[len(after) - 1 - suffix_len]):
+        suffix_len += 1
+    if before[prefix_end:len(before) - suffix_len]:
+        return False
+    inserted = after[prefix_end:len(after) - suffix_len]
+    if not _GAP_FILL_INSERT.fullmatch(inserted):
+        return False
+    if prefix_end == 0 or before[prefix_end - 1] not in "_^":
+        return False
+    return not _GAP_ARG_START.match(before[prefix_end:])
 
-    ``reason`` is a bounded, stable rejection category. The first differing
-    mathematical token is also returned for useful retry feedback. Ordered
-    tokens include grouping; token equality alone never authorizes an edit.
+
+def assess_candidate(original, candidate):
+    """Authorize unchanged source, the deterministic syntax patch, or one script-gap fill.
+
+    The only invented content ever authorized is a single bounded token (up to 8
+    letters/digits, optionally brace-wrapped) filling an empty subscript or
+    superscript slot (user ruling B, 2026-11-12). ``reason`` is a bounded, stable
+    rejection category. The first differing mathematical token is also returned
+    for useful retry feedback. Ordered tokens include grouping; token equality
+    alone never authorizes an edit.
     """
     rejected = {"allowed": False, "reason": "invalid_candidate", "method": "none"}
     if not isinstance(original, str) or not original.strip():
@@ -272,6 +297,8 @@ def assess_candidate(original, candidate):
     expected, method = _deterministic_patch(original)
     if expected is not None and after == expected.strip():
         return {"allowed": True, "reason": "deterministic_syntax_patch", "method": method}
+    if repair_blocker(original) is None and _gap_fill_insertion(before, after):
+        return {"allowed": True, "reason": "single_token_gap_fill", "method": "fill_empty_script_token"}
     reason = repair_blocker(original) or "unauthorized_source_change"
     result = {**rejected, "reason": reason}
     old_tokens, new_tokens = _tokens(before), _tokens(after)
