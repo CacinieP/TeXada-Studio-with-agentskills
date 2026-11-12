@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -321,6 +322,77 @@ def run_e2e3_ocr(image_dir, *, model="minicpm-ocr:latest", base=DEFAULT_MODELS_B
     return result
 
 
+def run_e2e4_persistence(call_factory, *, name="e2e-persistence-01.tex", content=None) -> dict:
+    """E2E-4 持久化：后端 A 存档 → 关停 A → 新后端 B 读回。
+
+    call_factory() 每次产出一个**新后端**的调用器（可带 close()）；防假绿：
+    读回必须来自工厂第二次产出（新进程），内容逐字节一致且哈希跨进程一致。
+    落点 state/studio/documents/（STUDIO_DOCS），两后端共享同一磁盘目录。
+    """
+    content = content if content is not None else (
+        "% TeXada E2E-4 persistence probe\n\\documentclass{article}\n"
+        "\\begin{document}\ne2e-4 probe\n\\end{document}\n")
+    started = time.monotonic()
+    criteria = {"write_ok": False, "read_back_matches": False,
+                "hash_consistent": False, "cross_restart": False}
+    result = {"id": "E2E-4", "passed": False, "criteria": criteria, "detail": ""}
+    expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    def _close(call):
+        close = getattr(call, "close", None)
+        if callable(close):
+            close()
+
+    call_a = call_factory()
+    try:
+        saved = call_a("/api/studio/save", {"name": name, "content": content})
+    except Exception as exc:
+        result["detail"] = f"存档失败：{exc!r}"
+        result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        return result
+    criteria["write_ok"] = (isinstance(saved, dict) and saved.get("ok") is True
+                            and saved.get("sha256") == expected_hash)
+    _close(call_a)
+    call_b = call_factory()
+    criteria["cross_restart"] = call_b is not call_a
+    try:
+        read = call_b(f"/api/studio/file?name={urllib.parse.quote(name)}")
+    except Exception as exc:
+        result["detail"] = f"读回失败：{exc!r}"
+        _close(call_b)
+        result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        return result
+    _close(call_b)
+    criteria["read_back_matches"] = isinstance(read, dict) and read.get("content") == content
+    criteria["hash_consistent"] = (isinstance(read, dict) and isinstance(saved, dict)
+                                   and read.get("sha256") == expected_hash == saved.get("sha256"))
+    if not all(criteria.values()):
+        result["detail"] = "持久化判据未全过：" + ",".join(k for k, v in criteria.items() if not v)
+    result["passed"] = all(criteria.values())
+    result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    return result
+
+
+def _persistence_factory(token, env_extra):
+    """E2E-4 契约工厂：每次调用产出一个全新后端进程的调用器（close() 关停）。"""
+    def factory():
+        proc, base_url = boot_backend(token, env_extra=env_extra)
+        call = make_call(base_url, token)
+        wait_ready(call)
+
+        def close():
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+        call.close = close
+        return call
+
+    return factory
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -402,6 +474,10 @@ def main(argv=None):
         print("[e2e] E2E-3 OCR→布局场景（真实模型，可能较久）…")
         results.append(run_e2e3_ocr(Path("samples/ocr"), model=args.ocr_model,
                                     base=args.models_base))
+    if want("E2E-4"):
+        print("[e2e] E2E-4 持久化场景（两起两停后端）…")
+        results.append(run_e2e4_persistence(_persistence_factory(
+            token, {"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})))
     json_path, md_path = write_evidence(results, Path(args.evidence_dir))
     print(f"[e2e] 证据：{json_path} / {md_path}")
     for r in results:

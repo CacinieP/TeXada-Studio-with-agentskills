@@ -3,14 +3,14 @@
     {
       "id": "E2E-1",
       "passed": true,
-      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-18acf0b69a9c40fd966e91176ac228b2）",
-      "elapsed_seconds": 0.19098401069641113
+      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-292fee9c31d84d6d94eae060a17d88a2）",
+      "elapsed_seconds": 0.18581414222717285
     },
     {
       "id": "E2E-2",
       "passed": true,
       "detail": "case=S02 edits=1 model_calls=1 repair_model=minicpm-v4.7",
-      "elapsed_seconds": 2.1916799545288086
+      "elapsed_seconds": 2.1915829181671143
     },
     {
       "id": "E2E-3",
@@ -30,10 +30,22 @@
         "node_types": [
           "text"
         ],
-        "record_sha256": "33fa56c85c13d30d795a1fe5aa068d64e9a5b48bbfa4ed64c6e5e8e8098bf2fe",
+        "record_sha256": "74816eaf812d9c35cefef16a8a39cf2778c3c6bf3b84d8ca9512023ac4c5d7d1",
         "node_count": 2
       },
-      "elapsed_seconds": 0.567
+      "elapsed_seconds": 0.635
+    },
+    {
+      "id": "E2E-4",
+      "passed": true,
+      "criteria": {
+        "write_ok": true,
+        "read_back_matches": true,
+        "hash_consistent": true,
+        "cross_restart": true
+      },
+      "detail": "",
+      "elapsed_seconds": 0.931
     }
   ],
   "all_passed": true

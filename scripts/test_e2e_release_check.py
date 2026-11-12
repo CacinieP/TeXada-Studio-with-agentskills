@@ -1,4 +1,5 @@
 """E2E 发行驱动的预检与证据写盘契约测试；不依赖宿主环境（CI 为 ubuntu 无 .venv/tectonic）。"""
+import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -16,6 +17,7 @@ from e2e_release_check import (
     run_e2e1_compile,
     run_e2e2_repair,
     run_e2e3_ocr,
+    run_e2e4_persistence,
     write_evidence,
 )
 
@@ -346,6 +348,50 @@ class E2E3OcrTests(unittest.TestCase):
         self.assertFalse(out["passed"])
         self.assertFalse(out["criteria"]["ocr_status_ok"])
         self.assertFalse(out["criteria"]["layout_emitted"])
+
+
+class E2E4PersistenceTests(unittest.TestCase):
+    """E2E-4 持久化：写过 → 新后端读回 → 哈希一致。
+
+    抓什么：防假绿两点——① 必须调用工厂两次（第二次是新后端进程读回，
+    同进程读回不算数）；② 读回内容必须与写入逐字节一致、哈希跨进程一致，
+    不一致即不过（防「只写不读」和「读回错内容也绿」）。
+    """
+
+    def _factory(self, tamper=None):
+        store = {}
+        calls = []
+
+        def factory():
+            def call(path, payload=None):
+                if path.startswith("/api/studio/save"):
+                    store["content"] = payload["content"]
+                    store["name"] = payload["name"]
+                    return {"ok": True, "sha256": hashlib.sha256(payload["content"].encode()).hexdigest()}
+                if path.startswith("/api/studio/file"):
+                    content = tamper(store["content"]) if tamper else store["content"]
+                    return {"name": store["name"], "content": content,
+                            "sha256": hashlib.sha256(content.encode()).hexdigest()}
+                raise AssertionError(f"意外端点：{path}")
+            calls.append(call)
+            return call
+
+        return factory, calls
+
+    def test_write_then_new_backend_readback_passes(self):
+        factory, calls = self._factory()
+        out = run_e2e4_persistence(factory)
+        self.assertTrue(out["passed"], out)
+        self.assertEqual(len(calls), 2)  # 防假绿：工厂必须被调两次（两次新后端）
+        for name in ("write_ok", "read_back_matches", "hash_consistent", "cross_restart"):
+            self.assertTrue(out["criteria"][name], (name, out))
+
+    def test_readback_mismatch_fails(self):
+        factory, _ = self._factory(tamper=lambda content: content + "tampered\n")
+        out = run_e2e4_persistence(factory)
+        self.assertFalse(out["passed"])
+        self.assertFalse(out["criteria"]["read_back_matches"])
+        self.assertFalse(out["criteria"]["hash_consistent"])
 
 
 if __name__ == "__main__":
