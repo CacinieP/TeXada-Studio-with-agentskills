@@ -1,15 +1,19 @@
 """E2E 发行驱动的预检与证据写盘契约测试；不依赖宿主环境（CI 为 ubuntu 无 .venv/tectonic）。"""
 import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 from e2e_release_check import (
     PreflightError,
+    make_call,
     preflight,
     probe_latex_tools,
     probe_python,
     probe_models,
+    run_e2e1_compile,
     write_evidence,
 )
 
@@ -102,6 +106,97 @@ class WriteEvidenceTests(unittest.TestCase):
             json_path, md_path = write_evidence(results, Path(tmp))
             self.assertFalse(json.loads(json_path.read_text(encoding="utf-8"))["all_passed"])
             self.assertIn("未通过", md_path.read_text(encoding="utf-8"))
+
+
+class MakeCallTests(unittest.TestCase):
+    """make_call 的真实边界契约：POST JSON、token 查询串、二进制响应。"""
+
+    def setUp(self):
+        outer = self
+        self.received = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                outer.received["path"] = self.path
+                outer.received["body"] = self.rfile.read(length)
+                payload = json.dumps({"tag": "live-x"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def do_GET(self):
+                outer.received["path"] = self.path
+                pdf = b"%PDF-1.7 fixture"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(pdf)))
+                self.end_headers()
+                self.wfile.write(pdf)
+
+            def log_message(self, *_args):
+                pass
+
+        self.server = HTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.call = make_call(f"http://127.0.0.1:{self.port}", "sekret")
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def test_make_call_posts_json_and_sends_token(self):
+        result = self.call("/api/studio/preview", {"name": "a.tex", "content": "x"})
+        self.assertEqual(result, {"tag": "live-x"})
+        self.assertIn("token=sekret", self.received["path"])
+        self.assertEqual(json.loads(self.received["body"]), {"name": "a.tex", "content": "x"})
+
+    def test_make_call_returns_bytes_for_binary_responses(self):
+        pdf = self.call("/api/studio/pdf/a.tex/live-x")
+        self.assertEqual(pdf, b"%PDF-1.7 fixture")
+        self.assertIn("token=sekret", self.received["path"])
+
+
+class E2E1CompileTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.fixture_dir = Path(tmp.name)
+        self.content = "\\documentclass{article}\n\\begin{document}\n$x^2+1$\n\\end{document}\n"
+        (self.fixture_dir / "paper.tex").write_text(self.content, encoding="utf-8")
+
+    def test_compile_scenario_passes_when_pdf_comes_back(self):
+        outer = self
+
+        def call(path, payload=None):
+            if path == "/api/studio/preview":
+                outer.assertEqual(payload["name"], "paper.tex")
+                outer.assertEqual(payload["content"], outer.content)
+                return {"tag": "live-x"}
+            if path == "/api/studio/pdf/paper.tex/live-x":
+                return b"%PDF-1.7 fixture"
+            outer.fail(f"unexpected path {path}")
+
+        result = run_e2e1_compile(call, self.fixture_dir)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["id"], "E2E-1")
+        self.assertEqual(sorted(result), ["detail", "elapsed_seconds", "id", "passed"])
+
+    def test_compile_scenario_fails_when_pdf_missing(self):
+        def call(path, payload=None):
+            return {"tag": "live-x"} if path == "/api/studio/preview" else b""
+
+        result = run_e2e1_compile(call, self.fixture_dir)
+        self.assertFalse(result["passed"])
+        self.assertIn("no pdf", result["detail"])
+
+    def test_compile_scenario_fails_on_non_pdf_bytes(self):
+        def call(path, payload=None):
+            return {"tag": "live-x"} if path == "/api/studio/preview" else b"<html>error</html>"
+
+        result = run_e2e1_compile(call, self.fixture_dir)
+        self.assertFalse(result["passed"])
 
 
 if __name__ == "__main__":
