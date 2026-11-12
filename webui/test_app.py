@@ -99,6 +99,35 @@ class AppTest(unittest.TestCase):
             self.assertEqual(configured.VLM_BASE_URL, base)
             self.assertEqual(configured.PROVIDER.model, model)
 
+    def test_repair_model_environment_takes_priority_and_flows_to_the_provider(self):
+        for index, (extra, expected) in enumerate((
+                ({"REPAIR_MODEL": "m-repair", "VLM_MODEL": "m-vlm"}, "m-repair"),
+                ({"VLM_MODEL": "m-vlm"}, "m-vlm"),
+                ({}, "minicpm-v4.7-35b-a3b-q4"))):
+            environment = {"DEMO_TOKEN": "test-only-demo-token",
+                           "TEXADA_STUDIO_STATE_DIR": str(self.base / f"routing-{index}"), **extra}
+            with self.subTest(expected=expected), patch.dict(os.environ, environment, clear=True):
+                spec = importlib.util.spec_from_file_location("repair_model_app", ROOT / "webui/app.py")
+                configured = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(configured)
+            self.assertEqual(configured.REPAIR_MODEL, expected)
+            self.assertEqual(configured.PROVIDER.model, expected)
+
+    def test_model_defaults_stay_in_sync_across_repair_studio_and_ocr_lines(self):
+        from docforensics.__main__ import DEFAULT_REPAIR_MODEL
+        spec = importlib.util.spec_from_file_location(
+            "ocr_extract_contract", ROOT / "skills/doc-ocr-extract/scripts/ocr_extract.py")
+        ocr = importlib.util.module_from_spec(spec)
+        with patch.dict(os.environ, clear=False):
+            for name in ("OCR_MODEL", "REPAIR_MODEL", "VLM_MODEL"):
+                os.environ.pop(name, None)
+            spec.loader.exec_module(ocr)
+        self.assertEqual(DEFAULT_REPAIR_MODEL, "minicpm-v4.7-35b-a3b-q4")
+        self.assertEqual(studio.DEFAULT_MODEL, DEFAULT_REPAIR_MODEL,
+                         "Studio 与 harness 的默认修复模型必须一致")
+        self.assertEqual(ocr.DEFAULT_MODEL, "minicpm-ocr:latest")
+        self.assertEqual(studio.OCR_MODEL, os.environ.get("OCR_MODEL", "minicpm-ocr:latest"))
+
     def test_upload_overlays_sample_without_modifying_it(self):
         response = self.client.post("/api/studio/upload", params=self.auth,
                                     json={"name": "example.tex", "content": "user document"})
@@ -227,8 +256,10 @@ class AppTest(unittest.TestCase):
             info = response.json()
             self.assertEqual(info["host"], "test-host")
             self.assertEqual(info["platform"], f"{system} test-release {machine}")
-            self.assertEqual(info["configured_model"], studio.VLM_MODEL)
-            self.assertEqual(info["model"], studio.VLM_MODEL)
+            self.assertEqual(info["configured_model"], studio.REPAIR_MODEL)
+            self.assertEqual(info["model"], studio.REPAIR_MODEL)
+            self.assertEqual(info["repair_model"], studio.REPAIR_MODEL)
+            self.assertEqual(info["ocr_model"], studio.OCR_MODEL)
             self.assertTrue(info["python"])
             self.assertEqual([info["gpu"], info["mem"], info["models"]], ["", "", ""])
             run.assert_not_called()
@@ -244,7 +275,7 @@ class AppTest(unittest.TestCase):
     def test_pipeline_uses_current_python_no_shell_and_keeps_exit_code(self):
         model = "model name; this must stay one argument"
         process = SimpleNamespace(stdout=["failed\n"], returncode=7, wait=lambda: 7)
-        with patch.object(studio, "VLM_MODEL", model), patch.dict(studio._run, clear=True), \
+        with patch.object(studio, "REPAIR_MODEL", model), patch.dict(studio._run, clear=True), \
                 patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(studio.threading, "Thread") as thread:
             studio._run_pipeline(fresh=False)
@@ -259,7 +290,7 @@ class AppTest(unittest.TestCase):
     def test_cloud_endpoint_and_key_are_shared_by_studio_and_pipeline(self):
         model, base, key = "MiniCPM-V-4.7-1B", "https://api.modelbest.cn/v1", "test-only-api-key"
         process = SimpleNamespace(stdout=[], returncode=0, wait=lambda: 0)
-        with patch.multiple(studio, VLM_MODEL=model, VLM_BASE_URL=base), \
+        with patch.multiple(studio, REPAIR_MODEL=model, VLM_MODEL=model, VLM_BASE_URL=base), \
                 patch.dict(os.environ, {"VLM_API_KEY": key, "TEXADA_LOCAL_MODE": "0"}), \
                 patch.object(studio.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(studio.threading, "Thread"):

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Studio's repair line now honors `REPAIR_MODEL` with priority over `VLM_MODEL`, matching the harness CLI routing contract, and `/api/nodeinfo` exposes the resolved `repair_model` and `ocr_model` so CLI and Studio report the same per-task models (issue #23).
+
+### Added
+
+- Model-routing contract tests: `OCR_MODEL` environment routing and the `--model` CLI default in doc-ocr-extract, `REPAIR_MODEL` priority through the Studio provider/pipeline surface, and default-literal consistency across the repair, Studio and OCR lines.
+
 ## 0.2.0-beta.4 — 2026-11-11
 
 ### Added
