@@ -15,10 +15,12 @@ import argparse
 import json
 import os
 import secrets
+import select
 import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -221,11 +223,17 @@ def stop_launcher(child: subprocess.Popen) -> None:
             child.kill()
 
 
-_terminate_state = {"window_closer": None}
+_terminate_state = {"window_closer": None, "shutdown": None, "signal_pump": None}
+_watchdog_deadline = 5.0
 
 
 def _on_terminate(signum, _frame):
-    """SIGTERM/SIGINT 先尝试关窗(走正常清理);窗口未建立时恢复默认行为。"""
+    """SIGTERM/SIGINT 先尝试关窗(走正常清理);窗口未建立时恢复默认行为。
+
+    注意:Python 级信号处理器只会在主线程执行字节码时运行,而 webview.start()
+    会把主线程阻塞在 Cocoa 事件循环里,本处理器可能永远得不到执行机会(#50)。
+    因此另有信号泵(_install_signal_pump)与看门狗(_install_terminate_watchdog)双保险。
+    """
     closer = _terminate_state.get("window_closer")
     if closer:
         try:
@@ -235,6 +243,73 @@ def _on_terminate(signum, _frame):
             pass
     signal.signal(signum, signal.SIG_DFL)
     os.kill(os.getpid(), signum)
+
+
+def _install_signal_pump(interval=0.2):
+    """macOS:让主 run loop 周期执行 Python 回调,待决信号处理器才能及时运行。
+
+    信号到达后 CPython 只置待决标志;主线程必须执行到字节码才会调用 Python 级处理器。
+    每 interval 秒执行一次回调把执行权带回解释器,_on_terminate 就能走 window_closer
+    正常清理。仅注册 NSTimer;失败时返回 False,不影响其它路径。
+    """
+    try:
+        from Foundation import NSObject, NSTimer, NSRunLoop, NSRunLoopCommonModes
+    except Exception:
+        return False
+
+    class _SignalPump(NSObject):
+        def tick_(self, _timer):
+            return None  # 执行 Python 字节码即可触发待决信号处理器
+
+    try:
+        pump = _SignalPump.alloc().init()
+        timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(
+            interval, pump, "tick:", None, True)
+        NSRunLoop.currentRunLoop().addTimer_forMode_(timer, NSRunLoopCommonModes)
+        _terminate_state["signal_pump"] = timer  # 保持引用,防止被回收
+        return True
+    except Exception:
+        return False
+
+
+def _terminate_watchdog(read_fd, state, deadline=_watchdog_deadline, exiter=None):
+    """看门狗线程体:收到唤醒字节后有界等待,随后自行清理并强制退出。
+
+    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的管道,读到字节即知收到了
+    信号。第一个字节后至多再等 deadline 秒让主线程走正常退出;期间再来第二个信号
+    则立即强制。随后执行清理钩子(标记会话停止、停止后端)并退出,保证有界退出。
+    """
+    exiter = os._exit if exiter is None else exiter
+    try:
+        select.select([read_fd], [], [])  # 阻塞等待第一个唤醒字节
+        os.read(read_fd, 64)
+        readable, _, _ = select.select([read_fd], [], [], deadline)
+        if readable:
+            os.read(read_fd, 64)
+        shutdown = state.get("shutdown")
+        if callable(shutdown):
+            try:
+                shutdown()
+            except Exception:
+                pass  # 清理失败也必须退出,保证有界
+        exiter(0)
+    except Exception:
+        exiter(0)
+
+
+def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
+    """安装 set_wakeup_fd 管道与看门狗线程;失败时返回 False。"""
+    try:
+        read_fd, write_fd = os.pipe()
+        os.set_blocking(write_fd, False)
+        signal.set_wakeup_fd(write_fd)
+    except (OSError, ValueError):
+        return False
+    threading.Thread(
+        target=_terminate_watchdog, args=(read_fd, state),
+        kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
+    ).start()
+    return True
 
 
 def main(argv=None) -> int:
@@ -286,11 +361,18 @@ def main(argv=None) -> int:
 
     webview.create_window("TeXada Studio", entry["url"], width=1440, height=900, min_size=(1024, 640))
     _terminate_state["window_closer"] = lambda: [window.destroy() for window in webview.windows]
+
+    def _cleanup():
+        if child is not None:
+            stop_launcher(child)
+        if server_box:
+            stop_backend_thread(server_box, state_dir)
+
+    _terminate_state["shutdown"] = _cleanup
+    _install_signal_pump()
+    _install_terminate_watchdog(_terminate_state)
     webview.start()
-    if child is not None:
-        stop_launcher(child)
-    if server_box:
-        stop_backend_thread(server_box, state_dir)
+    _cleanup()
     return 0
 
 

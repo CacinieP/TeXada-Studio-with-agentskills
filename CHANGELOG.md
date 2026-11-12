@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Exit within a bounded time when the macOS app receives SIGTERM/SIGINT while its Cocoa event loop is running. Python-level signal handlers only run when the main thread executes Python bytecode, so `webview.start()` could swallow the signal and leave the process alive after termination (#50). An NSTimer signal pump now lets `_on_terminate` close the window through the normal cleanup path, and a `signal.set_wakeup_fd` watchdog cleans up and force-exits as a fallback.
+
+### Added
+
+- Native integration verification for termination: a real Cocoa window receives SIGTERM and must exit gracefully within bounds (including via the window-closer cleanup path), plus watchdog unit tests for deadline and second-signal behavior.
+
 ## 0.2.0-beta.4 — 2026-11-11
 
 ### Added
