@@ -6,8 +6,10 @@ line) and ollama (native /api/chat + images fallback).
 """
 
 import base64
+import importlib
 import io
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -148,6 +150,25 @@ class RecordTest(unittest.TestCase):
         encoded = base64.b64encode(PNG_1X1).decode()
         self.assertEqual(self.run_record({"id": "x", "image": encoded},
                                          transport="carrier-pigeon"), 2)
+
+
+class ModelRoutingContractTests(unittest.TestCase):
+    """OCR_MODEL 路由契约(issue #23):env 优先,默认 minicpm-ocr:latest。"""
+
+    def tearDown(self):
+        importlib.reload(ocr_extract)
+
+    def test_default_model_reads_the_ocr_model_environment(self):
+        with patch.dict(os.environ, {"OCR_MODEL": "contract-probe"}):
+            importlib.reload(ocr_extract)
+            self.assertEqual(ocr_extract.DEFAULT_MODEL, "contract-probe")
+        importlib.reload(ocr_extract)
+        self.assertEqual(ocr_extract.DEFAULT_MODEL, "minicpm-ocr:latest")
+
+    def test_cli_model_default_is_the_routing_default(self):
+        parser = ocr_extract.build_parser()
+        self.assertEqual(parser.parse_args([]).model, ocr_extract.DEFAULT_MODEL)
+        self.assertEqual(parser.parse_args(["--model", "m-x"]).model, "m-x")
 
 
 if __name__ == "__main__":

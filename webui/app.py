@@ -102,7 +102,7 @@ def _run_pipeline(fresh: bool):
     if fresh and os.path.exists(STATE):
         shutil.rmtree(STATE)
     command = [sys.executable, "-m", "docforensics", "run", "samples", "--state", STATE,
-               "--vlm", VLM_BASE_URL, "--vlm-model", VLM_MODEL]
+               "--vlm", VLM_BASE_URL, "--vlm-model", REPAIR_MODEL]
     env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
     try:
         p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
@@ -210,7 +210,7 @@ def nodeinfo(token: str = Query("")):
     _guard(token)
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
-    configured_model = VLM_MODEL
+    configured_model = REPAIR_MODEL
     if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
         try:
             configured_model = _local_runtime().get_config()["model"]
@@ -219,6 +219,8 @@ def nodeinfo(token: str = Query("")):
     return {"host": platform.node(), "platform": runtime_platform,
             "python": platform.python_version(), "configured_model": configured_model,
             "model": configured_model,
+            # 按任务模型契约(#23):状态接口暴露修复线与 OCR 线的实际模型。
+            "repair_model": REPAIR_MODEL, "ocr_model": OCR_MODEL,
             # Empty legacy fields keep older clients compatible without probing hardware.
             "gpu": "", "mem": "", "models": ""}
 
@@ -293,6 +295,12 @@ from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
 from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
 from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
+from docforensics.__main__ import repair_model_default  # noqa: E402
+
+# 按任务模型契约(issue #23):修复线 REPAIR_MODEL > VLM_MODEL > 内置默认,与 harness CLI 同源。
+REPAIR_MODEL = repair_model_default()
+# OCR 线契约同 skills/doc-ocr-extract:OCR_MODEL > minicpm-ocr:latest。
+OCR_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
@@ -307,11 +315,11 @@ def _new_provider(*, skill_selection=False):
         config = _local_runtime().get_config()
         return make_local_provider(config["base_url"], config["model"],
                                    skill_mode="off" if skill_selection else SKILL_MODE)
-    return OpenAICompatibleProvider(VLM_BASE_URL, VLM_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
+    return OpenAICompatibleProvider(VLM_BASE_URL, REPAIR_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
 def _local_runtime():
-    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"), model=os.environ.get("VLM_MODEL"))
+    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"), model=REPAIR_MODEL)
 
 
 try:
@@ -1051,8 +1059,8 @@ def _studio_job(name: str, content: str, job_id: str):
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
                          "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
-                         "model": getattr(provider, "model", VLM_MODEL) if model_calls else None,
-                         "configured_model": getattr(provider, "model", VLM_MODEL), "model_calls": model_calls,
+                         "model": getattr(provider, "model", REPAIR_MODEL) if model_calls else None,
+                         "configured_model": getattr(provider, "model", REPAIR_MODEL), "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",
                          "skill_mode": "selected" if skill_selection else SKILL_MODE,
                          "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,

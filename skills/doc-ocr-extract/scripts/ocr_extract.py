@@ -208,7 +208,7 @@ def run_record(record, *, model: str, base: str, prompt: str,
     return {"OK": 0}.get(status, {"NEEDS_HUMAN": 1}.get(status, 2))
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Image → text candidate lines (local OCR model).")
     parser.add_argument("image", nargs="?", help="input image path (omit to read JSONL on stdin)")
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -220,7 +220,11 @@ def main() -> int:
                         help="minicpm-ocr: official recognition sampling; uses Text Recognition: unless --prompt is supplied")
     parser.add_argument("--prompt", default=None)
     parser.add_argument("--id", default="argv")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     prompt = args.prompt if args.prompt is not None else (MINICPM_PROMPT if args.profile == "minicpm-ocr" else DEFAULT_PROMPT)
     code = EXIT_OK
     if args.image:

@@ -4,10 +4,12 @@
 
 ### Fixed
 
+- Studio's repair line now honors `REPAIR_MODEL` with priority over `VLM_MODEL`, matching the harness CLI routing contract, and `/api/nodeinfo` exposes the resolved `repair_model` and `ocr_model` so CLI and Studio report the same per-task models (issue #23).
 - Exit within a bounded time when the macOS app receives SIGTERM/SIGINT while its Cocoa event loop is running. Python-level signal handlers only run when the main thread executes Python bytecode, so `webview.start()` could swallow the signal and leave the process alive after termination (#50). An NSTimer signal pump now lets `_on_terminate` close the window through the normal cleanup path, and a `signal.set_wakeup_fd` watchdog cleans up and force-exits as a fallback.
 
 ### Added
 
+- Model-routing contract tests: `OCR_MODEL` environment routing and the `--model` CLI default in doc-ocr-extract, `REPAIR_MODEL` priority through the Studio provider/pipeline surface, and default-literal consistency across the repair, Studio and OCR lines.
 - Native integration verification for termination: a real Cocoa window receives SIGTERM and must exit gracefully within bounds (including via the window-closer cleanup path), plus watchdog unit tests for deadline and second-signal behavior.
 
 ## 0.2.0-beta.4 — 2026-11-11
