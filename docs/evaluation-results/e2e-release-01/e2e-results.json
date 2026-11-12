@@ -3,14 +3,37 @@
     {
       "id": "E2E-1",
       "passed": true,
-      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-94787c6eaba2488dae84f666eb071f40）",
-      "elapsed_seconds": 0.22671890258789062
+      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-18acf0b69a9c40fd966e91176ac228b2）",
+      "elapsed_seconds": 0.19098401069641113
     },
     {
       "id": "E2E-2",
       "passed": true,
       "detail": "case=S02 edits=1 model_calls=1 repair_model=minicpm-v4.7",
-      "elapsed_seconds": 4.189511060714722
+      "elapsed_seconds": 2.1916799545288086
+    },
+    {
+      "id": "E2E-3",
+      "passed": true,
+      "image": "inlines-01.png",
+      "ocr_model": "minicpm-ocr:latest",
+      "criteria": {
+        "ocr_status_ok": true,
+        "review_gate_enforced": true,
+        "layout_emitted": true,
+        "layout_bound_to_source": true,
+        "no_pending_blockers": true
+      },
+      "detail": "",
+      "lines": 2,
+      "layout": {
+        "node_types": [
+          "text"
+        ],
+        "record_sha256": "33fa56c85c13d30d795a1fe5aa068d64e9a5b48bbfa4ed64c6e5e8e8098bf2fe",
+        "node_count": 2
+      },
+      "elapsed_seconds": 0.567
     }
   ],
   "all_passed": true

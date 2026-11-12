@@ -4,12 +4,15 @@
 运行入口见 docs/superpowers/plans/2026-11-12-e2e-release.md。
 """
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 import uuid
@@ -20,6 +23,9 @@ from docforensics.__main__ import repair_model_default  # noqa: E402  # #23 契�
 
 REQUIRED_MODELS = (repair_model_default(), "minicpm-ocr")
 DEFAULT_MODELS_BASE = "http://127.0.0.1:11434/v1"
+OCR_SCRIPT = Path(__file__).resolve().parent.parent / "skills/doc-ocr-extract/scripts/ocr_extract.py"
+LAYOUT_SCRIPT = Path(__file__).resolve().parent.parent / "skills/doc-ocr-extract/scripts/ocr_to_layout.py"
+_OCR_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 class PreflightError(RuntimeError):
@@ -186,6 +192,135 @@ def run_e2e2_repair(call, case_path):
             "elapsed_seconds": time.time() - t0}
 
 
+def _classify_review_line(line: str) -> dict:
+    """E2E 用轻量复核分类：整行数学→formula，管道行→table，其余→text。
+
+    只服务于 E2E-3 的链路验收（分类正确性不在验收面）；整行公式判定刻意保守，
+    行内数学归 text 与人工复核实践一致。"""
+    stripped = line.strip()
+    if stripped.count("|") >= 2:
+        return {"action": "accept", "type": "table", "separator": "pipe"}
+    if re.fullmatch(r"\$[^$]*\$|\\\([^)]*\\\)|\\\[[^\]]*\\\]", stripped) or stripped.startswith("\\begin{"):
+        return {"action": "accept", "type": "formula"}
+    return {"action": "accept", "type": "text"}
+
+
+def run_e2e3_ocr(image_dir, *, model="minicpm-ocr:latest", base=DEFAULT_MODELS_BASE,
+                 run_ocr=None, python=None, workdir=None) -> dict:
+    """E2E-3 OCR→布局：真实 OCR 推理 + 复核门 + 布局落盘（两段式）。
+
+    段 1（真实 OCR）：子进程跑 ocr_extract.py（或注入的 run_ocr 替代模型调用），
+      判据 ocr_status_ok：status=OK 且 lines 非空且记录级门（review_items 空、
+      output_complete 真）过。
+    段 2（布局落稿）：真实 ocr_to_layout.py 两跑——无 review 出模板（门不可跳），
+      再携哈希绑定的复核决策出布局；判据 layout_bound_to_source（布局绑定记录哈希）
+      与 no_pending_blockers（review_items 空才出布局，契约保证）。
+    """
+    image_dir = Path(image_dir)
+    images = sorted(p for p in image_dir.iterdir()
+                    if p.is_file() and p.suffix.lower() in _OCR_IMAGE_SUFFIXES) if image_dir.is_dir() else []
+    if not images:
+        raise PreflightError(f"样本图像目录为空或不存在：{image_dir}")
+    image = images[0]
+    python = Path(python or sys.executable)
+    started = time.monotonic()
+    result = {"id": "E2E-3", "passed": False, "image": image.name, "ocr_model": model,
+              "criteria": {name: False for name in ("ocr_status_ok", "review_gate_enforced",
+                                                    "layout_emitted", "layout_bound_to_source",
+                                                    "no_pending_blockers")}, "detail": ""}
+    criteria = result["criteria"]
+    if run_ocr is None:
+        # ocr_extract 的 path 自带 /v1（其 DEFAULT_BASE 为服务器根），
+        # 这里剥掉 OpenAI 风格的 /v1 后缀，避免拼成 /v1/v1/…（2026-11-12 实跑教训）。
+        ocr_base = base[:-3] if base.endswith("/v1") else base
+        proc = subprocess.run(
+            [str(python), str(OCR_SCRIPT), str(image), "--model", model, "--base", ocr_base,
+             "--transport", "openai", "--profile", "minicpm-ocr"],
+            capture_output=True, text=True, timeout=600)
+        code, stdout = proc.returncode, proc.stdout
+    else:
+        code, stdout = run_ocr(image, model, base[:-3] if base.endswith("/v1") else base)
+    record = None
+    for line in stdout.splitlines():
+        if line.strip():
+            try:
+                record = json.loads(line)
+            except ValueError:
+                record = None
+            break
+    lines = record.get("lines") if isinstance(record, dict) else None
+    record_ok = (isinstance(record, dict) and record.get("status") == "OK"
+                 and isinstance(lines, list) and bool(lines)
+                 and record.get("review_items") == []
+                 and record.get("output_complete") is True)
+    criteria["ocr_status_ok"] = record_ok
+    result["lines"] = len(lines) if isinstance(lines, list) else 0
+    if not record_ok:
+        result["detail"] = "OCR 记录未过记录级门（status=OK/lines 非空/review_items 空/output_complete 真）"
+        result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        return result
+    root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="e2e3-"))
+    root.mkdir(parents=True, exist_ok=True)
+    raw = json.dumps(record, ensure_ascii=False).encode("utf-8")
+    record_path = root / "record.json"
+    record_path.write_bytes(raw)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_ocr_to_layout", LAYOUT_SCRIPT)
+    layout_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(layout_mod)
+    digest = layout_mod.record_digest(record)  # 单一事实源：与 converter 同一摘要算法
+    gate_dir = root / "gate"
+    gate = subprocess.run(
+        [str(python), str(LAYOUT_SCRIPT), str(record_path), "--doc", "e2e-ocr-01",
+         "--output-dir", str(gate_dir)], capture_output=True, text=True, timeout=120)
+    criteria["review_gate_enforced"] = (
+        gate.returncode == 1 and (gate_dir / "review-template.json").exists()
+        and not (gate_dir / "layout.json").exists())
+    decisions = []
+    index = 0
+    while index < len(record["lines"]):
+        kind = _classify_review_line(record["lines"][index])
+        if kind["type"] == "table":
+            end = index
+            while (end + 1 < len(record["lines"])
+                   and _classify_review_line(record["lines"][end + 1])["type"] == "table"):
+                end += 1
+            decisions.append({"start_line": index + 1, "end_line": end + 1, **kind})
+            index = end + 1
+        else:
+            decisions.append({"start_line": index + 1, "end_line": index + 1, **kind})
+            index += 1
+    review_path = root / "review-decisions.json"
+    review_path.write_text(json.dumps(
+        {"record_sha256": digest, "reviewer": "e2e-release-check", "decisions": decisions},
+        ensure_ascii=False), encoding="utf-8")
+    reviewed_dir = root / "reviewed"
+    conv = subprocess.run(
+        [str(python), str(LAYOUT_SCRIPT), str(record_path), "--review", str(review_path),
+         "--doc", "e2e-ocr-01", "--output-dir", str(reviewed_dir)],
+        capture_output=True, text=True, timeout=120)
+    layout_path = reviewed_dir / "layout.json"
+    criteria["layout_emitted"] = conv.returncode == 0 and layout_path.exists()
+    if criteria["layout_emitted"]:
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        nodes = layout.get("nodes", [])
+        result["layout"] = {
+            "node_types": sorted({n.get("type") for n in nodes}),
+            "record_sha256": layout.get("ocr_record_sha256"),
+            "node_count": len(nodes)}
+        criteria["layout_bound_to_source"] = bool(nodes) and layout.get("ocr_record_sha256") == digest and all(
+            n.get("ocr_source", {}).get("record_sha256") == digest for n in nodes)
+        review_result = json.loads((reviewed_dir / "review.json").read_text(encoding="utf-8"))
+        criteria["no_pending_blockers"] = review_result.get("review_items") == []
+    else:
+        criteria["layout_bound_to_source"] = False
+        criteria["no_pending_blockers"] = False
+        result["detail"] = f"布局未产出：converter exit={conv.returncode} {conv.stderr.strip()[-200:]}"
+    result["passed"] = all(criteria.values())
+    result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    return result
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -228,7 +363,7 @@ def main(argv=None):
                     help="OpenAI 兼容模型端点（默认本机 Ollama）")
     ap.add_argument("--repair-model", default=None,
                     help="修复线模型名（默认取契约 repair_model_default()）")
-    ap.add_argument("--ocr-model", default="minicpm-ocr")
+    ap.add_argument("--ocr-model", default="minicpm-ocr:latest")
     args = ap.parse_args(argv)
     repair_model = args.repair_model or repair_model_default()
 
@@ -263,6 +398,10 @@ def main(argv=None):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+    if want("E2E-3"):
+        print("[e2e] E2E-3 OCR→布局场景（真实模型，可能较久）…")
+        results.append(run_e2e3_ocr(Path("samples/ocr"), model=args.ocr_model,
+                                    base=args.models_base))
     json_path, md_path = write_evidence(results, Path(args.evidence_dir))
     print(f"[e2e] 证据：{json_path} / {md_path}")
     for r in results:

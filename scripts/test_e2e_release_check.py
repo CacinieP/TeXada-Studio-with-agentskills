@@ -15,6 +15,7 @@ from e2e_release_check import (
     probe_models,
     run_e2e1_compile,
     run_e2e2_repair,
+    run_e2e3_ocr,
     write_evidence,
 )
 
@@ -294,6 +295,57 @@ class E2E2RepairTests(unittest.TestCase):
         out = self._run(analyze_problems=[])
         self.assertFalse(out["passed"])
         self.assertIn("analyze", out["detail"])
+
+
+class E2E3OcrTests(unittest.TestCase):
+    """E2E-3 两段式：真 OCR 记录 → 复核门 → 布局。
+
+    抓什么：① OCR 记录必须 status=OK 且带非空 lines（含记录级门：
+    review_items 空、output_complete 真）才进布局段；② 复核门不可跳过
+    （无 review 只出模板不出布局）；③ 布局必须绑定记录哈希且带
+    formula/table/text 节点；④ NEEDS_HUMAN 记录直接不过、不得出布局。
+    段 1 的模型子进程以 canned 输出替代（慢/外部）；段 2 跑真实
+    ocr_to_layout.py（本地快）。
+    """
+
+    RECORD = {
+        "id": "e2e3", "status": "OK", "reason": "", "model": "minicpm-ocr",
+        "lines": ["Kinetic energy $E$ is", "\\(x^2+1\\)", "a | b | c", "1 | 2 | 3"],
+        "review_items": [], "output_complete": True,
+    }
+
+    def _fake(self, record):
+        stdout = json.dumps(record, ensure_ascii=False) + "\n"
+        calls = []
+
+        def runner(image, model, base):
+            calls.append((Path(image).name, model, base))
+            return 0, stdout
+
+        return runner, calls
+
+    def test_ok_record_produces_hash_bound_layout(self):
+        runner, calls = self._fake(self.RECORD)
+        out = run_e2e3_ocr(Path("samples/ocr"), run_ocr=runner)
+        self.assertTrue(out["passed"], out)
+        for name in ("ocr_status_ok", "review_gate_enforced", "layout_emitted",
+                     "layout_bound_to_source", "no_pending_blockers"):
+            self.assertTrue(out["criteria"][name], (name, out))
+        self.assertEqual(out["layout"]["node_types"], ["formula", "table", "text"])
+        self.assertEqual(calls[0][1], "minicpm-ocr:latest")
+        # 抓回退点：ocr_extract 的 base 约定是服务器根（path 自带 /v1），
+        # /v1 后缀必须被剥掉，否则拼成 /v1/v1/… 秒 404（2026-11-12 实跑教训）。
+        self.assertEqual(calls[0][2], "http://127.0.0.1:11434")
+
+    def test_needs_human_record_fails_without_layout(self):
+        record = {"id": "e2e3", "status": "NEEDS_HUMAN", "reason": "bad_response_json",
+                  "model": "minicpm-ocr", "review_items": [{"reason": "bad_response_json", "scope": "record"}],
+                  "output_complete": False}
+        runner, _ = self._fake(record)
+        out = run_e2e3_ocr(Path("samples/ocr"), run_ocr=runner)
+        self.assertFalse(out["passed"])
+        self.assertFalse(out["criteria"]["ocr_status_ok"])
+        self.assertFalse(out["criteria"]["layout_emitted"])
 
 
 if __name__ == "__main__":
