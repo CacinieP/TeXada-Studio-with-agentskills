@@ -1,6 +1,6 @@
 ---
 name: doc-formula-verify
-version: 1.1.0
+version: 1.1.1
 description: Check supplied LaTeX formula syntax and propose only source-preserving repairs. Use for extracted formula nodes or OCR-derived LaTeX; preserve uncertain source and require review instead of guessing mathematical content.
 ---
 
@@ -17,16 +17,21 @@ Propose a candidate for the host to check; do not declare it mathematically true
    changing any of them. Do not solve, simplify or remove an inconvenient token.
 2. **Abstain when content is missing.** A trailing operator, empty argument,
    missing script operand, extra closing delimiter or ambiguous interior group
-   needs source evidence. Return the original `latex` exactly. In particular,
-   never delete a final `+`, fill an index, or move a brace to obtain a parse.
+   needs source evidence. The same applies when `\frac`, `\dfrac`, `\tfrac`,
+   `\binom`, `\dbinom` or `\tbinom` still lacks one of its two arguments after
+   the only legal brace close. Return the original `latex` exactly. In particular,
+   never delete a final `+`, fill an index, invent the missing argument, or
+   delete a brace to manufacture one.
 3. **Respect parser coverage.** Valid TeX notation can be unsupported by a scalar
    checker. Keep interval subscripts, chained relations, evaluation bars,
    document macros and structured environments unchanged. Do not flatten them
    into an easier expression just to satisfy the parser.
 4. **Use a small syntax patch only when unambiguous.** Append missing closing
-   braces only to a nonempty final argument; preserve the entire existing prefix.
-   Close a single visibly unambiguous `\left`/`\right` pair only when the host
-   supports that patch. Never infer where an interior argument should end.
+   braces only to a nonempty final argument, and only when that close still
+   leaves every two-argument command above with both of its existing arguments.
+   Preserve the entire existing prefix. Close a single visibly unambiguous
+   `\left`/`\right` pair only when the host supports that patch. Never infer
+   where an interior argument should end.
 5. **Audit the proposed difference.** If it deletes/reorders existing content,
    invents content or changes grouping scope without evidence, discard it and
    return the original. Fewer changed characters is not evidence of fidelity.
@@ -41,6 +46,7 @@ Examples illustrate edit authority, not answers for a particular document:
 | `z^3+` | `z^3+` | The missing operand cannot be recovered; retain the operator. |
 | `c_+d` | `c_+d` | The subscript is missing; do not invent one or delete `_`. |
 | `\frac{r+q}{5` | `\frac{r+q}{5}` | Close only the nonempty trailing argument. |
+| `\frac{{3}` | `\frac{{3}` | Both groups can close, but `\frac` still has one argument; do not invent the other or drop a brace. |
 | `\lim_{y \to b k(y)=N` | `\lim_{y \to b k(y)=N` | The intended interior group boundary is unknown. |
 
 ## Return the candidate contract

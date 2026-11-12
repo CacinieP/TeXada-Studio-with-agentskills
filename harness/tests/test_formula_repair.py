@@ -33,6 +33,16 @@ class DeterministicRepairTests(unittest.TestCase):
                 self.assertIsNone(deterministic_candidate(value))
                 self.assertTrue(assess_candidate(value, "  " + value + "  ")["allowed"])
 
+    def test_does_not_close_a_group_that_still_leaves_a_required_argument_missing(self):
+        for value in (r"\frac{{3}", r"\dfrac{{3}", r"\binom{{n}",
+                      r"\int_0^1 x^2\,dx = \frac{{3}", r"\frac{{3}}"):
+            with self.subTest(value=value):
+                self.assertEqual(repair_blocker(value), "missing_command_argument")
+                self.assertIsNone(deterministic_candidate(value))
+                self.assertFalse(assess_candidate(value, value + "}")["allowed"])
+        self.assertFalse(assess_candidate(r"\frac{{3}", r"\frac{1}{3}")["allowed"])
+        self.assertFalse(assess_candidate(r"\frac{{3}", r"\frac{3}{}")["allowed"])
+
     def test_does_not_guess_missing_operands_or_duplicate_scripts(self):
         for value in ("x+", "a_", "x^", "x^2^3", "x_i_j", "x^{a+b}^{c}", "x_{i+1}_{j}", r"\frac{a}{", r"\left("):
             with self.subTest(value=value):

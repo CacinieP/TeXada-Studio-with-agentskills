@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "skill_id": "doc-formula-verify",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "capability": "formula_syntax_review",
   "node_kind": "formula",
   "input_schema": {

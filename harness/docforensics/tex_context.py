@@ -217,9 +217,10 @@ def _find_close(text, cursor, closing, environment=None):
                 continue
             if not environment and text.startswith(closing, cursor):
                 return cursor, cursor + len(closing), None
-            # A new explicit display region can recover after an unclosed inline
-            # region. It is never included in a fabricated replacement range.
-            if not environment and closing in {"$", r"\)"} and command == "[":
+            # A new explicit display can recover after an unclosed inline or
+            # display region. The earlier region stays a diagnostic and is never
+            # given a replacement range that swallows the later formula.
+            if not environment and command == "[" and closing in {"$", r"\)", r"\]"}:
                 return None, cursor, "unclosed_math"
             cursor = end
             continue
