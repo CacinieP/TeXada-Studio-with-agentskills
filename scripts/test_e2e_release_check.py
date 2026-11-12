@@ -3,6 +3,7 @@ import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -18,6 +19,7 @@ from e2e_release_check import (
     run_e2e2_repair,
     run_e2e3_ocr,
     run_e2e4_persistence,
+    smoke_app,
     write_evidence,
 )
 
@@ -392,6 +394,75 @@ class E2E4PersistenceTests(unittest.TestCase):
         self.assertFalse(out["passed"])
         self.assertFalse(out["criteria"]["read_back_matches"])
         self.assertFalse(out["criteria"]["hash_consistent"])
+
+
+class E2E5AppSmokeTests(unittest.TestCase):
+    """E2E-5 .app 冒烟：nodeinfo 200 → SIGTERM → 5s 内 code=0（#50 行为契约）。
+
+    抓什么：① SIGTERM 后必须在 5 秒内退出（超时即不过——#50 回归的发行面）；
+    ② 退出码必须 0（crash 不算过）；③ nodeinfo 不通不得冒充通过。
+    popen 假件 + ready_probe 注入（慢/外部替代）；session.json 发现走真逻辑。
+    """
+
+    def _run(self, *, returncode=0, hang=False, ready=True):
+        state = Path(tempfile.mkdtemp(prefix="e2e5-test-"))
+        procs = []
+
+        class FakeProc:
+            returncode = None
+            sent = None
+            killed = False
+
+            def send_signal(self, sig):
+                self.sent = sig
+
+            def wait(self, timeout=None):
+                if hang:
+                    raise subprocess.TimeoutExpired("app", timeout)
+                self.returncode = returncode
+                return returncode
+
+            def kill(self):
+                self.killed = True
+
+        def factory(argv, **kwargs):
+            (state / "session.json").write_text(json.dumps({
+                "url": "http://127.0.0.1:18199/studio?token=tok",
+                "base_url": "http://127.0.0.1:18199", "running": True}))
+            proc = FakeProc()
+            procs.append(proc)
+            return proc
+
+        out = smoke_app(Path("/fake/TeXada Studio.app"), timeout=1.0,
+                        popen_factory=factory,
+                        ready_probe=lambda base, token: ready,
+                        state_dir=state)
+        return out, procs
+
+    def test_sigterm_bounded_graceful_exit_passes(self):
+        out, procs = self._run()
+        self.assertTrue(out["passed"], out)
+        for name in ("app_launched", "nodeinfo_ready", "sigterm_bounded_exit", "graceful_exit_code"):
+            self.assertTrue(out["criteria"][name], (name, out))
+        self.assertIsNotNone(procs[0].sent)  # 必须真的发过 SIGTERM
+
+    def test_hang_after_sigterm_fails(self):
+        out, procs = self._run(hang=True)
+        self.assertFalse(out["passed"])
+        self.assertFalse(out["criteria"]["sigterm_bounded_exit"])
+        self.assertFalse(out["criteria"]["graceful_exit_code"])
+        self.assertTrue(procs[0].killed)  # 超时后必须杀掉，不留悬挂进程
+
+    def test_nonzero_exit_fails(self):
+        out, _ = self._run(returncode=1)
+        self.assertFalse(out["passed"])
+        self.assertTrue(out["criteria"]["sigterm_bounded_exit"])
+        self.assertFalse(out["criteria"]["graceful_exit_code"])
+
+    def test_nodeinfo_not_ready_fails(self):
+        out, _ = self._run(ready=False)
+        self.assertFalse(out["passed"])
+        self.assertFalse(out["criteria"]["nodeinfo_ready"])
 
 
 if __name__ == "__main__":

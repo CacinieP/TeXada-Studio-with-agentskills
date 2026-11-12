@@ -7,8 +7,10 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -393,6 +395,95 @@ def _persistence_factory(token, env_extra):
     return factory
 
 
+def build_app(output) -> Path:
+    """子进程 desktop/build_bundle.py --output <dir> 构建 .app，返回其路径。"""
+    output = Path(output)
+    proc = subprocess.run(
+        [sys.executable, "desktop/build_bundle.py", "--output", str(output)],
+        capture_output=True, text=True, timeout=3600)
+    if proc.returncode != 0:
+        raise PreflightError(f"构建 .app 失败：{(proc.stderr or proc.stdout)[-500:]}")
+    apps = sorted(Path(output).glob("*.app"))
+    if not apps:
+        raise PreflightError(f"构建产物缺少 .app：{output}")
+    return apps[-1]
+
+
+def _probe_nodeinfo(base_url, token) -> bool:
+    try:
+        with urllib.request.urlopen(
+                f"{base_url}/api/nodeinfo?token={urllib.parse.quote(token)}", timeout=5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def smoke_app(app_path, *, timeout=30.0, popen_factory=subprocess.Popen,
+              ready_probe=None, state_dir=None) -> dict:
+    """E2E-5 .app 冒烟：启动 → /api/nodeinfo 200 → SIGTERM → 5s 内 code=0。
+
+    后两条是 #50 修复的行为契约（照 NativeTerminateIntegrationTests 口径）。
+    token 由 .app 自生成、从 session.json 发现（产品真实行为）；
+    popen_factory / ready_probe 仅供测试注入（慢/外部替代）。
+    """
+    started = time.monotonic()
+    criteria = {"app_launched": False, "nodeinfo_ready": False,
+                "sigterm_bounded_exit": False, "graceful_exit_code": False}
+    result = {"id": "E2E-5", "passed": False, "criteria": criteria, "detail": ""}
+    app_path = Path(app_path)
+    try:
+        exec_name = plistlib.loads((app_path / "Contents/Info.plist").read_bytes()).get("CFBundleExecutable", "")
+    except OSError:
+        exec_name = ""  # 仅测试注入假件时到此；真 .app 缺 plist 会在拉起时响亮失败
+    binary = app_path / "Contents/MacOS" / (exec_name or app_path.stem)
+    state = Path(state_dir) if state_dir else Path(tempfile.mkdtemp(prefix="e2e5-"))
+    proc = popen_factory([str(binary), "--state-dir", str(state), "--port", str(_free_port())],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        session = None
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            path = state / "session.json"
+            if path.exists():
+                try:
+                    candidate = json.loads(path.read_text(encoding="utf-8"))
+                except ValueError:
+                    candidate = None
+                if isinstance(candidate, dict) and candidate.get("base_url"):
+                    session = candidate
+                    break
+            time.sleep(0.2)
+        criteria["app_launched"] = session is not None
+        if session is not None:
+            token = next((v for k, v in urllib.parse.parse_qsl(
+                urllib.parse.urlparse(session.get("url", "")).query) if k == "token"), "")
+            probe = ready_probe or _probe_nodeinfo
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if probe(session["base_url"], token):
+                    criteria["nodeinfo_ready"] = True
+                    break
+                time.sleep(0.3)
+        if criteria["nodeinfo_ready"]:
+            proc.send_signal(signal.SIGTERM)
+            try:
+                proc.wait(timeout=5.0)
+                criteria["sigterm_bounded_exit"] = True
+                criteria["graceful_exit_code"] = proc.returncode == 0
+            except subprocess.TimeoutExpired:
+                result["detail"] = "SIGTERM 后 5 秒未退出（#50 契约违约）"
+    finally:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    if not all(criteria.values()) and not result["detail"]:
+        result["detail"] = "冒烟判据未全过：" + ",".join(k for k, v in criteria.items() if not v)
+    result["passed"] = all(criteria.values())
+    result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    return result
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -452,12 +543,16 @@ def main(argv=None):
           f"models={len(summary['models'])} 个 repair_model={repair_model}")
 
     token = uuid.uuid4().hex + uuid.uuid4().hex
-    proc, base_url = boot_backend(
-        token, env_extra={"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})
     results = []
+    if want("E2E-1") or want("E2E-2"):
+        proc, base_url = boot_backend(
+            token, env_extra={"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})
+    else:
+        proc, base_url = None, ""
     try:
-        call = make_call(base_url, token)
-        wait_ready(call)
+        call = make_call(base_url, token) if base_url else None
+        if call is not None:
+            wait_ready(call)
         if want("E2E-1"):
             print("[e2e] E2E-1 编译场景…")
             results.append(run_e2e1_compile(call, Path("samples/docs")))
@@ -465,11 +560,12 @@ def main(argv=None):
             print("[e2e] E2E-2 修复场景（真实模型，可能较久）…")
             results.append(run_e2e2_repair(call, Path("samples/research/smoke_cases.json")))
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        if proc is not None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
     if want("E2E-3"):
         print("[e2e] E2E-3 OCR→布局场景（真实模型，可能较久）…")
         results.append(run_e2e3_ocr(Path("samples/ocr"), model=args.ocr_model,
@@ -478,6 +574,12 @@ def main(argv=None):
         print("[e2e] E2E-4 持久化场景（两起两停后端）…")
         results.append(run_e2e4_persistence(_persistence_factory(
             token, {"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})))
+    if want("E2E-5"):
+        print("[e2e] E2E-5 .app 构建与冒烟（构建可能较久）…")
+        output = Path("dist-app")
+        shutil.rmtree(output, ignore_errors=True)
+        app = build_app(output)
+        results.append(smoke_app(app))
     json_path, md_path = write_evidence(results, Path(args.evidence_dir))
     print(f"[e2e] 证据：{json_path} / {md_path}")
     for r in results:
