@@ -114,6 +114,38 @@ class LocalProductTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["content"], "explicit replacement")
 
+    def test_page_split_conflict_leaves_all_other_targets_available_for_retry(self):
+        self.create("notes-第4页.tex", "Keep this")
+        documents = [{"name": "notes-第3页.tex", "content": "$x$"},
+                     {"name": "notes-第4页.tex", "content": "$y$"}]
+        response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.get("file", name=documents[0]["name"]).status_code, 404)
+        self.assertEqual(self.get("file", name=documents[1]["name"]).json()["content"], "Keep this")
+
+        documents[1]["name"] = "notes-retry-第4页.tex"
+        response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["files"], [document["name"] for document in documents])
+        for document in documents:
+            self.assertEqual(self.get("file", name=document["name"]).json()["content"], document["content"])
+
+    def test_page_split_rolls_back_an_io_failure_during_publication(self):
+        documents = [{"name": "page-1.tex", "content": "$x$"},
+                     {"name": "page-2.tex", "content": "$y$"}]
+        real_link = os.link
+
+        def fail_second_link(source, target):
+            if target.name == "page-2.tex":
+                raise OSError("simulated write failure")
+            return real_link(source, target)
+
+        with patch("document_store.os.link", side_effect=fail_second_link):
+            response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 500, response.text)
+        self.assertEqual(list(self.documents.iterdir()), [])
+        self.assertEqual(self.post("create-split", {"documents": documents}).status_code, 200)
+
     def test_stale_version_blocks_save_rename_and_delete(self):
         original = self.create()
         current = self.post("save", {"name": original["name"], "content": "newer",
@@ -475,7 +507,7 @@ class LocalProductTest(unittest.TestCase):
         for route in ("files", "file", "config", "jobs", "fixstatus"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get("/api/studio/" + route).status_code, 401)
-        for route in ("create", "save", "upload", "rename", "delete", "settings", "import", "math",
+        for route in ("create", "create-split", "save", "upload", "rename", "delete", "settings", "import", "math",
                       "jobs/" + "a" * 32 + "/decision", "jobs/" + "a" * 32 + "/cancel"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.post("/api/studio/" + route, json={}).status_code, 401)

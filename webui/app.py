@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
-from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, LocalRuntime, LocalRuntimeError, make_local_provider
+from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -1190,6 +1190,17 @@ def studio_create(token: str = Query(""), body: dict = None):
     _guard(token)
     name, content = _document_body(body)
     return _document_call(lambda: _documents().save(name, content, create=True))
+
+
+@app.post("/api/studio/create-split")
+def studio_create_split(token: str = Query(""), body: dict = None):
+    _guard(token)
+    documents = (body or {}).get("documents")
+    if (not isinstance(documents, list) or not 1 <= len(documents) <= MAX_PDF_PAGES
+            or any(not isinstance(document, dict) for document in documents)):
+        raise HTTPException(status_code=400, detail=f"每次请选择 1–{MAX_PDF_PAGES} 页拆分。")
+    entries = [_document_body(document) for document in documents]
+    return _document_call(lambda: _documents().create_many(entries))
 
 
 @app.post("/api/studio/save")

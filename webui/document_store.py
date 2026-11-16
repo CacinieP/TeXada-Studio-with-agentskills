@@ -6,6 +6,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -58,6 +59,10 @@ class DocumentStore:
         return path
 
     def read(self, name):
+        with _LOCK:
+            return self._read(name)
+
+    def _read(self, name):
         user_path = self._path(self.documents, name)
         path = user_path if user_path.is_file() else self._path(self.samples, name)
         if not path.is_file():
@@ -73,6 +78,10 @@ class DocumentStore:
                 "saved_at": path.stat().st_mtime, "size": len(content.encode("utf-8"))}
 
     def listing(self):
+        with _LOCK:
+            return self._listing()
+
+    def _listing(self):
         names = {p.name for directory in (self.samples, self.documents) if directory.is_dir()
                  for p in directory.glob("*.tex") if p.is_file() and not p.is_symlink()}
         documents = []
@@ -135,6 +144,39 @@ class DocumentStore:
                 raise DocumentError("文件已被移动或删除；请另存为。", 409)
             self._write(self._path(self.documents, name), content)
             return {"ok": True, **self.read(name)}
+
+    def create_many(self, documents):
+        with _LOCK:
+            paths = []
+            for name, content in documents:
+                path = self._path(self.documents, name)
+                if path.exists() or self._path(self.samples, name).exists() or path in paths:
+                    raise DocumentError(f"「{name}」已存在或重复，请更换文件名。", 409)
+                self._safe_write_path(path)
+                paths.append(path)
+
+            published = []
+            try:
+                self.documents.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with tempfile.TemporaryDirectory(prefix=".split-", dir=self.documents) as temporary:
+                    staged = []
+                    for index, (_, content) in enumerate(documents):
+                        path = Path(temporary) / str(index)
+                        self._write(path, content)
+                        staged.append(path)
+                    for source, target in zip(staged, paths):
+                        try:
+                            os.link(source, target)
+                        except FileExistsError:
+                            raise DocumentError(f"「{target.name}」已存在，请更换文件名。", 409) from None
+                        published.append(target)
+            except (OSError, DocumentError) as error:
+                for path in published:
+                    path.unlink(missing_ok=True)
+                if isinstance(error, DocumentError):
+                    raise
+                raise DocumentError("无法按页保存文档，请检查本地存储后重试。", 500) from None
+            return {"ok": True, "files": [path.name for path in paths]}
 
     def rename(self, name, new_name, expected_sha256):
         document_name(new_name)
