@@ -434,6 +434,7 @@ $("btnAnalyze").onclick = () => analyze({reveal:true}).catch(error=>{warn(error)
 $("btnFix").onclick = async () => {
   if (busy || !curName) return;
   showCenter("edit"); invalidatePreview("正在生成候选…");
+  const repairPreviewEpoch = previewEpoch;
   busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
   $("btnAnalyze").disabled = true; $("btnCompile").disabled = true;
   $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
@@ -458,6 +459,9 @@ $("btnFix").onclick = async () => {
     }
   } catch(e){warn(e);$('joblog').innerHTML+='<br>'+lineStyle(e.message);toggleBottomPanel('log',true,$('btnFix'));}
   finally {
+    if (previewEpoch === repairPreviewEpoch) {
+      invalidatePreview("修复任务未完成，请查看日志。");
+    }
     activeJob=null; $("btnCancel").classList.add("hide");
     busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
     $("btnAnalyze").disabled = false; $("btnCompile").disabled = false;
@@ -507,11 +511,16 @@ async function applyResult(res, source = null) {
     $("reviewHint").textContent = problems.length
       ? `未生成修改。还有 ${problems.length} 项待核对。`
       : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
-    if (failed) showCompileFailure(failed, source.content);
+    if (failed) {
+      showCompileFailure(failed, source.content);
+    } else {
+      invalidatePreview("检查完成，未生成修改。可编译原文查看 PDF。");
+    }
     if (problems.length) toggleBottomPanel("problems",true,$("btnFix"));
     return;
   }
   ++previewEpoch;
+  $("pvStatus").textContent = "候选已生成，请核对差异。";
   $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +

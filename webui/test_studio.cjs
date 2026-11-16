@@ -306,6 +306,7 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   context.cleanNoEditResult = same;
   await run('applyResult(cleanNoEditResult)');
   assert.match(get('reviewHint').textContent,/检查完成.*未生成修改/);
+  assert.match(get('pvStatus').textContent,/检查完成.*未生成修改/);
   context.failedNoEditResult = {...same, compile_after:{compile_ok:false,log:'error: main.tex:4: Missing right'}};
   await run('applyResult(failedNoEditResult)');
   assert.match(get('reviewHint').textContent,/原文编译未通过/);
