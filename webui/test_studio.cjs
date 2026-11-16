@@ -1004,6 +1004,32 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('modelIndicator').dataset.state,'connected','a failed draft probe does not downgrade a different active model');
   assert.match(get('modelConnectionStatus').textContent,/已连接/);
   assert.equal(run('studioConfig.model'),'MiniCPM-V-4.7-1B');
+
+  let finishConfigRead;
+  context.delayedConfigWire=()=>new Promise(resolve=>{finishConfigRead=resolve;});
+  run('j=delayedConfigWire;openModelSettings()');
+  get('modelBaseUrl').value='http://127.0.0.1:11434/v1';
+  get('modelBaseUrl').listeners.get('input')();
+  get('modelName').value='minicpm-ocr:latest';
+  get('modelName').listeners.get('input')();
+  finishConfigRead(context.activeConfig);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(get('modelBaseUrl').value,'http://127.0.0.1:11434/v1','slow config reads preserve the edited address');
+  assert.equal(get('modelName').value,'minicpm-ocr:latest','slow config reads preserve the edited model');
+
+  const olderRead=run('loadConfig()');
+  let savedModelSettings;
+  context.saveModelWire=async(url,options)=>{
+    assert.match(url,/\/settings\?/);
+    savedModelSettings=JSON.parse(options.body);
+    return {...context.activeConfig,...savedModelSettings};
+  };
+  run('j=saveModelWire');
+  await get('btnSettingsSave').onclick();
+  finishConfigRead(context.activeConfig);
+  await olderRead;
+  assert.equal(savedModelSettings.model,'minicpm-ocr:latest');
+  assert.equal(run('studioConfig.model'),'minicpm-ocr:latest','pre-save reads cannot replace the confirmed settings');
   for(const node of domNodes)assert.doesNotMatch(node.textContent+node.innerHTML,/PRIVATE-(?:HOST|PLATFORM)-SENTINEL/);
 
   assert.match(html, /<script src="\/static\/monaco\/0\.52\.2\/min\/vs\/loader\.js"><\/script>/);

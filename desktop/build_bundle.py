@@ -52,9 +52,12 @@ def build_icon(workdir: Path) -> Path | None:
     if shutil.which("sips") is None or shutil.which("iconutil") is None or not BRAND_SOURCE.exists():
         return None
     iconset.mkdir(parents=True, exist_ok=True)
-    for size in (16, 32, 64, 128, 256, 512):
-        run(["sips", "-z", str(size), str(size), str(BRAND_SOURCE), "--out", str(iconset / f"icon_{size}x{size}.png")],
-            capture_output=True)
+    for points in (16, 32, 128, 256, 512):
+        for scale, suffix in ((1, ""), (2, "@2x")):
+            pixels = str(points * scale)
+            target = iconset / f"icon_{points}x{points}{suffix}.png"
+            run(["sips", "-z", pixels, pixels, str(BRAND_SOURCE), "--out", str(target)],
+                capture_output=True)
     run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], capture_output=True)
     shutil.rmtree(iconset, ignore_errors=True)
     return icns if icns.exists() else None

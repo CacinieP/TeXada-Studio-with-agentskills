@@ -735,7 +735,7 @@ $("btnCancel").onclick = async () => {
   catch(error) { warn(error); }
 };
 
-let studioConfig = null;
+let studioConfig = null, configRequestId = 0, modelDraftEdited = false;
 function displayModelConnection(available) {
   const state=available===true?'connected':available===false?'disconnected':'unchecked';
   $("modelIndicator").dataset.state=state;
@@ -748,10 +748,12 @@ function sameModelConfiguration(a,b) {
   const endpoint=value=>String(value||'').trim().replace(/\/+$/,'');
   return !!a&&!!b&&endpoint(a.base_url)===endpoint(b.base_url)&&String(a.model||'').trim()===String(b.model||'').trim();
 }
-function displayConfig(config) {
+function displayConfig(config, preserveDraft=false) {
   studioConfig=config;
-  $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
-  $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
+  if (!preserveDraft) {
+    $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
+    $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
+  }
   $("sb-model").textContent=/minicpm/i.test(config.model||"")?"MiniCPM":/qwen/i.test(config.model||"")?"Qwen":"本地模型";
   const available=config.model_available;
   displayModelConnection(available);
@@ -759,11 +761,35 @@ function displayConfig(config) {
   $("configStatus").textContent=[available === true ? "模型服务可用" : available === false ? "尚未连接到本地模型" : "连接状态尚未检查", `编译器：${tools.tectonic ? "可用" : "待安装"}`,`页面预览：${tools.pdftoppm ? "可用" : "待安装"}`].join(" · ");
   if (config.error) $("configStatus").textContent += " · " + config.error;
 }
-async function loadConfig(probe=false) { const d=await j(`/api/studio/config?token=${encodeURIComponent(T)}${probe ? "&probe=true" : ""}`); displayConfig(d); return d; }
-$("btnSettings").onclick = () => { openDialog("settingsDialog"); loadConfig().catch(warn); };
+async function loadConfig(probe=false) {
+  const requestId=++configRequestId;
+  const d=await j(`/api/studio/config?token=${encodeURIComponent(T)}${probe ? "&probe=true" : ""}`);
+  if (requestId===configRequestId) displayConfig(d,modelDraftEdited);
+  return d;
+}
+function openModelSettings() {
+  modelDraftEdited=false;
+  if (studioConfig) displayConfig(studioConfig);
+  openDialog("settingsDialog");
+  loadConfig().catch(warn);
+}
+for (const id of ["modelBaseUrl","modelName"]) $(id).addEventListener("input",()=>{modelDraftEdited=true;});
+$("btnSettings").onclick = openModelSettings;
 $("btnSettingsClose").onclick = () => closeDialog("settingsDialog");
 $("btnSettingsSave").onclick = async () => {
-  try { const d=await post("settings",{base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()}); displayConfig(d); closeDialog("settingsDialog"); toast("本地模型设置已保存。"); } catch(error) { warn(error); }
+  const controls=["btnSettingsSave","modelBaseUrl","modelName"].map($);
+  if (controls[0].disabled) return;
+  const draft={base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()};
+  controls.forEach(control=>{control.disabled=true;});
+  try {
+    const d=await post("settings",draft);
+    ++configRequestId;
+    modelDraftEdited=false;
+    displayConfig(d);
+    closeDialog("settingsDialog");
+    toast("本地模型设置已保存。");
+  } catch(error) { warn(error); }
+  finally { controls.forEach(control=>{control.disabled=false;}); }
 };
 $("btnTestModel").onclick = async () => {
   $("btnTestModel").disabled=true; $("configStatus").textContent="正在检查本地模型…";
@@ -1288,7 +1314,7 @@ $('navigatorBackdrop').onclick=()=>toggleNavigator(false);
 $('btnProblems').onclick=()=>toggleBottomPanel('problems',undefined,$('btnProblems'));
 $('btnLog').onclick=()=>toggleBottomPanel('log',undefined,$('btnLog'));
 $('btnBottomClose').onclick=()=>{toggleBottomPanel(bottomPanelKind,false);restoreWorkspaceFocus(bottomPanelTrigger);};
-$('btnModelStatus').onclick=()=>{openDialog('settingsDialog');loadConfig().catch(warn);};
+$('btnModelStatus').onclick=openModelSettings;
 $('btnQuickOutline').onclick=openOutline;
 $('btnTogglePreview').onclick=togglePreviewPane;
 
