@@ -186,8 +186,9 @@ def run_e2e2_repair(call, case_path):
         return fail(f"内容哈希未变化（repair_model={model}）")
     if result.get("fixed_content") != content.replace(delimiter, delimiter + r"\right)"):
         return fail(f"候选未保留原文或未正确闭合定界符（repair_model={model}）")
-    if not (result.get("compile_after") or {}).get("ok"):
-        return fail(f"修复后编译失败（repair_model={model}）")
+    compile_after = result.get("compile_after") or {}
+    if not compile_after.get("ok"):
+        return fail(f"修复后编译失败（repair_model={model}）：{compile_after.get('log', '')[-600:]}")
     if result.get("model_calls") != 0:
         return fail(f"确定性修复或缺下标错误调用了模型（repair_model={model}）")
     return {"id": "E2E-2", "passed": True,
@@ -531,9 +532,6 @@ def main(argv=None):
     args = ap.parse_args(argv)
     repair_model = args.repair_model or repair_model_default()
 
-    def want(sid):
-        return not args.only or sid in args.only
-
     try:
         summary = preflight(skip_model=args.skip_model, models_base=args.models_base,
                             required=(repair_model, args.ocr_model))
@@ -543,11 +541,20 @@ def main(argv=None):
     print(f"[e2e] 预检通过：python={summary['python']} tools={summary['latex_tools']} "
           f"models={len(summary['models'])} 个 repair_model={repair_model}")
 
+    with tempfile.TemporaryDirectory(prefix="texada-release-state-") as state:
+        return _run_scenarios(args, repair_model, state)
+
+
+def _run_scenarios(args, repair_model, state):
+    def want(sid):
+        return not args.only or sid in args.only
+
+    backend_env = {"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model,
+                   "TEXADA_STUDIO_STATE_DIR": state}
     token = uuid.uuid4().hex + uuid.uuid4().hex
     results = []
     if want("E2E-1") or want("E2E-2"):
-        proc, base_url = boot_backend(
-            token, env_extra={"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})
+        proc, base_url = boot_backend(token, env_extra=backend_env)
     else:
         proc, base_url = None, ""
     try:
@@ -573,8 +580,7 @@ def main(argv=None):
                                     base=args.models_base))
     if want("E2E-4"):
         print("[e2e] E2E-4 持久化场景（两起两停后端）…")
-        results.append(run_e2e4_persistence(_persistence_factory(
-            token, {"VLM_BASE_URL": args.models_base, "REPAIR_MODEL": repair_model})))
+        results.append(run_e2e4_persistence(_persistence_factory(token, backend_env)))
     if want("E2E-5"):
         print("[e2e] E2E-5 .app 构建与冒烟（构建可能较久）…")
         output = Path("dist-app")
