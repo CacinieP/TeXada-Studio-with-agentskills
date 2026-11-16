@@ -20,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -135,13 +136,31 @@ def launcher_env(source=None):
 
 
 def seed_tex_cache(source=None, target=None, copier=None):
-    """首次运行把捆绑的 TeX 缓存种子到用户目录;已存在或无源则不动。"""
+    """Seed a fresh cache or add immutable bundle resources missing after an upgrade."""
     source = Path(source) if source is not None else TEX_CACHE_SOURCE
     target = Path(target) if target is not None else TEX_CACHE_TARGET
-    if source is None or not Path(source).is_dir() or Path(target).exists():
+    if source is None or not source.is_dir():
         return False
-    (copier or shutil.copytree)(str(source), str(target))
-    return True
+    if not target.exists():
+        (copier or shutil.copytree)(str(source), str(target))
+        return True
+    copied = False
+    for entry in (source / "bundles" / "data").glob("*/*"):
+        digest = entry.parent.name
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest) or not entry.is_file():
+            continue
+        destination = target / entry.relative_to(source)
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=destination.parent) as staging:
+            shutil.copyfile(entry, staging.name)
+            try:
+                os.link(staging.name, destination)
+            except FileExistsError:
+                continue
+        copied = True
+    return copied
 
 
 def start_backend_thread(state_dir: Path, port, server_box: dict):

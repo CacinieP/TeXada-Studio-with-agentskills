@@ -1,6 +1,6 @@
 """E2E 发行驱动：预检、场景执行、证据写盘。
 
-仅用于可信本机环境：真实 LaTeX 编译、真实 Ollama 模型、真实 Studio 后端。
+仅用于可信本机环境：真实 LaTeX 编译、真实 Ollama OCR 模型、真实 Studio 后端。
 运行入口见 docs/superpowers/plans/2026-11-12-e2e-release.md。
 """
 import argparse
@@ -146,12 +146,13 @@ def run_e2e1_compile(call, fixture_dir):
 
 
 def run_e2e2_repair(call, case_path):
-    """E2E-2：真实修复链路落稿并过复核（首个 injected 用例；jobs 判 done + fixstatus 取 result）。"""
+    """E2E-2：落稿确定性定界符修复，缺失下标保留人工处理。"""
     t0 = time.time()
     cases = json.loads(Path(case_path).read_text(encoding="utf-8"))["cases"]
-    case = next((c for c in cases if c.get("case_kind") == "injected"), cases[0])
-    content = ("\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n\\[\n"
-               + case["original_latex"] + "\n\\]\n\\end{document}\n")
+    case = next(c for c in cases if c["original_latex"] == "a_+b")
+    delimiter = r"\left(\frac{x^2-1}{x-1}"
+    content = ("\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n"
+               + "$" + delimiter + "$.\n$" + case["original_latex"] + "$.\n\\end{document}\n")
     name = f"{case['id']}.tex"
 
     def fail(detail):
@@ -177,18 +178,18 @@ def run_e2e2_repair(call, case_path):
     model = result.get("configured_model") or result.get("model") or "?"
     edits = result.get("edits") or []
     problems_after = result.get("problems_after") or []
-    if any(p.get("status") == "NEEDS_HUMAN" for p in problems_after):
-        return fail(f"NEEDS_HUMAN 残留（repair_model={model}）")
-    if not edits:
-        return fail(f"无落稿编辑（repair_model={model}）")
+    if len(problems_after) != 1 or problems_after[0].get("repair_blocker") != "missing_script_operand":
+        return fail(f"缺下标未保留为唯一人工审阅项（repair_model={model}）")
+    if len(edits) != 1:
+        return fail(f"预期一处定界符编辑（repair_model={model}）")
     if result.get("original_sha256") == result.get("candidate_sha256"):
         return fail(f"内容哈希未变化（repair_model={model}）")
+    if result.get("fixed_content") != content.replace(delimiter, delimiter + r"\right)"):
+        return fail(f"候选未保留原文或未正确闭合定界符（repair_model={model}）")
     if not (result.get("compile_after") or {}).get("ok"):
         return fail(f"修复后编译失败（repair_model={model}）")
-    if problems_after:
-        return fail(f"修复后仍有问题（repair_model={model}）")
-    if not result.get("model_calls"):
-        return fail(f"未调用真实模型（repair_model={model}）")
+    if result.get("model_calls") != 0:
+        return fail(f"确定性修复或缺下标错误调用了模型（repair_model={model}）")
     return {"id": "E2E-2", "passed": True,
             "detail": f"case={case['id']} edits={len(edits)} "
                       f"model_calls={result.get('model_calls')} repair_model={model}",
@@ -557,7 +558,7 @@ def main(argv=None):
             print("[e2e] E2E-1 编译场景…")
             results.append(run_e2e1_compile(call, Path("samples/docs")))
         if want("E2E-2"):
-            print("[e2e] E2E-2 修复场景（真实模型，可能较久）…")
+            print("[e2e] E2E-2 修复场景（确定性补定界符，保留缺项）…")
             results.append(run_e2e2_repair(call, Path("samples/research/smoke_cases.json")))
     finally:
         if proc is not None:

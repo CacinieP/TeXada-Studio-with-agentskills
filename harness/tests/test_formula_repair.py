@@ -167,25 +167,15 @@ class CandidatePreservationTests(unittest.TestCase):
         self.assertTrue(assess_candidate(r"\frac{a}{b", "  " + r"\frac{a}{b}" + " ")["allowed"])
 
 
-class GapFillAuthorizationTests(unittest.TestCase):
-    # 用户裁决 B（2026-11-12）：范围门卫扩权——仅空 script 槽的单 token 填充可落稿。
-
-    def test_fills_only_empty_script_slots_with_one_bounded_token(self):
-        # 抓的破坏点：模型修复线永远无法落稿（E2E-2 死线）——空下标/上标缺参的
-        # 单 token 填充必须放行，reason/method 类别稳定
-        cases = [
-            ("a_+b", "a_1+b"),      # 空下标槽，填 1 个数字（E2E-2 fixture 形态）
-            ("a_+b", "a_{1}+b"),    # 同槽，{} 包裹形式
-            ("x^+1", "x^2+1"),      # 空上标槽
-            ("c_+d", "c_k+d"),      # 字母 index 填充
-            ("a_+b", "a_12+b"),     # 数字串 ≤8 字符
-        ]
-        for original, candidate in cases:
-            with self.subTest(original=original, candidate=candidate):
+class MissingScriptTests(unittest.TestCase):
+    def test_uncertain_scripts_are_preserved(self):
+        for original, candidate in (("a_+b", "a_1+b"), ("x^+1", "x^2+1"),
+                                    ("a_ + b", "a_{1} + b"), ("a_", "a_1")):
+            with self.subTest(original=original):
+                self.assertIsNone(deterministic_candidate(original))
                 evidence = assess_candidate(original, candidate)
-                self.assertTrue(evidence["allowed"], evidence)
-                self.assertEqual(evidence["reason"], "single_token_gap_fill")
-                self.assertEqual(evidence["method"], "fill_empty_script_token")
+                self.assertFalse(evidence["allowed"])
+                self.assertEqual(evidence["reason"], "missing_script_operand")
 
     def test_rejects_fills_outside_empty_script_slots(self):
         # 抓的破坏点：扩权被滥用于任意位置插字（操作数/已占用槽/命令/超长/结构改动）

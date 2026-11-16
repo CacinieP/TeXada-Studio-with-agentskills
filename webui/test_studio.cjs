@@ -590,9 +590,9 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnOcr').disabled,false);
 
   const ocrFailed=get('btnOcr').onclick();await flushOcr();
-  ocrRequests[5].reject(new Error('model unavailable'));await ocrFailed;
+  ocrRequests[5].reject(run("new Error('model unavailable')"));await ocrFailed;
   assert.equal(run('ocrRunning'),false);assert.equal(get('btnOcr').disabled,false,'a current failure can be retried');
-  assert.match(get('ocrHint').textContent,/识别未完成/);
+  assert.equal(get('ocrHint').textContent,'识别未完成：model unavailable');
   const ocrRetried=get('btnOcr').onclick();await flushOcr();
   assert.equal(ocrRequests[6].body.name,'B.png');
   ocrRequests[6].resolve(recognized('retry.tex','retry candidate'));await ocrRetried;

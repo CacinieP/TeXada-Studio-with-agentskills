@@ -877,7 +877,13 @@ $("btnOcr").onclick = async () => {
     $("ocrCandidate").value=d.content;ocrReviewActive=true;openDialog("ocrDialog");
     presentOcrPages(d,file);
     $("ocrHint").textContent="识别完成。请对照原件审阅候选，再创建文档。";
-  } catch(error) { if(current()){warn(error);$("ocrHint").textContent="识别未完成，请检查本地模型与文件后重试。";} }
+  } catch(error) {
+    if (current()) {
+      $("ocrHint").textContent = error instanceof Error && error.message
+        ? "识别未完成：" + error.message
+        : "识别未完成，请重试。";
+    }
+  }
   finally { if(requestId===ocrRequestId){ocrRunning=false;syncOcrControls();} }
 };
 $("btnOcrCancel").onclick = cancelOcrReview;

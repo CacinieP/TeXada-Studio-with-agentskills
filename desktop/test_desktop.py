@@ -126,6 +126,20 @@ class LauncherTests(unittest.TestCase):
             self.assertFalse(desktop_app.seed_tex_cache(Path(tmp) / "missing", target, copier=copier))
             self.assertEqual(copied, [(str(source), str(target))])
 
+    def test_seed_tex_cache_adds_missing_files_to_existing_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "source", Path(tmp) / "target"
+            relative = Path("bundles") / "data" / ("a" * 64)
+            for root in (source, target):
+                (root / relative).mkdir(parents=True)
+            (source / relative / "cmmi5.pfb").write_bytes(b"new font")
+            (source / relative / "other").write_bytes(b"bundled copy")
+            (target / relative / "other").write_bytes(b"already cached")
+            self.assertTrue(desktop_app.seed_tex_cache(source, target))
+            self.assertEqual((target / relative / "cmmi5.pfb").read_bytes(), b"new font")
+            self.assertEqual((target / relative / "other").read_bytes(), b"already cached")
+            self.assertFalse(desktop_app.seed_tex_cache(source, target))
+
 
 class BuildTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "darwin", "应用包生成仅支持 macOS")

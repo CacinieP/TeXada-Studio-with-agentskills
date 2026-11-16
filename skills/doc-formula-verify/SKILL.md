@@ -1,6 +1,6 @@
 ---
 name: doc-formula-verify
-version: 1.2.0
+version: 1.3.0
 description: Check supplied LaTeX formula syntax and propose only source-preserving repairs. Use for extracted formula nodes or OCR-derived LaTeX; preserve uncertain source and require review instead of guessing mathematical content.
 ---
 
@@ -20,8 +20,8 @@ Propose a candidate for the host to check; do not declare it mathematically true
    same applies when `\frac`, `\dfrac`, `\tfrac`, `\binom`, `\dbinom` or `\tbinom`
    still lacks one of its two arguments after the only legal brace close. Return
    the original `latex` exactly. In particular, never delete a final `+`, invent
-   the missing argument, or delete a brace to manufacture one. An empty
-   subscript or superscript slot is the single exception; see rule 4.
+   the missing argument, or delete a brace to manufacture one. Leave an empty
+   subscript or superscript unchanged for the operator to confirm against the source.
 3. **Respect parser coverage.** Valid TeX notation can be unsupported by a scalar
    checker. Keep interval subscripts, chained relations, evaluation bars,
    document macros and structured environments unchanged. Do not flatten them
@@ -31,12 +31,9 @@ Propose a candidate for the host to check; do not declare it mathematically true
    leaves every two-argument command above with both of its existing arguments.
    Preserve the entire existing prefix. Close a single visibly unambiguous
    `\left`/`\right` pair only when the host supports that patch. Never infer
-   where an interior argument should end. **Fill an empty script slot only**
-   (host ruling B, 2026-11-12): when a `_` or `^` is followed by no argument at
-   all, you may propose exactly one small token — up to 8 letters or digits,
-   optionally `{...}`-wrapped — in that slot, and nothing else.
+   where an interior argument should end.
 5. **Audit the proposed difference.** If it deletes/reorders existing content,
-   invents content beyond the single script-gap token of rule 4, or changes
+   invents mathematical content, or changes
    grouping scope without evidence, discard it and return the original. Fewer
    changed characters is not evidence of fidelity.
 6. **Use feedback without changing authority.** Start each retry from the
@@ -48,7 +45,7 @@ Examples illustrate edit authority, not answers for a particular document:
 | Supplied text | Candidate | Reason |
 | --- | --- | --- |
 | `z^3+` | `z^3+` | The missing operand cannot be recovered; retain the operator. |
-| `c_+d` | `c_1+d` | The subscript slot is empty; fill it with one small token for human review to adopt or reject. |
+| `c_+d` | `c_+d` | The subscript needs source evidence. |
 | `\frac{r+q}{5` | `\frac{r+q}{5}` | Close only the nonempty trailing argument. |
 | `\frac{{3}` | `\frac{{3}` | Both groups can close, but `\frac` still has one argument; do not invent the other or drop a brace. |
 | `\lim_{y \to b k(y)=N` | `\lim_{y \to b k(y)=N` | The intended interior group boundary is unknown. |

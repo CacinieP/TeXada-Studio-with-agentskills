@@ -226,6 +226,8 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
         print(f"   已捆绑 {count} 个非系统动态库")
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
+    run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
+        env={**os.environ, "TECTONIC": str(TECTONIC)})
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
     (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
         tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")

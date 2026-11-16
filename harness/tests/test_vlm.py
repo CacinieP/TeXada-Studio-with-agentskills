@@ -82,7 +82,7 @@ class ProviderRuntimeTest(unittest.TestCase):
             self.assertEqual(json.loads(example_input), {"task": "repair_formula_syntax", "latex": r"\frac{a^2+b^2}{2"})
             self.assertEqual(json.loads(example_output), {"latex": r"\frac{a^2+b^2}{2}"})
             self.assertEqual(json.loads(messages[3]["content"]), {"task": "repair_formula_syntax", "latex": "x^+1"})
-            self.assertEqual(json.loads(messages[4]["content"]), {"latex": "x^2+1"})
+            self.assertEqual(json.loads(messages[4]["content"]), {"latex": "x^+1"})
             self.assertEqual(json.loads(messages[-1]["content"]), {"task": "repair_formula_syntax", "latex": r"\frac{x}{2"})
             self.assertIn('\\\\frac', example_output)
             self.assertIn('}{2}"}', example_output)
@@ -94,7 +94,7 @@ class ProviderRuntimeTest(unittest.TestCase):
                 self.assertNotIn("<loaded_skill", system)
             self.assertIsNotNone(provider.fingerprint()["fewshot_sha256"])
 
-    def test_fewshot_includes_guard_authorized_gap_fill_repair(self):
+    def test_fewshot_distinguishes_syntax_repair_from_missing_script(self):
         # 抓的破坏点：few-shot 仅恒等样例（输入→原样输出）教模型回显坏公式——必须含修复样例，
         # 且每个样例输出必须过范围门卫（few-shot 不得教模型产出被拒内容）
         examples = vlm._minicpm_json_examples()
@@ -103,9 +103,7 @@ class ProviderRuntimeTest(unittest.TestCase):
                  for index in (0, 2)]
         self.assertTrue(any(user["latex"] != assistant["latex"] for user, assistant in pairs),
                         "few-shot 必须含非恒等修复样例")
-        self.assertTrue(any(assess_candidate(user["latex"], assistant["latex"])["reason"] == "single_token_gap_fill"
-                            for user, assistant in pairs),
-                        "few-shot 必须含 script 槽填充样例（防退化为仅补括号样例）")
+        self.assertIn(({"task": "repair_formula_syntax", "latex": "x^+1"}, {"latex": "x^+1"}), pairs)
         for user, assistant in pairs:
             with self.subTest(latex=user["latex"]):
                 self.assertEqual(user["task"], "repair_formula_syntax")
@@ -113,12 +111,10 @@ class ProviderRuntimeTest(unittest.TestCase):
                 evidence = assess_candidate(user["latex"], assistant["latex"])
                 self.assertTrue(evidence["allowed"] or user["latex"] == assistant["latex"], evidence)
 
-    def test_system_prompt_allows_only_single_script_gap_fill(self):
-        # 抓的破坏点：提示词禁令导致模型遵命回显；或放开过度允许臆造操作数
+    def test_system_prompt_forbids_missing_script_guesses(self):
         prompt = vlm.FORMULA_SYSTEM_PROMPT
-        self.assertIn("empty subscript or superscript slot", prompt)
+        self.assertIn("Never invent an operand, subscript or superscript", prompt)
         self.assertIn("Preserve every existing number", prompt)
-        self.assertNotIn("never solve, simplify, drop terms or invent a missing operand or index", prompt)
 
     def test_default_provider_and_cli_model_are_minicpm_with_explicit_override_supported(self):
         provider = vlm.OpenAICompatibleProvider()

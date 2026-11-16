@@ -293,7 +293,7 @@ from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
-from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
+from docforensics.tex_context import analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
 from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
 from docforensics.__main__ import repair_model_default  # noqa: E402
 
@@ -505,8 +505,11 @@ def _formula_problems(content: str, emit=None):
     problems = []
     parsed = analyze_math(content)
     for node in parsed["nodes"]:
-        vj = (_verify_formula(node["latex"]) if node["checkable"] else
-              {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]})
+        if node["checkable"]:
+            vj = _verify_formula(node["latex"])
+        else:
+            grid = check_math_grids(node["latex"]) if node["reason"] == "structured_math" else None
+            vj = grid or {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]}
         if emit:
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=vj)
@@ -1316,6 +1319,12 @@ def studio_job_decision(job_id: str, token: str = Query(""), body: dict = None):
         if job.get("review") and job["review"]["decision"] != decision:
             raise HTTPException(status_code=409, detail="此候选已有相反的审阅决定。")
         if not job.get("review"):
+            if decision == "accept" and any(
+                edit.get("skill") == "doc-formula-verify"
+                and repair_blocker(edit.get("before")) == "missing_script_operand"
+                for edit in result.get("edits", [])
+            ):
+                raise HTTPException(status_code=409, detail="此旧候选含有无法从原文确定的上下标，请核对原文后手动补全。")
             job["review"] = {"decision": decision, "at": time.time(),
                              "original_sha256": result["original_sha256"],
                              "candidate_sha256": result["candidate_sha256"]}

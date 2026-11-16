@@ -241,11 +241,15 @@ class E2E2RepairTests(unittest.TestCase):
 
     @staticmethod
     def _result(**overrides):
-        result = {"fixed_content": "\\[ a_1+b \\]", "edits": [
-            {"line": 4, "before": "a_+b", "after": "a_1+b", "skill": "doc-formula-verify"}],
-            "compile_before": {"ok": True}, "compile_after": {"ok": True},
-            "problems_after": [], "model": E2E2RepairTests.MODEL,
-            "configured_model": E2E2RepairTests.MODEL, "model_calls": 2,
+        original = r"\left(\frac{x^2-1}{x-1}"
+        repaired = original + r"\right)"
+        result = {"fixed_content": ("\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n"
+                                    + "$" + repaired + "$.\n$a_+b$.\n\\end{document}\n"),
+                  "edits": [{"line": 4, "before": original, "after": repaired, "skill": "doc-formula-verify"}],
+                  "compile_before": {"ok": False}, "compile_after": {"ok": True},
+                  "problems_after": [{"status": "NEEDS_HUMAN", "repair_blocker": "missing_script_operand"}],
+                  "model": E2E2RepairTests.MODEL,
+                  "configured_model": E2E2RepairTests.MODEL, "model_calls": 0,
             "original_sha256": "00", "candidate_sha256": "11"}
         result.update(overrides)
         return result
@@ -284,7 +288,7 @@ class E2E2RepairTests(unittest.TestCase):
         out = self._run(result=self._result(
             problems_after=[{"id": "f-1", "type": "formula", "status": "NEEDS_HUMAN"}]))
         self.assertFalse(out["passed"])
-        self.assertIn("NEEDS_HUMAN", out["detail"])
+        self.assertIn("缺下标", out["detail"])
 
     def test_repair_scenario_fails_on_job_error(self):
         out = self._run(jobs_entry={"id": "j1", "done": True, "error": "任务失败（RuntimeError）"})

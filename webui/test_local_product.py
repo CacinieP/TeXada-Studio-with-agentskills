@@ -130,6 +130,26 @@ class LocalProductTest(unittest.TestCase):
         for document in documents:
             self.assertEqual(self.get("file", name=document["name"]).json()["content"], document["content"])
 
+    def test_matrix_and_cases_are_checked_for_shape(self):
+        matrices = self.post("analyze", {"content": (
+            r"$f(x)=\begin{vmatrix}2x&1&-1\\-x&x&x\\1&2&x\end{vmatrix}$ "
+            r"$\delta_{ij}=\begin{cases}1,&i=j\\0,&i\neq j\end{cases}$"
+        )})
+        self.assertEqual(matrices.json()["problems"], [])
+        invalid = self.post("analyze", {"content": r"$\begin{cases}1,&i=j\\0\end{cases}$"})
+        [problem] = invalid.json()["problems"]
+        self.assertEqual(problem["status"], "NEEDS_HUMAN")
+        self.assertIn("[2, 1]", problem["reason"])
+
+    def test_old_guessed_script_candidate_cannot_be_adopted(self):
+        job_id, original, candidate = self.candidate(original="$a_+b$", candidate="$a_1+b$")
+        job = studio._jobs[job_id]
+        job["result"]["edits"] = [{"before": "a_+b", "after": "a_1+b", "skill": "doc-formula-verify"}]
+        response = self.decision(job_id, original, candidate)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("无法从原文确定", response.json()["detail"])
+        self.assertEqual(self.decision(job_id, original, candidate, decision="reject").status_code, 200)
+
     def test_page_split_rolls_back_an_io_failure_during_publication(self):
         documents = [{"name": "page-1.tex", "content": "$x$"},
                      {"name": "page-2.tex", "content": "$y$"}]

@@ -31,8 +31,6 @@ _RELATIONS = frozenset({"=", "<", ">", "≤", "≥", "≠", r"\le", r"\leq", r"\
 _TWO_ARGUMENT_COMMANDS = frozenset({
     r"\frac", r"\dfrac", r"\tfrac", r"\binom", r"\dbinom", r"\tbinom",
 })
-_GAP_FILL_INSERT = re.compile(r"[0-9A-Za-z]{1,8}|\{[0-9A-Za-z]{1,8}\}")
-_GAP_ARG_START = re.compile(r"[0-9A-Za-z{\\]")
 
 
 @dataclass(frozen=True)
@@ -162,7 +160,10 @@ def repair_blocker(original):
         return "parser_coverage_unsupported"
     if tokens[-1].text == "\\":
         return "incomplete_command"
-    if tokens[-1].text in {"^", "_"}:
+    if tokens[-1].text in {"^", "_"} or any(
+        left.text in {"^", "_"} and right.text in _TRAILING_OPERATORS | _RELATIONS | {"^", "_", "}"}
+        for left, right in zip(tokens, tokens[1:])
+    ):
         return "missing_script_operand"
     if tokens[-1].text in _TRAILING_OPERATORS:
         return "missing_operator_operand"
@@ -252,35 +253,11 @@ def deterministic_candidate(original):
     return _deterministic_patch(original)[0]
 
 
-def _gap_fill_insertion(before, after):
-    """True when ``after`` is ``before`` plus one bounded token at an empty script slot."""
-    limit = min(len(before), len(after))
-    prefix_end = 0
-    while prefix_end < limit and before[prefix_end] == after[prefix_end]:
-        prefix_end += 1
-    suffix_len = 0
-    while (suffix_len < len(before) - prefix_end and suffix_len < len(after) - prefix_end
-           and before[len(before) - 1 - suffix_len] == after[len(after) - 1 - suffix_len]):
-        suffix_len += 1
-    if before[prefix_end:len(before) - suffix_len]:
-        return False
-    inserted = after[prefix_end:len(after) - suffix_len]
-    if not _GAP_FILL_INSERT.fullmatch(inserted):
-        return False
-    if prefix_end == 0 or before[prefix_end - 1] not in "_^":
-        return False
-    return not _GAP_ARG_START.match(before[prefix_end:])
-
-
 def assess_candidate(original, candidate):
-    """Authorize unchanged source, the deterministic syntax patch, or one script-gap fill.
+    """Authorize unchanged source or an exact deterministic syntax patch.
 
-    The only invented content ever authorized is a single bounded token (up to 8
-    letters/digits, optionally brace-wrapped) filling an empty subscript or
-    superscript slot (user ruling B, 2026-11-12). ``reason`` is a bounded, stable
-    rejection category. The first differing mathematical token is also returned
-    for useful retry feedback. Ordered tokens include grouping; token equality
-    alone never authorizes an edit.
+    Grouping and all existing math tokens are authoritative. The first
+    differing token in a rejection is available for bounded retry feedback.
     """
     rejected = {"allowed": False, "reason": "invalid_candidate", "method": "none"}
     if not isinstance(original, str) or not original.strip():
@@ -297,8 +274,6 @@ def assess_candidate(original, candidate):
     expected, method = _deterministic_patch(original)
     if expected is not None and after == expected.strip():
         return {"allowed": True, "reason": "deterministic_syntax_patch", "method": method}
-    if repair_blocker(original) is None and _gap_fill_insertion(before, after):
-        return {"allowed": True, "reason": "single_token_gap_fill", "method": "fill_empty_script_token"}
     reason = repair_blocker(original) or "unauthorized_source_change"
     result = {**rejected, "reason": reason}
     old_tokens, new_tokens = _tokens(before), _tokens(after)
