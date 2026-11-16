@@ -478,7 +478,8 @@ class LocalRuntime:
             raise LocalRuntimeError("invalid_import_evidence", "无法读取原图证据记录。", 409) from None
 
 
-def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=0, max_tokens=300):
+def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=0, max_tokens=300,
+                        constrain_planner=False):
     """Existing repair/Skill behavior with credential-free local-only transport.
 
     Imported lazily so image import tests need only the Python standard library.
@@ -510,7 +511,42 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
         def fingerprint(self):
             record = super().fingerprint()
             record["local_runtime_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+            if constrain_planner:
+                record["parameters"]["planner_response_format"] = "numbered_json_choice"
             return record
+
+        def plan_action(self, snapshot, *, timeout=120):
+            if not constrain_planner:
+                return super().plan_action(snapshot, timeout=timeout)
+            options = [
+                {"action": action, "node_id": node["id"], "line": node.get("line"),
+                 "check_status": node["check_status"]}
+                for node in snapshot["nodes"] for action in node["action_mask"]
+            ]
+            automatic = [option for option in options if option["action"] != "request-human"]
+            options = automatic or options
+            request = {
+                "choices": [{"choice": index, **option} for index, option in enumerate(options)]
+            }
+            if not options:
+                return None
+            answer = self.structured_decision(
+                "plan_action_choice", request,
+                'Select one numbered choice. Return only {"choice": number}. '
+                "Prefer a check on an unchecked node or a repair on a retry node. "
+                "If all available choices are request-human, choose the next issue to review.",
+                timeout=timeout,
+            )
+            index = answer.get("choice") if isinstance(answer, dict) else None
+            if not (isinstance(answer, dict) and set(answer) == {"choice"}
+                    and type(index) is int and 0 <= index < len(options)):
+                if answer is not None:
+                    self.last_trace["reason"] = "invalid_planner_choice"
+                return None
+            option = options[index]
+            action = option["action"]
+            return {"action": action, "node_id": option["node_id"], "state_rev": snapshot["state_rev"],
+                    "params": {"reason": "模型选择人工核对"} if action == "request-human" else {}}
 
         def _chat(self, prompt, *, system=None, examples=None, timeout=120):
             messages = [{"role": "system", "content": self._system_prompt() if system is None else system}]
@@ -523,6 +559,20 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
                        "messages": messages, "stream": False}
             if self.disable_thinking:
                 payload["chat_template_kwargs"] = {"enable_thinking": False}
+            if self.last_trace.get("operation") == "plan_action_choice":
+                choices = json.loads(prompt)["choices"]
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "studio_planner_choice",
+                        "strict": True,
+                        "schema": {"type": "object", "additionalProperties": False,
+                                   "required": ["choice"], "properties": {
+                                       "choice": {"type": "integer", "enum": list(range(len(choices)))}
+                                   }},
+                    },
+                }
+                payload["max_tokens"] = min(self.max_tokens, 64)
             self.last_trace["prompt_sha256"] = _hash(_canonical(payload["messages"]))
             self.last_trace.update(model_called=True, model_calls=1)
             return local_json_request(self.endpoint, payload, timeout=timeout)

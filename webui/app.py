@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
 from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
-from managed_models import ManagedModels
+from managed_models import ManagedModels, PROFILES
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -325,9 +325,14 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 def _new_provider(*, skill_selection=False):
     # Selection must see metadata first; do not eagerly load the fixed formula body.
     if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
-        config = _local_runtime().get_config()
+        runtime = _local_runtime()
+        config = runtime.get_config()
+        active = managed_models.connection()
+        managed_1b = (active is not None and active["model"] == config["model"] == PROFILES["1b"].model
+                      and active["base_url"] == config["base_url"])
         return make_local_provider(config["base_url"], config["model"],
-                                   skill_mode="off" if skill_selection else SKILL_MODE)
+                                   skill_mode="off" if skill_selection else SKILL_MODE,
+                                   constrain_planner=managed_1b)
     return OpenAICompatibleProvider(VLM_BASE_URL, REPAIR_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
