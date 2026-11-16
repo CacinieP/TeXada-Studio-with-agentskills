@@ -31,7 +31,7 @@
 <div id="inspectorBackdrop" class="workspace-backdrop hide"></div><div id="navigatorBackdrop" class="workspace-backdrop hide"></div>
 <div id="exportMenu" class="workspace-menu hide" role="menu" aria-label="导出文档"><button id="btnExport" role="menuitem">导出 LaTeX (.tex)</button><button id="btnPdf" role="menuitem" disabled>导出 PDF</button></div>
 <div id="workspaceSettingsMenu" class="workspace-menu hide" role="menu" aria-label="工作区设置"><button id="btnEditorSettings" role="menuitem">编辑器设置</button><button id="btnSettings" role="menuitem">本地模型</button><button id="btnHistory" role="menuitem">运行记录</button><button id="btnTheme" role="menuitem">增强对比度</button></div>
-<div id="editorToolsMenu" class="workspace-menu hide" role="menu" aria-label="编辑与布局工具"><button id="btnFind" role="menuitem">查找</button><button id="btnReplace" role="menuitem">查找和替换</button><button id="btnQuickOutline" role="menuitem">转到章节</button><button id="btnTogglePreview" role="menuitem">切换PDF预览</button></div>
+<div id="editorToolsMenu" class="workspace-menu hide" role="menu" aria-label="编辑与布局工具"><button id="btnUndo" role="menuitem" disabled>撤销</button><button id="btnRedo" role="menuitem" disabled>重做</button><button id="btnFind" role="menuitem">查找</button><button id="btnReplace" role="menuitem">查找和替换</button><button id="btnQuickOutline" role="menuitem">转到章节</button><button id="btnTogglePreview" role="menuitem">切换PDF预览</button></div>
 <dialog id="importDialog"><div class="dialog-heading"><h2>图片 / PDF 识别</h2><button id="btnImportClose" class="icon-button" aria-label="关闭识别面板" title="关闭识别面板"></button></div><p class="hint">打开 LaTeX，或从图片和 PDF 生成可编辑候选。</p>
  <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖入图片和PDF"><div class="drop-symbol">▧</div><div id="ocrFileLabel">拖入 PDF / 图片，或点击选择</div></div><input id="ocrInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
  <div class="row"><label for="ocrStart" class="hint">起始页</label><input id="ocrStart" type="number" min="1" step="1" value="1" class="light-button" style="width:64px" aria-label="起始页(PDF)"><label for="ocrPages" class="hint">最多页数</label><select id="ocrPages" class="light-button" aria-label="最多识别页数"><option value="1">1 页</option><option value="3">3 页</option><option value="5">5 页</option></select><button class="light-button" id="btnOcr" disabled>开始识别</button></div><p class="local-note" id="ocrHint">仅向配置的本地模型发送。识别结果经你确认后新建文档。</p></dialog>
@@ -70,6 +70,7 @@ function updateSaveState() {
   $("saveState").textContent = !curName ? "未打开文档" : savingDocument ? "保存中…" : isDirty() ? "未保存修改" : documentOrigin === "sample" ? "已保存 · 示例" : "已保存";
   $("saveState").classList.toggle("dirty", isDirty());
   $("btnSave").disabled = !curName || busy || savingDocument;
+  updateHistoryControls();
   $("tabname").textContent = curName ? curName + (isDirty() ? " •" : "") : "未打开文档";
   $("workspaceFilename").textContent=curName||"未打开文档";
   document.title=(curName?curName+" · ":"")+"TeXada Studio";
@@ -352,6 +353,12 @@ $("pvPrevious").onclick = () => { if (previewPage > 0) { previewPage--; renderPr
 $("pvNext").onclick = () => { if (previewPage < previewPages.length - 1) { previewPage++; renderPreviewPage(); } };
 $("pvZoomFit").onclick = () => { pvZoom = "fit"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
 $("pvZoom100").onclick = () => { pvZoom = "raw"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
+function compileErrorSummary(log) {
+  const lines = String(log || "").split(/\r?\n/).map(line => line.trim());
+  const diagnostic = lines.find(line => /^error:\s*main\.tex:\d+:/i.test(line))
+    || lines.find(line => /^error:\s*!|^!\s/.test(line));
+  return diagnostic?.replace(/^error:\s*!?\s*|^!\s*/i,"").slice(0,240) || "";
+}
 async function compilePreview(content) {
   if (!curName || !editor?.getModel()) return;
   const epoch = ++previewEpoch, name = curName;
@@ -373,7 +380,10 @@ async function compilePreview(content) {
       if (lastPreviewTag || d.pdf) setPdfAvailable(true);
       if (!previewPages.length && d.log) { $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log; }
     } else {
-      previewPages = []; $("pvStatus").textContent = "未能生成 PDF，请查看编译详情。"; $("pvTabStatus").textContent = "编译未通过";
+      previewPages = [];
+      const summary = compileErrorSummary(d.log);
+      $("pvStatus").textContent = summary ? "编译未通过：" + summary : "未能生成 PDF，请查看编译详情。";
+      $("pvTabStatus").textContent = "编译未通过";
       $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log || "编译器未返回详细信息。";
       $("pvImgWrap").innerHTML = '<div class="preview-empty"><b>▤</b>修正源码后，再试一次编译。</div>';
     }
@@ -439,7 +449,36 @@ async function applyResult(res, source = null) {
   source = source || await captureSource();
   await validateCandidate(res, source);
   if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
-  ++previewEpoch; lastResult = res; lastCandidateSource = source;
+  const unchanged = res.fixed_content === source.content;
+  lastResult = res; lastCandidateSource = unchanged ? null : source;
+  if (unchanged) {
+    const failed = [res.compile_after,res.compile_before].find(
+      outcome=>outcome && outcome.status !== "NOT_CHECKED" && !(outcome.compile_ok ?? outcome.ok)
+    );
+    const problems = res.problems_after;
+    disposeDiff();
+    $("btnDiff").disabled = true;
+    $("tab-diff").setAttribute("aria-disabled", "true");
+    $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = false;
+    showCenter("edit"); toggleAgentDrawer(true,$("btnAgent"));
+    renderProblems(problems);
+    const compiled = res.compile_after.compile_ok ?? res.compile_after.ok;
+    $("compile").textContent = failed ? "原文编译未通过" : compiled ? "原文编译通过" : "原文编译未检查";
+    $("preview").textContent = "本次没有需要审阅的差异。";
+    $("reviewHint").textContent = problems.length
+      ? `未生成修改。还有 ${problems.length} 项待核对。`
+      : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
+    if (failed) {
+      const summary = compileErrorSummary(failed.log);
+      invalidatePreview(summary ? "编译未通过：" + summary : "原文编译未通过，请查看诊断。");
+      $("pvTabStatus").textContent = "编译未通过";
+      $("pvLog").textContent = failed.log || "编译器未返回详细信息。";
+      $("pvLog").classList.remove("hide");
+    }
+    if (problems.length) toggleBottomPanel("problems",true,$("btnFix"));
+    return;
+  }
+  ++previewEpoch;
   $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
@@ -553,7 +592,10 @@ async function decideCandidate(decision) {
       throw new Error("请求期间原文或文件已变化；本地未采用候选。");
     result.local_decision = decision; lastCandidateSource = null;
     if (decision === "accept") {
-      editor.setValue(result.fixed_content);
+      const model = editor.getModel();
+      model.pushStackElement();
+      model.pushEditOperations(editor.getSelections(), [{range:model.getFullModelRange(),text:result.fixed_content}], () => null);
+      model.pushStackElement();
       showCenter("edit");
       $("reviewHint").textContent = "已采用候选到编辑器。请保存到本地，或导出文档。"; updateSaveState();
       analyze().catch(warn); compilePreview(editor.getValue());
@@ -721,7 +763,7 @@ async function restoreJob(id,name) {
   if (name && name !== curName) { if (!discardAllowed()) return; await loadFile(name,true); }
   if (await sha256Text(editor.getValue()) !== d.result.original_sha256) return toast("当前原文与历史任务不同。记录已显示，候选不能应用到此版本。",true);
   if (d.result.local_decision || d.review?.decision) return toast("此候选已有审阅决定，请创建新的修复任务。");
-  await applyResult(d.result); closeDialog("historyDialog"); toast("历史候选已恢复，请审阅差异。");
+  await applyResult(d.result); closeDialog("historyDialog"); toast(d.result.fixed_content === editor.getValue() ? "已恢复历史检查结果。" : "历史候选已恢复，请审阅差异。");
 }
 for (const id of ["jobs","historyJobs"]) $(id).addEventListener("click", e => {
   const item=e.target.closest?.("[data-job]"); if (item) restoreJob(item.dataset.job,item.dataset.name).catch(warn);
@@ -1101,6 +1143,21 @@ function runEditorAction(id){
   if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
   target.focus();const action=target.getAction?.(id);if(action)return action.run();toast('编辑器尚未就绪，请稍后再试。',true);
 }
+function updateHistoryControls() {
+  const model = editor?.getModel();
+  const available = !!curName && !busy && !loadingDocument;
+  $("btnUndo").disabled = !available || !model?.canUndo();
+  $("btnRedo").disabled = !available || !model?.canRedo();
+}
+function runHistoryAction(direction) {
+  updateHistoryControls();
+  if ($(direction === "undo" ? "btnUndo" : "btnRedo").disabled) return;
+  showCenter("edit");
+  editor.focus();
+  return editor.getModel()[direction]();
+}
+$("btnUndo").onclick = () => runHistoryAction("undo");
+$("btnRedo").onclick = () => runHistoryAction("redo");
 $('btnFind').onclick=()=>runEditorAction('actions.find');$('btnReplace').onclick=()=>runEditorAction('editor.action.startFindReplaceAction');
 
 const EDITOR_COMMANDS=[
@@ -1108,6 +1165,8 @@ const EDITOR_COMMANDS=[
   {id:'file.open',label:'打开 LaTeX 文档',detail:'从本机导入 .tex',icon:'folder',keywords:'open import tex',button:'btnUpload'},
   {id:'file.new-template',label:'从模板新建',detail:'选择内置文档骨架创建本地文档',icon:'template',keywords:'template new create blank beamer exam',button:'btnNewFromTemplate'},
   {id:'file.save',label:'保存文档',detail:'保存当前修改到本机',icon:'save',keywords:'save',shortcut:'⌘/Ctrl S',button:'btnSave'},
+  {id:'editor.undo',label:'撤销',detail:'撤销当前文档的上一次编辑',icon:'history',keywords:'undo',shortcut:'⌘/Ctrl Z',button:'btnUndo'},
+  {id:'editor.redo',label:'重做',detail:'恢复当前文档已撤销的编辑',icon:'history',keywords:'redo',shortcut:'⌘/Ctrl ⇧ Z',button:'btnRedo'},
   {id:'editor.find',label:'查找',detail:'在当前文档中搜索',icon:'search',keywords:'find search',shortcut:'⌘/Ctrl F',button:'btnFind'},
   {id:'editor.replace',label:'查找和替换',detail:'打开编辑器替换面板',icon:'replace',keywords:'replace find',button:'btnReplace'},
   {id:'editor.outline',label:'转到章节',detail:'在文档大纲中跳转',icon:'outline',keywords:'outline section heading',shortcut:'⌘/Ctrl ⇧ O',button:'btnOutline'},
@@ -1134,7 +1193,7 @@ function renderCommands(){
   $('commandList').innerHTML=filteredCommands.length?filteredCommands.map((command,index)=>`<button id="command-option-${index}" class="command-option" role="option" aria-selected="${index===selectedCommand}" aria-disabled="${!commandEnabled(command)}" data-command-index="${index}" tabindex="-1"${commandEnabled(command)?'':' disabled'}>${toolIcon(command.icon)}<span class="command-label">${esc(command.label)}<small>${esc(command.detail)}</small></span>${command.shortcut?`<kbd>${esc(command.shortcut)}</kbd>`:''}</button>`).join(''):'<div class="empty">没有匹配命令，试试「保存」「查找」或「编译」。</div>';
   $('commandInput').setAttribute('aria-activedescendant',filteredCommands.length?`command-option-${selectedCommand}`:'');
 }
-function openCommandPalette(){commandPreviousFocus=document.activeElement||null;commandPaletteOpen=true;selectedCommand=0;$('commandInput').value='';$('commandInput').setAttribute('aria-expanded','true');renderCommands();openDialog('commandDialog');$('commandInput').focus?.();}
+function openCommandPalette(){updateHistoryControls();commandPreviousFocus=document.activeElement||null;commandPaletteOpen=true;selectedCommand=0;$('commandInput').value='';$('commandInput').setAttribute('aria-expanded','true');renderCommands();openDialog('commandDialog');$('commandInput').focus?.();}
 function closeCommandPalette(){commandPaletteOpen=false;$('commandInput').setAttribute('aria-expanded','false');closeDialog('commandDialog');if(commandPreviousFocus?.isConnected)commandPreviousFocus.focus?.();else editor?.focus();}
 async function executeCommand(index=selectedCommand){const command=filteredCommands[Number(index)];if(!command||!commandEnabled(command))return;closeCommandPalette();try{if(command.run)await command.run();else{const button=$(command.button);if(button.click)button.click();else await button.onclick?.();}}catch(error){warn(error);}}
 function moveCommandSelection(delta){if(!filteredCommands.length)return;for(let steps=0;steps<filteredCommands.length;steps++){selectedCommand=(selectedCommand+delta+filteredCommands.length)%filteredCommands.length;if(commandEnabled(filteredCommands[selectedCommand]))break;}renderCommands();$('commandList').querySelector?.('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});}
@@ -1287,7 +1346,7 @@ function closeExportMenu(restoreFocus=true){if(openWorkspaceMenu==='exportMenu')
 function setPdfAvailable(available){$('btnPdf').classList.remove('hide');$('btnPdf').disabled=!available;$('btnPdf').setAttribute('aria-disabled',String(!available));}
 $('btnExportMenu').onclick=()=>toggleExportMenu();
 $('btnWorkspaceSettings').onclick=()=>toggleWorkspaceMenu('workspaceSettingsMenu',$('btnWorkspaceSettings'));
-$('btnEditorTools').onclick=()=>toggleWorkspaceMenu('editorToolsMenu',$('btnEditorTools'));
+$('btnEditorTools').onclick=()=>{updateHistoryControls();toggleWorkspaceMenu('editorToolsMenu',$('btnEditorTools'));};
 for(const id of ['exportMenu','workspaceSettingsMenu','editorToolsMenu']){
   const menu=$(id);
   for(const button of Array.from(menu.querySelectorAll?.('button')||[])){
