@@ -793,6 +793,12 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True)
     for start, end, replacement in sorted(replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
 
+    content, table_edits = _apply_table_fixes(content, log, emit)
+    return content, edits + table_edits
+
+
+def _apply_table_fixes(content, log, emit):
+    edits = []
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
     lines = content.splitlines(keepends=True)
@@ -975,7 +981,10 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                 resolved.add(fields["node_id"])
             emit(action, **fields)
 
-        fixed, local_edits = _apply_fixes(fixed, log, emit=emit_fallback, use_model=False)
+        if verifier_unavailable or planner.remaining_seconds() <= 0:
+            fixed, local_edits = _apply_table_fixes(fixed, log, emit_fallback)
+        else:
+            fixed, local_edits = _apply_fixes(fixed, log, emit=emit_fallback, use_model=False)
         public_edits.extend(local_edits)
         if local_edits:
             summary["deterministic_resolved"] = sorted(resolved)

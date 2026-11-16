@@ -519,6 +519,7 @@ class StudioTableAuditTest(unittest.TestCase):
                     patch.object(studio, "_verify_formula",
                                  side_effect=lambda latex: {"status": "OK" if r"\right)" in latex else "RETRY"}):
                 planner.return_value.run.return_value = ([], summary)
+                planner.return_value.remaining_seconds.return_value = 30
                 fixed, edits, _ = studio._apply_planned_fixes(
                     content, [], provider=provider, emit=lambda *args, **kwargs: None,
                     use_model_planner=use_model_planner, skill_selection=skill_selection)
