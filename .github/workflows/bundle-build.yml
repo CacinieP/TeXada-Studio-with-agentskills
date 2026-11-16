@@ -67,12 +67,12 @@ jobs:
         run: |
           .venv/bin/python scripts/install_local_tools.py
           echo "$HOME/.texada/bin" >> "$GITHUB_PATH"
-      - name: Install Poppler
-        run: brew install poppler
+      - name: Install Poppler and llama.cpp
+        run: brew install poppler llama.cpp
       - name: Prepare TeX resource cache
         run: .venv/bin/python scripts/prepare-local-tex.py --download-resources
       - name: Build self-contained app
-        run: .venv/bin/python desktop/build_bundle.py --output dist-app
+        run: .venv/bin/python desktop/build_bundle.py --output dist-app --with-llama-server
       - name: Verify Studio app icon
         run: |
           APP="dist-app/TeXada Studio.app/Contents"
@@ -87,6 +87,7 @@ jobs:
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/tectonic" --version
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdfinfo" -v
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdftoppm" -v
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/llama-server" --version
           WORK="$RUNNER_TEMP/smoke"
           mkdir -p "$WORK/out"
           printf '\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n$x^2+1$\n\\end{document}\n' > "$WORK/smoke.tex"

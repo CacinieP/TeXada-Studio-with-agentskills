@@ -508,6 +508,25 @@ class StudioTableAuditTest(unittest.TestCase):
         lines.extend(['合计 & ' + total + r' \\', r'\end{tabular}'])
         return newline.join(lines) + newline
 
+    def test_model_deferral_does_not_gate_deterministic_formula_and_table_repairs(self):
+        formula = r"$\left(\frac{x+1}{x-1}$"
+        content = formula + "\n" + self.table([("A", "20"), ("B", "31")], "50")
+        summary = {"executed": 0, "rejected": 1, "nodes": [{"state": "human"}]}
+        provider = SimpleNamespace(repair_formula=lambda _: self.fail("Fallback must not call a model"))
+        for use_model_planner, skill_selection in ((True, False), (False, True), (True, True)):
+            with self.subTest(planner=use_model_planner, selection=skill_selection), \
+                    patch.object(studio, "ConstrainedPlanner") as planner, \
+                    patch.object(studio, "_verify_formula",
+                                 side_effect=lambda latex: {"status": "OK" if r"\right)" in latex else "RETRY"}):
+                planner.return_value.run.return_value = ([], summary)
+                planner.return_value.remaining_seconds.return_value = 30
+                fixed, edits, _ = studio._apply_planned_fixes(
+                    content, [], provider=provider, emit=lambda *args, **kwargs: None,
+                    use_model_planner=use_model_planner, skill_selection=skill_selection)
+                expected = content.replace(formula, formula[:-1] + r"\right)$").replace("合计 & 50", "合计 & 51")
+                self.assertEqual(fixed, expected)
+                self.assertEqual([edit["skill"] for edit in edits], ["doc-formula-verify", "doc-table-audit"])
+
     def assert_manual_unchanged(self, content):
         problems = studio._table_problems(content)
         self.assertTrue(problems)

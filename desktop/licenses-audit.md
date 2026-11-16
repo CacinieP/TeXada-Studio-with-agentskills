@@ -47,6 +47,7 @@
 
 | 组件 | 许可证 |
 | --- | --- |
+| llama.cpp（可选，自包含发行包经 Homebrew 构建） | MIT；随包附许可证，作为独立进程调用。模型由用户启动下载 |
 | Monaco 0.52.2(已 vendored) | MIT |
 | 本项目代码/文档/合成样本 | AGPL-3.0-only(见 LICENSE、THIRD_PARTY_NOTICES.md) |
 

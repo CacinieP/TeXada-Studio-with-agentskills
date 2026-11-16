@@ -255,6 +255,40 @@ class LocalRuntimeTest(unittest.TestCase):
                             self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
                     self.assertEqual(provider.fingerprint()["parameters"]["formula_response_format"], "text")
 
+    def test_managed_planner_validates_and_resolves_numbered_choices(self):
+        harness = str(Path(__file__).resolve().parents[1] / "harness")
+        snapshot = {"state_rev": 4, "nodes": [
+            {"id": "f-001-1", "line": 1, "check_status": "RETRY",
+             "action_mask": ["propose-repair", "request-human"]},
+            {"id": "f-002-1", "line": 2, "check_status": None,
+             "action_mask": ["check-formula", "request-human"]},
+            {"id": "f-003-1", "line": 3, "check_status": "NEEDS_HUMAN", "action_mask": ["request-human"]},
+        ]}
+        with patch.object(sys, "path", [harness, *sys.path]):
+            provider = make_local_provider("http://127.0.0.1:18147", "minicpm-v4.7-1b-q4_k_m",
+                                           constrain_planner=True)
+            for content, expected in (('{"choice":0}', ("propose-repair", "f-001-1")),
+                                      ('{"choice":1}', ("check-formula", "f-002-1")),
+                                      ('{"choice":true}', None), ('{"choice":2}', None),
+                                      ('{"choice":0,"node_id":"other"}', None)):
+                with self.subTest(content=content), patch("local_runtime.local_json_request") as request:
+                    request.return_value = {"choices": [{"message": {"content": content}, "finish_reason": "stop"}]}
+                    action = provider.plan_action(snapshot)
+                    if expected is not None:
+                        self.assertEqual((action["action"], action["node_id"], action["state_rev"]),
+                                         (*expected, 4))
+                    else:
+                        self.assertIsNone(action)
+                    payload = request.call_args.args[1]
+                    schema = payload["response_format"]["json_schema"]["schema"]
+                    self.assertEqual(schema["properties"]["choice"]["enum"], [0, 1])
+                    choices = json.loads(payload["messages"][-1]["content"])["choices"]
+                    self.assertEqual({item["node_id"] for item in choices}, {"f-001-1", "f-002-1"})
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {"choices": [{"message": {"content": '{"choice":0}'}}]}
+                proposal = provider.plan_action({"state_rev": 5, "nodes": snapshot["nodes"][2:]})
+                self.assertEqual((proposal["action"], proposal["node_id"]), ("request-human", "f-003-1"))
+
     def test_invalid_http_and_response_shapes_are_explicit(self):
         for response, status, expected in ((b"not json", 200, "invalid_model_response"),
                                            ([], 200, "invalid_model_response"),
