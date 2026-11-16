@@ -20,7 +20,7 @@
   <div class="vsep" id="sepL" title="拖拽调整文档导航"><button class="sep-btn" id="sepBtnL" aria-label="折叠或展开文档导航"></button></div>
   <section id="center" aria-label="文档工作台">
     <div class="workbar" role="toolbar" aria-label="文档操作"><div id="tabs" role="tablist" aria-label="文档视图"><button id="tab-edit" class="tab active" role="tab" aria-selected="true" aria-controls="duo" tabindex="0" onclick="showCenter('edit')"><span data-icon="file"></span><span id="tabname">未打开文档</span></button><button id="tab-diff" class="tab" role="tab" aria-selected="false" aria-controls="diff" aria-disabled="true" tabindex="-1" onclick="showCenter('diff')">修复对比</button></div><button class="icon-button" id="btnEditorTools" title="编辑与布局工具" aria-label="编辑与布局工具" aria-expanded="false" aria-controls="editorToolsMenu"></button><div class="spacer"></div><span id="pvTabStatus" class="sr-only"></span><button id="btnAgent" class="agent-switch" aria-expanded="false" aria-controls="rightpanel" title="Agent与审阅"><span data-icon="model"></span><span class="button-label">Agent</span><span class="switch-track" aria-hidden="true"><span></span></span></button><span class="toolbar-divider"></span><button class="toolbar-button" id="btnAnalyze">检查</button><button class="toolbar-button primary" id="btnCompile">编译</button><button class="toolbar-button hide" id="btnCancel">停止</button><button class="toolbar-button" id="btnExportMenu" aria-expanded="false" aria-haspopup="menu" aria-controls="exportMenu" title="导出文档">导出</button><button id="btnDiff" class="hide" disabled>查看修复对比</button></div>
-    <div id="duo" role="tabpanel" aria-labelledby="tab-edit"><div id="editor"></div><div class="vsep" id="sepE" title="拖拽调整源码与预览"><button id="sepBtnE" class="sep-btn" aria-label="折叠或展开PDF预览"></button></div><section id="previewPane" aria-label="PDF预览"><div class="preview-tools"><span class="preview-heading">PDF 预览</span><div class="spacer"></div><button class="icon-button" id="pvPrevious" disabled aria-label="上一页"></button><span id="pvPage">—</span><button class="icon-button" id="pvNext" disabled aria-label="下一页"></button><button class="preview-button" id="pvZoomFit">适应</button><button class="preview-button" id="pvZoom100">100%</button></div><div id="pvStatus" role="status">打开文档后编译预览</div><div id="pvLog" class="kv hide"></div><div id="pvImgWrap" class="fit"><div class="preview-empty"><span data-icon="file"></span><p>文档预览</p><small>编译当前文档，查看完整 PDF。</small></div></div></section></div><div id="diff" class="hide" role="tabpanel" aria-labelledby="tab-diff"></div>
+    <div id="duo" role="tabpanel" aria-labelledby="tab-edit"><div id="editor"></div><div class="vsep" id="sepE" title="拖拽调整源码与预览"><button id="sepBtnE" class="sep-btn" aria-label="折叠或展开PDF预览"></button></div><section id="previewPane" aria-label="PDF预览"><div class="preview-tools"><span class="preview-heading">PDF 预览</span><div class="spacer"></div><button class="icon-button" id="pvPrevious" disabled aria-label="上一页"></button><span id="pvPage">—</span><button class="icon-button" id="pvNext" disabled aria-label="下一页"></button><button class="preview-button" id="pvZoomFit">适应</button><button class="preview-button" id="pvZoom100">100%</button></div><div id="pvStatus" role="status">打开文档后编译预览</div><button id="btnCompileLocation" type="button" class="preview-button" hidden></button><div id="pvLog" class="kv hide"></div><div id="pvImgWrap" class="fit"><div class="preview-empty"><span data-icon="file"></span><p>文档预览</p><small>编译当前文档，查看完整 PDF。</small></div></div></section></div><div id="diff" class="hide" role="tabpanel" aria-labelledby="tab-diff"></div>
   </section>
   <div class="vsep" id="sepR" title="调整Agent面板宽度"><button id="sepBtnR" class="sep-btn" aria-label="关闭Agent面板"></button></div>
   <aside id="rightpanel" class="closed" aria-label="Agent与候选审阅"><div class="drawer-heading"><span data-icon="model"></span><h2>Agent 与审阅</h2><div class="spacer"></div><button id="btnInspectorClose" class="icon-button" title="关闭Agent面板" aria-label="关闭Agent面板"></button></div><section class="panel agent-intake"><p class="hint">本地 MiniCPM 提出候选，确认差异后再采用。</p><button id="btnFix" class="toolbar-button primary full">生成修复候选</button><button id="btnInspector" class="subtle-button full" aria-expanded="false" aria-controls="rightpanel">查看审阅结果</button></section><details class="card advanced-card" id="workflowPanel"><summary class="card-title"><span class="card-icon" data-icon="workflow"></span><h2>Agent 工作流</h2></summary><label class="sidebar-label"><input type="checkbox" id="plannerMode">受限 Agent 规划</label><label class="sidebar-label"><input type="checkbox" id="skillSelection">自动选择检查 Skill</label><p class="hint">至多 12 步；生成的修改始终先审阅。</p><details><summary class="hint">单公式交接 · 实验</summary><button class="light-button full" id="btnHandoff" disabled>修复当前公式</button><button class="light-button full" id="btnHandoffComplete" disabled style="margin-top:5px">续写当前公式</button><p class="hint" id="handoffHint">未启用单公式交接。</p></details></details><section class="panel"><h4>候选审阅</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。请先核对差异，再决定采用。</div><button class="act" id="btnAccept" disabled>采用候选到编辑器</button><button class="act ghost" id="btnReject" disabled>拒绝候选，保留原文</button><button class="act ghost" id="btnReport" disabled>导出检查报告</button></section><section class="panel"><h4>编译结果</h4><div id="compile" class="kv">尚无编译记录</div></section><section class="panel"><h4>候选预览</h4><div id="preview" class="hint">生成候选后显示。</div></section><section class="panel"><h4>最近运行 <button class="light-button" id="btnRefreshJobs" style="float:right;padding:0 5px">↻</button></h4><div id="jobs"><div class="hint">运行记录保存在本机。</div></div></section></aside>
@@ -65,6 +65,7 @@ function authUrl(url) {
 function openDialog(id) { const el = $(id); if (el.showModal) el.showModal(); }
 function closeDialog(id) { const el = $(id); if (el.close) el.close(); }
 let savedContent = "", savedHash = null, documentOrigin = "", loadingDocument = false;
+let compileLocation = null, problemsSource = null;
 function isDirty() { return !!curName && !!editor && editor.getValue() !== savedContent; }
 function updateSaveState() {
   $("saveState").textContent = !curName ? "未打开文档" : savingDocument ? "保存中…" : isDirty() ? "未保存修改" : documentOrigin === "sample" ? "已保存 · 示例" : "已保存";
@@ -76,7 +77,12 @@ function updateSaveState() {
   document.title=(curName?curName+" · ":"")+"TeXada Studio";
 }
 function discardAllowed() { return !isDirty() || typeof confirm !== "function" || confirm("当前文档有未保存修改。放弃修改并继续？"); }
+function clearCompileLocation() {
+  compileLocation = null;
+  $("btnCompileLocation").hidden = true;
+}
 function invalidatePreview(message = "内容已变化，请重新编译预览。") {
+  clearCompileLocation();
   ++previewEpoch; lastPreviewTag = null; previewBinding = null; previewPages = []; previewPage = 0;
   setPdfAvailable(false); $("pvPrevious").disabled = true; $("pvNext").disabled = true;
   $("pvPage").textContent = "—"; $("pvTabStatus").textContent = ""; $("pvStatus").textContent = message;
@@ -244,19 +250,34 @@ async function analyze(options={reveal:false}) {
 }
 
 function renderProblems(problems) {
+  problemsSource = {name:curName, epoch:fileEpoch, content:currentContent()};
   $("probCount").textContent = problems.length;
   $("probCount").style.display="inline-block";
   if (!problems.length) {
     $("problems").innerHTML = `<div class="prob fixed">✓ 支持范围内未检出问题；数学含义仍需核对</div>`;
     return;
   }
-  $("problems").innerHTML = problems.map(p => `
-    <div class="prob ${p.type === "formula" ? "f" : "t"}" onclick="gotoLine(${p.line})">
-      <div>${p.type === "formula" ? "公式" : "表格合计"} · <span class="loc">L${p.line}</span>
-        ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</div>
-      <div class="loc">${esc((p.latex ?? p.reason ?? "").slice(0, 60))}</div>
-    </div>`).join("");
+  $("problems").innerHTML = problems.map(p => {
+    const line = Number.isSafeInteger(p.line) && p.line > 0 ? p.line : null;
+    const tag = line ? "button" : "div";
+    return `<${tag} class="prob ${p.type === "formula" ? "f" : "t"}"${line ? ` type="button" data-problem-line="${line}"` : ""}>
+      <span>${p.type === "formula" ? "公式" : "表格合计"}${line ? ` · L${line}` : ""}
+        ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</span>
+      ${p.reason ? `<span class="prob-reason">${esc(p.reason)}</span>` : ""}
+      ${p.latex ? `<span class="prob-source loc">${esc(p.latex.slice(0,100))}</span>` : ""}
+    </${tag}>`;
+  }).join("");
 }
+
+$("problems").addEventListener("click", event => {
+  const item = event.target.closest?.("button[data-problem-line]");
+  if (!item || !problemsSource) return;
+  if (problemsSource.name !== curName || problemsSource.epoch !== fileEpoch || problemsSource.content !== currentContent()) {
+    toast("文档已变化，请重新检查后跳转。",true);
+    return;
+  }
+  gotoLine(Number(item.dataset.problemLine));
+});
 
 function gotoLine(line) {
   const ed = diffShown && diffEditor ? diffEditor.getModifiedEditor() : editor;
@@ -359,9 +380,31 @@ function compileErrorSummary(log) {
     || lines.find(line => /^error:\s*!|^!\s/.test(line));
   return diagnostic?.replace(/^error:\s*!?\s*|^!\s*/i,"").slice(0,240) || "";
 }
+function showCompileFailure(outcome, content) {
+  const location = outcome.diagnostic;
+  const summary = location?.message
+    ? `第 ${location.line} 行 · ${location.message}`
+    : compileErrorSummary(outcome.log);
+  invalidatePreview(summary ? "编译未通过：" + summary : "未能生成 PDF，请查看编译详情。");
+  $("pvTabStatus").textContent = "编译未通过";
+  $("pvLog").textContent = outcome.log || "编译器未返回详细信息。";
+  $("pvLog").classList.remove("hide");
+  if (Number.isSafeInteger(location?.line) && location.line >= 1 && location.line <= content.split("\n").length) {
+    compileLocation = {line:location.line, name:curName, epoch:previewEpoch, content};
+    $("btnCompileLocation").textContent = `转到第 ${location.line} 行`;
+    $("btnCompileLocation").hidden = false;
+  }
+}
+$("btnCompileLocation").onclick = () => {
+  const location = compileLocation;
+  if (location && location.name === curName && location.epoch === previewEpoch && location.content === currentContent()) {
+    gotoLine(location.line);
+  }
+};
 async function compilePreview(content) {
   if (!curName || !editor?.getModel()) return;
   const epoch = ++previewEpoch, name = curName;
+  clearCompileLocation();
   lastPreviewTag = null; previewBinding = null; setPdfAvailable(false);
   $("pvStatus").innerHTML = `<span class="spin"></span>正在编译文档…`; $("pvTabStatus").textContent = "编译中";
   $("pvLog").classList.add("hide");
@@ -380,12 +423,7 @@ async function compilePreview(content) {
       if (lastPreviewTag || d.pdf) setPdfAvailable(true);
       if (!previewPages.length && d.log) { $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log; }
     } else {
-      previewPages = [];
-      const summary = compileErrorSummary(d.log);
-      $("pvStatus").textContent = summary ? "编译未通过：" + summary : "未能生成 PDF，请查看编译详情。";
-      $("pvTabStatus").textContent = "编译未通过";
-      $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log || "编译器未返回详细信息。";
-      $("pvImgWrap").innerHTML = '<div class="preview-empty"><b>▤</b>修正源码后，再试一次编译。</div>';
+      showCompileFailure(d, content);
     }
   } catch (error) { if (epoch === previewEpoch) { $("pvStatus").textContent = "编译请求失败：" + error.message; $("pvTabStatus").textContent = "请求失败"; } }
 }
@@ -450,6 +488,7 @@ async function applyResult(res, source = null) {
   await validateCandidate(res, source);
   if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
   const unchanged = res.fixed_content === source.content;
+  clearCompileLocation();
   lastResult = res; lastCandidateSource = unchanged ? null : source;
   if (unchanged) {
     const failed = [res.compile_after,res.compile_before].find(
@@ -468,13 +507,7 @@ async function applyResult(res, source = null) {
     $("reviewHint").textContent = problems.length
       ? `未生成修改。还有 ${problems.length} 项待核对。`
       : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
-    if (failed) {
-      const summary = compileErrorSummary(failed.log);
-      invalidatePreview(summary ? "编译未通过：" + summary : "原文编译未通过，请查看诊断。");
-      $("pvTabStatus").textContent = "编译未通过";
-      $("pvLog").textContent = failed.log || "编译器未返回详细信息。";
-      $("pvLog").classList.remove("hide");
-    }
+    if (failed) showCompileFailure(failed, source.content);
     if (problems.length) toggleBottomPanel("problems",true,$("btnFix"));
     return;
   }
@@ -495,8 +528,8 @@ async function applyResult(res, source = null) {
   diffEditor.getModifiedEditor().onDidChangeCursorPosition?.(updateEditorStatus);diffEditor.getModifiedEditor().onDidChangeCursorSelection?.(updateEditorStatus);
   $("btnDiff").disabled = false;
   $("tab-diff").setAttribute("aria-disabled", "false");
-  renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
   showCenter("diff");toggleAgentDrawer(true,$('btnAgent'));
+  renderProblems(res.problems_after);
   $("compile").innerHTML =
     `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.status === "NOT_CHECKED" ? "未检查" : res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
     `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;

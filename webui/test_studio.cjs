@@ -465,6 +465,25 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('pvLog').textContent,'','previous-document compiler details must not remain attached to the new version');
   assert.equal(get('pvLog').classList.contains('hide'),true);
 
+  context.testEditor.setValue('line one\nline two');
+  context.locatedFailure=async()=>({compile_ok:false,log:'compiled stderr',diagnostic:{line:2,message:'Undefined control sequence'}});
+  run('j=locatedFailure');
+  await pageCompilePreview('line one\nline two');
+  assert.equal(get('btnCompileLocation').hidden,false);
+  assert.equal(get('btnCompileLocation').textContent,'转到第 2 行');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position.lineNumber,2);
+  context.testEditor.setValue('different source');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position,null,'a stale location does not move the cursor');
+  run('invalidatePreview()');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  context.unlocatedFailure=async()=>({compile_ok:false,log:'error: included.tex:2: failure',diagnostic:null});
+  run('j=unlocatedFailure');
+  await pageCompilePreview('different source');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  assert.match(get('pvLog').textContent,/included.tex/);
+
   // Even a response whose PDF bytes arrive later must keep its source binding.
   context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};setPdfAvailable(true);");
   let finishPdf,notifyPdf;const sawPdf=new Promise(resolve=>{notifyPdf=resolve;});let raceDownloads=0;
@@ -961,8 +980,13 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   // Problem links dismiss floating review/navigation and focus the requested source line.
   get('activityAgent').click();
   context.testEditor.focused=false;
-  const problemHandler=get('problems').innerHTML.match(/onclick="([^"]+)"/)?.[1];
-  assert.ok(problemHandler,'rendered problem exposes a working line action');run(problemHandler);
+  run("renderProblems([{type:'formula',status:'NEEDS_HUMAN',line:3,latex:'x_+',reason:'Missing <index>'}])");
+  assert.match(get('problems').innerHTML,/<button[^>]*data-problem-line="3"/);
+  assert.match(get('problems').innerHTML,/Missing &lt;index&gt;/);
+  const openProblem=()=>get('problems').listeners.get('click')({target:{
+    closest:()=>({dataset:{problemLine:"3"}})
+  }});
+  openProblem();
   assert.equal(get('inspectorBackdrop').classList.contains('hide'),true);
   assert.equal(get('navigatorBackdrop').classList.contains('hide'),true);
   assert.equal(context.testEditor.position.lineNumber,3);
