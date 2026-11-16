@@ -267,15 +267,15 @@ def main(argv=None) -> int:
     staging = workdir / "Resources"
     staging.mkdir(parents=True)
 
-    print("① 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
+    print("① 生成图标…")
+    icon = build_icon(workdir)
+    if icon is None:
+        raise SystemExit("无法生成 Studio 图标：请检查品牌源图、sips 和 iconutil。")
+
+    print("② 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
     sizes = stage_resources(staging, args.skip_poppler)
     for area, size in sizes.items():
         print(f"   {area}: {size / 1_048_576:.1f} MiB")
-
-    print("② 生成图标…")
-    icon = build_icon(workdir)
-    if icon is None:
-        print("   跳过(sips/iconutil 或源图缺失)")
 
     print("③ py2app 冻结程序部分(首次较慢)…")
     py2app_dist = workdir / "py2app-dist"
@@ -291,8 +291,7 @@ def main(argv=None) -> int:
     resources = app / "Contents" / "Resources"
     for item in staging.iterdir():
         shutil.move(str(item), str(resources / item.name))
-    if icon is not None:
-        install_app_icon(app, icon)
+    install_app_icon(app, icon)
     seal_app_bundle(app)
     shutil.rmtree(workdir, ignore_errors=True)
 
