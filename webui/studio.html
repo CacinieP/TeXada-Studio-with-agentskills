@@ -462,7 +462,8 @@ async function applyResult(res, source = null) {
     $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = false;
     showCenter("edit"); toggleAgentDrawer(true,$("btnAgent"));
     renderProblems(problems);
-    $("compile").textContent = failed ? "原文编译未通过" : res.compile_after.ok ? "原文编译通过" : "原文编译未检查";
+    const compiled = res.compile_after.compile_ok ?? res.compile_after.ok;
+    $("compile").textContent = failed ? "原文编译未通过" : compiled ? "原文编译通过" : "原文编译未检查";
     $("preview").textContent = "本次没有需要审阅的差异。";
     $("reviewHint").textContent = problems.length
       ? `未生成修改。还有 ${problems.length} 项待核对。`
