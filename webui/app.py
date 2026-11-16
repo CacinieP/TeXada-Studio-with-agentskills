@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
-from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, LocalRuntime, LocalRuntimeError, make_local_provider
+from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -293,7 +293,7 @@ from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
-from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
+from docforensics.tex_context import analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
 from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
 from docforensics.__main__ import repair_model_default  # noqa: E402
 
@@ -368,6 +368,19 @@ def _subprocess_text(value) -> str:
     return value
 
 
+def _source_compile_error(output: str, source: Path, line_count: int):
+    """Return a location only when Tectonic names the compiled source file."""
+    source_paths = {source.name, "./" + source.name, str(source)}
+    for match in _re.finditer(r"^error:[ \t]*([^:\r\n]+):(\d{1,8}):[ \t]*([^\r\n]+)", output, _re.M):
+        filename, line, message = match.groups()
+        if filename not in source_paths:
+            continue
+        number = int(line)
+        if 1 <= number <= line_count:
+            return {"line": number, "message": message.strip()[:240]}
+    return None
+
+
 def _append_compiler_log(log, outcome) -> None:
     """失败时把编译器原文写进任务日志，成功时不重复成功输出。"""
     if outcome.get("ok"):
@@ -403,9 +416,12 @@ def _studio_compile(content: str, name: str, tag: str):
             return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
-        log = (_subprocess_text(run.stderr) or _subprocess_text(run.stdout))[-2400:]
+        output = _subprocess_text(run.stderr) or _subprocess_text(run.stdout)
+        log = output[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
-            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。"}
+            diagnostic = _source_compile_error(output, texf, content.count("\n") + 1)
+            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。",
+                    "diagnostic": diagnostic}
         base = f"/api/studio/preview/{quote(name)}/{tag}"
         result.update(compile_ok=True, pdf=f"/api/studio/pdf/{quote(name)}/{tag}", log=log)
         page_count = 1
@@ -505,8 +521,11 @@ def _formula_problems(content: str, emit=None):
     problems = []
     parsed = analyze_math(content)
     for node in parsed["nodes"]:
-        vj = (_verify_formula(node["latex"]) if node["checkable"] else
-              {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]})
+        if node["checkable"]:
+            vj = _verify_formula(node["latex"])
+        else:
+            grid = check_math_grids(node["latex"]) if node["reason"] == "structured_math" else None
+            vj = grid or {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]}
         if emit:
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=vj)
@@ -1192,6 +1211,17 @@ def studio_create(token: str = Query(""), body: dict = None):
     return _document_call(lambda: _documents().save(name, content, create=True))
 
 
+@app.post("/api/studio/create-split")
+def studio_create_split(token: str = Query(""), body: dict = None):
+    _guard(token)
+    documents = (body or {}).get("documents")
+    if (not isinstance(documents, list) or not 1 <= len(documents) <= MAX_PDF_PAGES
+            or any(not isinstance(document, dict) for document in documents)):
+        raise HTTPException(status_code=400, detail=f"每次请选择 1–{MAX_PDF_PAGES} 页拆分。")
+    entries = [_document_body(document) for document in documents]
+    return _document_call(lambda: _documents().create_many(entries))
+
+
 @app.post("/api/studio/save")
 def studio_save(token: str = Query(""), body: dict = None):
     _guard(token)
@@ -1305,6 +1335,12 @@ def studio_job_decision(job_id: str, token: str = Query(""), body: dict = None):
         if job.get("review") and job["review"]["decision"] != decision:
             raise HTTPException(status_code=409, detail="此候选已有相反的审阅决定。")
         if not job.get("review"):
+            if decision == "accept" and any(
+                edit.get("skill") == "doc-formula-verify"
+                and repair_blocker(edit.get("before")) == "missing_script_operand"
+                for edit in result.get("edits", [])
+            ):
+                raise HTTPException(status_code=409, detail="此旧候选含有无法从原文确定的上下标，请核对原文后手动补全。")
             job["review"] = {"decision": decision, "at": time.time(),
                              "original_sha256": result["original_sha256"],
                              "candidate_sha256": result["candidate_sha256"]}

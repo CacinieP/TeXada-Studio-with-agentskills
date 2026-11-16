@@ -1,0 +1,52 @@
+{
+  "results": [
+    {
+      "id": "E2E-1",
+      "passed": true,
+      "detail": "clean-control.tex → 12913 字节 PDF（tag=live-292fee9c31d84d6d94eae060a17d88a2）",
+      "elapsed_seconds": 0.18581414222717285
+    },
+    {
+      "id": "E2E-2",
+      "passed": true,
+      "detail": "case=S02 edits=1 model_calls=1 repair_model=minicpm-v4.7",
+      "elapsed_seconds": 2.1915829181671143
+    },
+    {
+      "id": "E2E-3",
+      "passed": true,
+      "image": "inlines-01.png",
+      "ocr_model": "minicpm-ocr:latest",
+      "criteria": {
+        "ocr_status_ok": true,
+        "review_gate_enforced": true,
+        "layout_emitted": true,
+        "layout_bound_to_source": true,
+        "no_pending_blockers": true
+      },
+      "detail": "",
+      "lines": 2,
+      "layout": {
+        "node_types": [
+          "text"
+        ],
+        "record_sha256": "74816eaf812d9c35cefef16a8a39cf2778c3c6bf3b84d8ca9512023ac4c5d7d1",
+        "node_count": 2
+      },
+      "elapsed_seconds": 0.635
+    },
+    {
+      "id": "E2E-4",
+      "passed": true,
+      "criteria": {
+        "write_ok": true,
+        "read_back_matches": true,
+        "hash_consistent": true,
+        "cross_restart": true
+      },
+      "detail": "",
+      "elapsed_seconds": 0.931
+    }
+  ],
+  "all_passed": true
+}

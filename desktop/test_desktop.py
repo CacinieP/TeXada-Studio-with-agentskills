@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -124,6 +125,20 @@ class LauncherTests(unittest.TestCase):
             self.assertFalse(desktop_app.seed_tex_cache(source, target, copier=copier), "目标已存在不重复种子")
             self.assertFalse(desktop_app.seed_tex_cache(Path(tmp) / "missing", target, copier=copier))
             self.assertEqual(copied, [(str(source), str(target))])
+
+    def test_seed_tex_cache_adds_missing_files_to_existing_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "source", Path(tmp) / "target"
+            relative = Path("bundles") / "data" / ("a" * 64)
+            for root in (source, target):
+                (root / relative).mkdir(parents=True)
+            (source / relative / "cmmi5.pfb").write_bytes(b"new font")
+            (source / relative / "other").write_bytes(b"bundled copy")
+            (target / relative / "other").write_bytes(b"already cached")
+            self.assertTrue(desktop_app.seed_tex_cache(source, target))
+            self.assertEqual((target / relative / "cmmi5.pfb").read_bytes(), b"new font")
+            self.assertEqual((target / relative / "other").read_bytes(), b"already cached")
+            self.assertFalse(desktop_app.seed_tex_cache(source, target))
 
 
 class BuildTests(unittest.TestCase):
@@ -246,6 +261,41 @@ class TerminateWatchdogTests(unittest.TestCase):
         os.close(read_fd)
         os.close(write_fd)
         self.assertEqual(exited, [0], "无清理钩子也不能卡死")
+
+
+class TerminateFallbackTests(unittest.TestCase):
+    """SIGTERM 在窗口建立前的启动窗口也必须有界 code=0（E2E-5 发行契约）。
+
+    抓什么：SIGTERM 落在「nodeinfo 就绪但 window_closer 未注册」的窗口期时，
+    曾走 SIG_DFL 重抛（-15）违反契约；必须跑清理钩子后以 0 退出。
+    """
+
+    def test_sigterm_without_window_closer_cleans_up_and_exits_zero(self):
+        calls = []
+        state = {"window_closer": None, "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["cleanup", ("exit", 0)])
+
+    def test_sigterm_window_closer_failure_still_exits_zero(self):
+        calls = []
+
+        def broken():
+            calls.append("closer")
+            raise RuntimeError("boom")
+
+        state = {"window_closer": broken, "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["closer", "cleanup", ("exit", 0)])
+
+    def test_windowed_sigterm_keeps_normal_cleanup_path(self):
+        calls = []
+        state = {"window_closer": lambda: calls.append("closer"),
+                 "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["closer"], "窗口路径不强制退出，主循环走正常收尾")
 
 
 class NativeTerminateIntegrationTests(unittest.TestCase):

@@ -160,7 +160,10 @@ def repair_blocker(original):
         return "parser_coverage_unsupported"
     if tokens[-1].text == "\\":
         return "incomplete_command"
-    if tokens[-1].text in {"^", "_"}:
+    if tokens[-1].text in {"^", "_"} or any(
+        left.text in {"^", "_"} and right.text in _TRAILING_OPERATORS | _RELATIONS | {"^", "_", "}"}
+        for left, right in zip(tokens, tokens[1:])
+    ):
         return "missing_script_operand"
     if tokens[-1].text in _TRAILING_OPERATORS:
         return "missing_operator_operand"
@@ -251,11 +254,10 @@ def deterministic_candidate(original):
 
 
 def assess_candidate(original, candidate):
-    """Authorize only an unchanged body or the same deterministic syntax patch.
+    """Authorize unchanged source or an exact deterministic syntax patch.
 
-    ``reason`` is a bounded, stable rejection category. The first differing
-    mathematical token is also returned for useful retry feedback. Ordered
-    tokens include grouping; token equality alone never authorizes an edit.
+    Grouping and all existing math tokens are authoritative. The first
+    differing token in a rejection is available for bounded retry feedback.
     """
     rejected = {"allowed": False, "reason": "invalid_candidate", "method": "none"}
     if not isinstance(original, str) or not original.strip():

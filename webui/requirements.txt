@@ -2,3 +2,5 @@
 fastapi==0.141.1
 starlette==1.7.0
 uvicorn==0.54.0
+# starlette.testclient(仅测试需要)依赖 httpx;缺失时 webui 测试模块导入即报错
+httpx==0.28.1

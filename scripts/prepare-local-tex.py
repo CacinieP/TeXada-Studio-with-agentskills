@@ -17,9 +17,26 @@ SAMPLE = r"""\documentclass[UTF8,fontset=fandol]{ctexart}
 本地文档排版测试。\[x^2+1\]
 \[\int_0^1 x^2\,dx=\frac{1}{3},\qquad
   \sum_{n=1}^{N} n=\frac{N(N+1)}{2},\qquad \sqrt{a^2+b^2}\]
+\[
+x_i=\frac{\det(A_i)}{\det(A)},\qquad
+\|f\|_{L^p}=\left(\int_E |f|^p\,dx\right)^{1/p}
+\]
+\[
+\begin{vmatrix}2x&1&-1\\-x&x&x\\1&2&x\end{vmatrix}
+\qquad
+\delta_{ij}=\begin{cases}1,&i=j\\0,&i\ne j\end{cases}
+\]
 \begin{tabular}{lr}\toprule Item & Value \\\midrule A & 2 \\\bottomrule\end{tabular}
 \newpage
 Second page: $\frac{1}{2}$.
+Inline nested math: $\left(\frac{x^2-1}{x-1}\right)$.
+In display, text, script, and scriptscript styles:
+\[
+  \displaystyle \frac{x^2}{y} \quad
+  \textstyle \frac{x^2}{y} \quad
+  \scriptstyle \frac{x^2}{y} \quad
+  \scriptscriptstyle \frac{x^2}{y}.
+\]
 \end{document}
 """
 

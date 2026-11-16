@@ -64,6 +64,58 @@ _KNOWN_COMMANDS = frozenset("""
     big Big bigg Bigg bigl bigr Bigl Bigr biggl biggr Biggl Biggr
 """.split())
 _ENVIRONMENT = re.compile(r"\\(begin|end)\s*\{([^{}\r\n]+)\}")
+_GRID_ENVIRONMENTS = frozenset({"matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases"})
+
+
+def check_math_grids(latex):
+    """Check the row and column shape of literal matrix/cases blocks."""
+    controls = list(_ENVIRONMENT.finditer(latex))
+    if not controls or any(match[2] not in _GRID_ENVIRONMENTS for match in controls):
+        return None
+    for index in range(0, len(controls), 2):
+        opening = controls[index]
+        if index + 1 == len(controls) or opening[1] != "begin":
+            return None
+        closing = controls[index + 1]
+        if closing[1] != "end" or opening[2] != closing[2]:
+            return None
+        body = latex[opening.end():closing.start()]
+        if "%" in body or r"\verb" in body or r"\cr" in body:
+            return None
+        widths = []
+        cursor, depth, columns = 0, 0, 1
+        row_start = 0
+        while cursor < len(body):
+            char = body[cursor]
+            if char == "\\":
+                command, cursor = _command(body, cursor)
+                if command == "\\" and depth == 0:
+                    widths.append(columns)
+                    columns = 1
+                    cursor += body[cursor:cursor+1] == "*"
+                    cursor = _skip_space(body, cursor)
+                    if body[cursor:cursor+1] == "[":
+                        end = _balanced_end(body, cursor, "[", "]")
+                        if end is None:
+                            return None
+                        cursor = end
+                    row_start = cursor
+                continue
+            depth += (char == "{") - (char == "}")
+            if depth < 0:
+                return None
+            if char == "&" and depth == 0:
+                columns += 1
+            cursor += 1
+        if depth:
+            return None
+        if body[row_start:].strip():
+            widths.append(columns)
+        fixed_width = 2 if opening[2] == "cases" else (len(widths) if opening[2] == "vmatrix" else None)
+        if not widths or len(set(widths)) > 1 or (fixed_width is not None and widths[0] != fixed_width):
+            expected = f"，预期每行 {fixed_width} 列" if fixed_width is not None else ""
+            return {"status": "NEEDS_HUMAN", "reason": f"{opening[2]} 各行列数为 {widths}{expected}，请核对排版。"}
+    return {"status": "OK", "reason": "", "scope": "grid_shape"}
 
 
 def _command(text, offset):

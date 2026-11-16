@@ -20,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -135,13 +136,31 @@ def launcher_env(source=None):
 
 
 def seed_tex_cache(source=None, target=None, copier=None):
-    """首次运行把捆绑的 TeX 缓存种子到用户目录;已存在或无源则不动。"""
+    """Seed a fresh cache or add immutable bundle resources missing after an upgrade."""
     source = Path(source) if source is not None else TEX_CACHE_SOURCE
     target = Path(target) if target is not None else TEX_CACHE_TARGET
-    if source is None or not Path(source).is_dir() or Path(target).exists():
+    if source is None or not source.is_dir():
         return False
-    (copier or shutil.copytree)(str(source), str(target))
-    return True
+    if not target.exists():
+        (copier or shutil.copytree)(str(source), str(target))
+        return True
+    copied = False
+    for entry in (source / "bundles" / "data").glob("*/*"):
+        digest = entry.parent.name
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest) or not entry.is_file():
+            continue
+        destination = target / entry.relative_to(source)
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=destination.parent) as staging:
+            shutil.copyfile(entry, staging.name)
+            try:
+                os.link(staging.name, destination)
+            except FileExistsError:
+                continue
+        copied = True
+    return copied
 
 
 def start_backend_thread(state_dir: Path, port, server_box: dict):
@@ -228,19 +247,40 @@ _watchdog_deadline = 5.0
 
 
 def _on_terminate(signum, _frame):
-    """SIGTERM/SIGINT 先尝试关窗(走正常清理);窗口未建立时恢复默认行为。
+    """SIGTERM/SIGINT 先尝试关窗(走正常清理);窗口未建立时 SIGTERM 仍契约式 0 退出。
 
     注意:Python 级信号处理器只会在主线程执行字节码时运行,而 webview.start()
     会把主线程阻塞在 Cocoa 事件循环里,本处理器可能永远得不到执行机会(#50)。
     因此另有信号泵(_install_signal_pump)与看门狗(_install_terminate_watchdog)双保险。
     """
-    closer = _terminate_state.get("window_closer")
+    _terminate_action(signum, _terminate_state)
+
+
+def _terminate_action(signum, state, exiter=None):
+    """终止动作核心(可注入 exiter 供测试)。
+
+    契约(#50 / E2E-5 发行验收):SIGTERM 无论落在「窗口建立前的启动窗口」还是
+    窗口建立后,都必须有界地以退出码 0 结束;此前无 window_closer 时走 SIG_DFL
+    重抛(-15),会把启动期 SIGTERM 判成异常死亡。SIGINT(开发者 Ctrl-C)保持
+    默认语义不变。
+    """
+    exiter = os._exit if exiter is None else exiter
+    closer = state.get("window_closer")
     if closer:
         try:
             closer()
             return
         except Exception:
             pass
+    if signum == signal.SIGTERM:
+        shutdown = state.get("shutdown")
+        if callable(shutdown):
+            try:
+                shutdown()
+            except Exception:
+                pass  # 清理失败也必须退出,保证有界
+        exiter(0)
+        return
     signal.signal(signum, signal.SIG_DFL)
     os.kill(os.getpid(), signum)
 

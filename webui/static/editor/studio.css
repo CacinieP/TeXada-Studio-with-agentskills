@@ -127,6 +127,7 @@ kbd { font:10px/1.5 ui-monospace,Menlo,monospace;color:#7e9ab9;white-space:nowra
 .preview-tools .icon-button { width:25px;height:25px;border:1px solid var(--border-soft);border-radius:5px; }
 #pvPage { min-width:27px;color:#adc5df;text-align:center;white-space:nowrap; }
 .preview-button { height:25px;padding:3px 7px;color:#c2d8ef;font-size:11px; }
+#btnCompileLocation[hidden] { display:none; }
 .preview-button .ui-icon { width:13px;height:13px; }
 #pvStatus { min-height:15px;flex:none;color:#6e91b5;font-size:10px;margin:-2px 17px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 #pvImgWrap { flex:1;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center;padding:0 20px 20px;overflow:auto; }
@@ -191,6 +192,8 @@ kbd { font:10px/1.5 ui-monospace,Menlo,monospace;color:#7e9ab9;white-space:nowra
 .prob:hover { background:#15385a; }
 .prob.t { border-left-color:var(--warning); } .prob.fixed { border-left-color:var(--success); }
 .prob .loc { color:#7297bd;font-size:10px; }
+.prob-reason,.prob-source { display:block;margin-top:4px;overflow-wrap:anywhere; }
+.prob:focus-visible { outline:2px solid #9fd8ff;outline-offset:1px; }
 #statusbar { height:26px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;background:#0b2039;border-top:1px solid var(--border);color:#8dadd0;font-size:10px;font-variant-numeric:tabular-nums; }
 .model-indicator { width:7px;height:7px;border-radius:50%;background:#6e88a5; }
 .model-indicator[data-state="connected"] { background:var(--success);box-shadow:0 0 6px #69dfbf20; }

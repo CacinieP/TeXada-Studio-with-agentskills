@@ -73,6 +73,11 @@ jobs:
         run: .venv/bin/python scripts/prepare-local-tex.py --download-resources
       - name: Build self-contained app
         run: .venv/bin/python desktop/build_bundle.py --output dist-app
+      - name: Verify Studio app icon
+        run: |
+          APP="dist-app/TeXada Studio.app/Contents"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Info.plist")" = AppIcon
+          test -s "$APP/Resources/AppIcon.icns"
       - name: Isolated smoke test (no repo, no brew, no network in the test env)
         run: |
           R="dist-app/TeXada Studio.app/Contents/Resources"

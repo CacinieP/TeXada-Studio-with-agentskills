@@ -52,9 +52,12 @@ def build_icon(workdir: Path) -> Path | None:
     if shutil.which("sips") is None or shutil.which("iconutil") is None or not BRAND_SOURCE.exists():
         return None
     iconset.mkdir(parents=True, exist_ok=True)
-    for size in (16, 32, 64, 128, 256, 512):
-        run(["sips", "-z", str(size), str(size), str(BRAND_SOURCE), "--out", str(iconset / f"icon_{size}x{size}.png")],
-            capture_output=True)
+    for points in (16, 32, 128, 256, 512):
+        for scale, suffix in ((1, ""), (2, "@2x")):
+            pixels = str(points * scale)
+            target = iconset / f"icon_{points}x{points}{suffix}.png"
+            run(["sips", "-z", pixels, pixels, str(BRAND_SOURCE), "--out", str(target)],
+                capture_output=True)
     run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], capture_output=True)
     shutil.rmtree(iconset, ignore_errors=True)
     return icns if icns.exists() else None
@@ -129,8 +132,11 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
                 if candidate.exists():
                     return str(candidate)
             return None
-        if entry.startswith("@executable_path") or entry.startswith("@loader_path"):
-            return None  # 同包内引用,重写后自洽
+        if entry.startswith("@loader_path/"):
+            candidate = loader_dir / entry.removeprefix("@loader_path/")
+            return str(candidate) if candidate.is_file() else None
+        if entry.startswith("@executable_path/"):
+            return None  # @executable_path is relative to the root binary.
         return entry if Path(entry).exists() else None
 
     def is_system(path: str) -> bool:
@@ -162,7 +168,7 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
                 shutil.copy2(source, target)
                 os.chmod(target, 0o755)
             relocated[source] = target
-            queue.append((target, Path(source).parent))
+            queue.append((target, Path(source).resolve().parent))
         for entry in dependencies:
             source = resolve(entry, rpaths, loader_dir)
             if source is None or is_system(source):
@@ -221,8 +227,12 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
             originals[str(staging / "bin" / name)] = tool
         count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
+        for name, flag in (("tectonic", "--version"), ("pdfinfo", "-v"), ("pdftoppm", "-v")):
+            run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
+    run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
+        env={**os.environ, "TECTONIC": str(TECTONIC)})
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
     (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
         tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")
@@ -257,15 +267,15 @@ def main(argv=None) -> int:
     staging = workdir / "Resources"
     staging.mkdir(parents=True)
 
-    print("① 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
+    print("① 生成图标…")
+    icon = build_icon(workdir)
+    if icon is None:
+        raise SystemExit("无法生成 Studio 图标：请检查品牌源图、sips 和 iconutil。")
+
+    print("② 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
     sizes = stage_resources(staging, args.skip_poppler)
     for area, size in sizes.items():
         print(f"   {area}: {size / 1_048_576:.1f} MiB")
-
-    print("② 生成图标…")
-    icon = build_icon(workdir)
-    if icon is None:
-        print("   跳过(sips/iconutil 或源图缺失)")
 
     print("③ py2app 冻结程序部分(首次较慢)…")
     py2app_dist = workdir / "py2app-dist"
@@ -281,8 +291,7 @@ def main(argv=None) -> int:
     resources = app / "Contents" / "Resources"
     for item in staging.iterdir():
         shutil.move(str(item), str(resources / item.name))
-    if icon is not None:
-        install_app_icon(app, icon)
+    install_app_icon(app, icon)
     seal_app_bundle(app)
     shutil.rmtree(workdir, ignore_errors=True)
 

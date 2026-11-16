@@ -1,16 +1,32 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
 ### Fixed
 
+- Studio PDF imports now save selected pages as one batch when splitting. A filename conflict leaves the current review and every existing document intact. Saving advances the next import to the following source page.
+- Show the relevant TeX error and source location when compilation fails, and keep the complete log available. Select a diagnostic to jump to its source line.
+- Keep the editor open when Agent repair makes no changes. Show the actual check result and keep the report available for export.
+- Stabilize model settings when discovery requests finish out of order, and bundle loader-relative native library dependencies with the macOS tools.
+
 - Studio's repair line now honors `REPAIR_MODEL` with priority over `VLM_MODEL`, matching the harness CLI routing contract, and `/api/nodeinfo` exposes the resolved `repair_model` and `ocr_model` so CLI and Studio report the same per-task models (issue #23).
 - Exit within a bounded time when the macOS app receives SIGTERM/SIGINT while its Cocoa event loop is running. Python-level signal handlers only run when the main thread executes Python bytecode, so `webview.start()` could swallow the signal and leave the process alive after termination (#50). An NSTimer signal pump now lets `_on_terminate` close the window through the normal cleanup path, and a `signal.set_wakeup_fd` watchdog cleans up and force-exits as a fallback.
+- SIGTERM during app startup (after the backend answers but before the window registers its closer) used to re-raise the signal and exit with code -15, breaking the bounded `returncode == 0` termination contract; the termination action now runs the cleanup hook and exits 0 for SIGTERM at any point after handlers are installed, while SIGINT keeps its default semantics.
 
 ### Added
 
+- Undo and redo editor changes and adopted Agent repairs from the editor toolbar, the command palette, or keyboard shortcuts. History changes invalidate the previous PDF preview.
+
+- E2E release acceptance driver `scripts/e2e_release_check.py`: preflight (venv Python, LaTeX toolchain, served model names must match the contract names exactly), E2E-1 compile scenario (real tectonic build + PDF fetch), E2E-2 repair scenario (deterministic delimiter correction, unchanged missing script, zero model calls), and evidence records under `docs/evaluation-results/e2e-release-01/`.
 - Model-routing contract tests: `OCR_MODEL` environment routing and the `--model` CLI default in doc-ocr-extract, `REPAIR_MODEL` priority through the Studio provider/pipeline surface, and default-literal consistency across the repair, Studio and OCR lines.
 - Native integration verification for termination: a real Cocoa window receives SIGTERM and must exit gracefully within bounds (including via the window-closer cleanup path), plus watchdog unit tests for deadline and second-signal behavior.
+
+### Changed
+
+- Leave missing or ambiguous subscripts and superscripts for review. Offer deterministic delimiter and brace repairs when the source supports them.
+- Check the row and column shape of common matrix and cases environments.
+- Preserve local OCR error messages in the import panel.
+- Warm the nested-math font needed by the offline compiler and seed missing resources when upgrading an existing cache.
 
 ## 0.2.0-beta.4 — 2026-11-11
 

@@ -167,5 +167,38 @@ class CandidatePreservationTests(unittest.TestCase):
         self.assertTrue(assess_candidate(r"\frac{a}{b", "  " + r"\frac{a}{b}" + " ")["allowed"])
 
 
+class MissingScriptTests(unittest.TestCase):
+    def test_uncertain_scripts_are_preserved(self):
+        for original, candidate in (("a_+b", "a_1+b"), ("x^+1", "x^2+1"),
+                                    ("a_ + b", "a_{1} + b"), ("a_", "a_1")):
+            with self.subTest(original=original):
+                self.assertIsNone(deterministic_candidate(original))
+                evidence = assess_candidate(original, candidate)
+                self.assertFalse(evidence["allowed"])
+                self.assertEqual(evidence["reason"], "missing_script_operand")
+
+    def test_rejects_fills_outside_empty_script_slots(self):
+        # 抓的破坏点：扩权被滥用于任意位置插字（操作数/已占用槽/命令/超长/结构改动）
+        cases = [
+            ("x+1", "x2+1"),                # 操作数后插字——不是 script 槽
+            ("x+1", "x+21"),                # 同上，数字尾插字
+            ("a_1+b", "a_21+b"),            # 槽已被 1 占用，不是空槽
+            ("a_+b", "a_\\alpha+b"),        # 命令不是单 token 填充
+            ("a_+b", "a_123456789+b"),      # 超出 8 字符上限
+            ("a_+b", "a_ 1+b"),             # 位置在空格后而非 script 标记后（间距改动）
+            ("z^3+", "z^3+1"),              # 尾操作数缺失不允许臆造（SKILL 教义保持）
+            ("a_", "a_1"),                  # 行尾空槽：repair_blocker=missing_script_operand 保持拦截
+            (r"\frac{{3}", r"\frac{1}{3}"),  # 缺 frac 参数不允许臆造（既有裁决保持）
+        ]
+        for original, candidate in cases:
+            with self.subTest(original=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+    def test_gap_fill_cannot_bypass_repair_blocker(self):
+        # 抓的破坏点：repair_blocker 拦下的源（注释等）借填充绕过
+        evidence = assess_candidate("x^+1%c", "x^2+1%c")
+        self.assertFalse(evidence["allowed"])
+
+
 if __name__ == "__main__":
     unittest.main()

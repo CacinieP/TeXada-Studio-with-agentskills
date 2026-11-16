@@ -13,6 +13,7 @@ import urllib.error
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from docforensics import vlm
 from docforensics import __main__ as cli
+from docforensics.formula_repair import assess_candidate
 
 
 def response(content='{"latex":"a_1"}', **extra):
@@ -73,12 +74,15 @@ class ProviderRuntimeTest(unittest.TestCase):
             with self.subTest(mode=mode), patch.object(vlm.urllib.request, "urlopen", return_value=response()) as network:
                 provider.repair_formula({"data": {"latex": r"\frac{x}{2"}})
             messages = json.loads(network.call_args.args[0].data)["messages"]
-            self.assertEqual([message["role"] for message in messages], ["system", "user", "assistant", "user"])
+            self.assertEqual([message["role"] for message in messages],
+                             ["system", "user", "assistant", "user", "assistant", "user"])
             system = messages[0]["content"]
             example_input = messages[1]["content"]
             example_output = messages[2]["content"]
             self.assertEqual(json.loads(example_input), {"task": "repair_formula_syntax", "latex": r"\frac{a^2+b^2}{2"})
             self.assertEqual(json.loads(example_output), {"latex": r"\frac{a^2+b^2}{2}"})
+            self.assertEqual(json.loads(messages[3]["content"]), {"task": "repair_formula_syntax", "latex": "x^+1"})
+            self.assertEqual(json.loads(messages[4]["content"]), {"latex": "x^+1"})
             self.assertEqual(json.loads(messages[-1]["content"]), {"task": "repair_formula_syntax", "latex": r"\frac{x}{2"})
             self.assertIn('\\\\frac', example_output)
             self.assertIn('}{2}"}', example_output)
@@ -89,6 +93,28 @@ class ProviderRuntimeTest(unittest.TestCase):
             else:
                 self.assertNotIn("<loaded_skill", system)
             self.assertIsNotNone(provider.fingerprint()["fewshot_sha256"])
+
+    def test_fewshot_distinguishes_syntax_repair_from_missing_script(self):
+        # 抓的破坏点：few-shot 仅恒等样例（输入→原样输出）教模型回显坏公式——必须含修复样例，
+        # 且每个样例输出必须过范围门卫（few-shot 不得教模型产出被拒内容）
+        examples = vlm._minicpm_json_examples()
+        self.assertEqual(len(examples), 4)
+        pairs = [(json.loads(examples[index]["content"]), json.loads(examples[index + 1]["content"]))
+                 for index in (0, 2)]
+        self.assertTrue(any(user["latex"] != assistant["latex"] for user, assistant in pairs),
+                        "few-shot 必须含非恒等修复样例")
+        self.assertIn(({"task": "repair_formula_syntax", "latex": "x^+1"}, {"latex": "x^+1"}), pairs)
+        for user, assistant in pairs:
+            with self.subTest(latex=user["latex"]):
+                self.assertEqual(user["task"], "repair_formula_syntax")
+                self.assertEqual(set(assistant), {"latex"})
+                evidence = assess_candidate(user["latex"], assistant["latex"])
+                self.assertTrue(evidence["allowed"] or user["latex"] == assistant["latex"], evidence)
+
+    def test_system_prompt_forbids_missing_script_guesses(self):
+        prompt = vlm.FORMULA_SYSTEM_PROMPT
+        self.assertIn("Never invent an operand, subscript or superscript", prompt)
+        self.assertIn("Preserve every existing number", prompt)
 
     def test_default_provider_and_cli_model_are_minicpm_with_explicit_override_supported(self):
         provider = vlm.OpenAICompatibleProvider()

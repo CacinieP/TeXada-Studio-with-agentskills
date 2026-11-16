@@ -20,7 +20,7 @@
   <div class="vsep" id="sepL" title="拖拽调整文档导航"><button class="sep-btn" id="sepBtnL" aria-label="折叠或展开文档导航"></button></div>
   <section id="center" aria-label="文档工作台">
     <div class="workbar" role="toolbar" aria-label="文档操作"><div id="tabs" role="tablist" aria-label="文档视图"><button id="tab-edit" class="tab active" role="tab" aria-selected="true" aria-controls="duo" tabindex="0" onclick="showCenter('edit')"><span data-icon="file"></span><span id="tabname">未打开文档</span></button><button id="tab-diff" class="tab" role="tab" aria-selected="false" aria-controls="diff" aria-disabled="true" tabindex="-1" onclick="showCenter('diff')">修复对比</button></div><button class="icon-button" id="btnEditorTools" title="编辑与布局工具" aria-label="编辑与布局工具" aria-expanded="false" aria-controls="editorToolsMenu"></button><div class="spacer"></div><span id="pvTabStatus" class="sr-only"></span><button id="btnAgent" class="agent-switch" aria-expanded="false" aria-controls="rightpanel" title="Agent与审阅"><span data-icon="model"></span><span class="button-label">Agent</span><span class="switch-track" aria-hidden="true"><span></span></span></button><span class="toolbar-divider"></span><button class="toolbar-button" id="btnAnalyze">检查</button><button class="toolbar-button primary" id="btnCompile">编译</button><button class="toolbar-button hide" id="btnCancel">停止</button><button class="toolbar-button" id="btnExportMenu" aria-expanded="false" aria-haspopup="menu" aria-controls="exportMenu" title="导出文档">导出</button><button id="btnDiff" class="hide" disabled>查看修复对比</button></div>
-    <div id="duo" role="tabpanel" aria-labelledby="tab-edit"><div id="editor"></div><div class="vsep" id="sepE" title="拖拽调整源码与预览"><button id="sepBtnE" class="sep-btn" aria-label="折叠或展开PDF预览"></button></div><section id="previewPane" aria-label="PDF预览"><div class="preview-tools"><span class="preview-heading">PDF 预览</span><div class="spacer"></div><button class="icon-button" id="pvPrevious" disabled aria-label="上一页"></button><span id="pvPage">—</span><button class="icon-button" id="pvNext" disabled aria-label="下一页"></button><button class="preview-button" id="pvZoomFit">适应</button><button class="preview-button" id="pvZoom100">100%</button></div><div id="pvStatus" role="status">打开文档后编译预览</div><div id="pvLog" class="kv hide"></div><div id="pvImgWrap" class="fit"><div class="preview-empty"><span data-icon="file"></span><p>文档预览</p><small>编译当前文档，查看完整 PDF。</small></div></div></section></div><div id="diff" class="hide" role="tabpanel" aria-labelledby="tab-diff"></div>
+    <div id="duo" role="tabpanel" aria-labelledby="tab-edit"><div id="editor"></div><div class="vsep" id="sepE" title="拖拽调整源码与预览"><button id="sepBtnE" class="sep-btn" aria-label="折叠或展开PDF预览"></button></div><section id="previewPane" aria-label="PDF预览"><div class="preview-tools"><span class="preview-heading">PDF 预览</span><div class="spacer"></div><button class="icon-button" id="pvPrevious" disabled aria-label="上一页"></button><span id="pvPage">—</span><button class="icon-button" id="pvNext" disabled aria-label="下一页"></button><button class="preview-button" id="pvZoomFit">适应</button><button class="preview-button" id="pvZoom100">100%</button></div><div id="pvStatus" role="status">打开文档后编译预览</div><button id="btnCompileLocation" type="button" class="preview-button" hidden></button><div id="pvLog" class="kv hide"></div><div id="pvImgWrap" class="fit"><div class="preview-empty"><span data-icon="file"></span><p>文档预览</p><small>编译当前文档，查看完整 PDF。</small></div></div></section></div><div id="diff" class="hide" role="tabpanel" aria-labelledby="tab-diff"></div>
   </section>
   <div class="vsep" id="sepR" title="调整Agent面板宽度"><button id="sepBtnR" class="sep-btn" aria-label="关闭Agent面板"></button></div>
   <aside id="rightpanel" class="closed" aria-label="Agent与候选审阅"><div class="drawer-heading"><span data-icon="model"></span><h2>Agent 与审阅</h2><div class="spacer"></div><button id="btnInspectorClose" class="icon-button" title="关闭Agent面板" aria-label="关闭Agent面板"></button></div><section class="panel agent-intake"><p class="hint">本地 MiniCPM 提出候选，确认差异后再采用。</p><button id="btnFix" class="toolbar-button primary full">生成修复候选</button><button id="btnInspector" class="subtle-button full" aria-expanded="false" aria-controls="rightpanel">查看审阅结果</button></section><details class="card advanced-card" id="workflowPanel"><summary class="card-title"><span class="card-icon" data-icon="workflow"></span><h2>Agent 工作流</h2></summary><label class="sidebar-label"><input type="checkbox" id="plannerMode">受限 Agent 规划</label><label class="sidebar-label"><input type="checkbox" id="skillSelection">自动选择检查 Skill</label><p class="hint">至多 12 步；生成的修改始终先审阅。</p><details><summary class="hint">单公式交接 · 实验</summary><button class="light-button full" id="btnHandoff" disabled>修复当前公式</button><button class="light-button full" id="btnHandoffComplete" disabled style="margin-top:5px">续写当前公式</button><p class="hint" id="handoffHint">未启用单公式交接。</p></details></details><section class="panel"><h4>候选审阅</h4><div class="hint" id="reviewHint">语法通过不代表含义正确。请先核对差异，再决定采用。</div><button class="act" id="btnAccept" disabled>采用候选到编辑器</button><button class="act ghost" id="btnReject" disabled>拒绝候选，保留原文</button><button class="act ghost" id="btnReport" disabled>导出检查报告</button></section><section class="panel"><h4>编译结果</h4><div id="compile" class="kv">尚无编译记录</div></section><section class="panel"><h4>候选预览</h4><div id="preview" class="hint">生成候选后显示。</div></section><section class="panel"><h4>最近运行 <button class="light-button" id="btnRefreshJobs" style="float:right;padding:0 5px">↻</button></h4><div id="jobs"><div class="hint">运行记录保存在本机。</div></div></section></aside>
@@ -31,12 +31,12 @@
 <div id="inspectorBackdrop" class="workspace-backdrop hide"></div><div id="navigatorBackdrop" class="workspace-backdrop hide"></div>
 <div id="exportMenu" class="workspace-menu hide" role="menu" aria-label="导出文档"><button id="btnExport" role="menuitem">导出 LaTeX (.tex)</button><button id="btnPdf" role="menuitem" disabled>导出 PDF</button></div>
 <div id="workspaceSettingsMenu" class="workspace-menu hide" role="menu" aria-label="工作区设置"><button id="btnEditorSettings" role="menuitem">编辑器设置</button><button id="btnSettings" role="menuitem">本地模型</button><button id="btnHistory" role="menuitem">运行记录</button><button id="btnTheme" role="menuitem">增强对比度</button></div>
-<div id="editorToolsMenu" class="workspace-menu hide" role="menu" aria-label="编辑与布局工具"><button id="btnFind" role="menuitem">查找</button><button id="btnReplace" role="menuitem">查找和替换</button><button id="btnQuickOutline" role="menuitem">转到章节</button><button id="btnTogglePreview" role="menuitem">切换PDF预览</button></div>
+<div id="editorToolsMenu" class="workspace-menu hide" role="menu" aria-label="编辑与布局工具"><button id="btnUndo" role="menuitem" disabled>撤销</button><button id="btnRedo" role="menuitem" disabled>重做</button><button id="btnFind" role="menuitem">查找</button><button id="btnReplace" role="menuitem">查找和替换</button><button id="btnQuickOutline" role="menuitem">转到章节</button><button id="btnTogglePreview" role="menuitem">切换PDF预览</button></div>
 <dialog id="importDialog"><div class="dialog-heading"><h2>图片 / PDF 识别</h2><button id="btnImportClose" class="icon-button" aria-label="关闭识别面板" title="关闭识别面板"></button></div><p class="hint">打开 LaTeX，或从图片和 PDF 生成可编辑候选。</p>
  <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖入图片和PDF"><div class="drop-symbol">▧</div><div id="ocrFileLabel">拖入 PDF / 图片，或点击选择</div></div><input id="ocrInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
  <div class="row"><label for="ocrStart" class="hint">起始页</label><input id="ocrStart" type="number" min="1" step="1" value="1" class="light-button" style="width:64px" aria-label="起始页(PDF)"><label for="ocrPages" class="hint">最多页数</label><select id="ocrPages" class="light-button" aria-label="最多识别页数"><option value="1">1 页</option><option value="3">3 页</option><option value="5">5 页</option></select><button class="light-button" id="btnOcr" disabled>开始识别</button></div><p class="local-note" id="ocrHint">仅向配置的本地模型发送。识别结果经你确认后新建文档。</p></dialog>
 <dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="minicpm-v4.7-35b-a3b-q4"></div><div class="field"><label for="btnInstallTools">本地工具</label><button class="light-button" id="btnInstallTools">下载 Tectonic 0.17.0（官方 Release）</button><button class="light-button" id="btnInstallPoppler" style="margin-left:6px">安装 Poppler（brew）</button><p class="hint" id="installToolsHint">仅在点击时执行：Tectonic 从官方 Release 下载并校验 SHA256；Poppler 经 Homebrew 安装（GPL-2+，进程调用）。Linux 请用系统包管理器。</p></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
-<dialog id="ocrDialog"><h2>审阅识别结果</h2><p class="hint">对照原件检查公式和正文。识别结果不会自动覆盖现有文档。</p><div class="field"><label for="ocrName">新文档名称</label><input id="ocrName" value="识别文档.tex"></div><div class="field"><label for="ocrCandidate">LaTeX 候选</label><textarea id="ocrCandidate"></textarea></div><div class="field" id="ocrPageSplitField" hidden><label>分页切割</label><div id="ocrPageList"></div><p class="hint">取消勾选会从候选中剔除该页；「按页拆分」为每个勾选页各建一个文档。手动编辑过候选时以文本框为准，不再自动重组。</p></div><div class="actions"><button class="light-button" id="btnOcrMore" hidden>继续识别后续页</button></div><div class="actions"><button class="light-button" id="btnOcrCancel">取消</button><button class="light-button" id="btnOcrSplit" hidden>按页拆分为多文档</button><button class="act star" id="btnOcrCreate">新建文档</button></div></dialog>
+<dialog id="ocrDialog"><h2>审阅识别结果</h2><p class="hint">对照原件检查公式和正文。识别结果不会自动覆盖现有文档。</p><div class="field"><label for="ocrName">新文档名称</label><input id="ocrName" value="识别文档.tex"></div><div class="field"><label for="ocrCandidate">LaTeX 候选</label><textarea id="ocrCandidate"></textarea></div><div class="field" id="ocrPageSplitField" hidden><label>分页切割</label><div id="ocrPageList"></div><p class="hint">「新建文档」保存文本框内容。编辑文本框之前，勾选页会自动重组候选。「按页拆分」使用各勾选页的原始识别结果。</p></div><div class="actions"><button class="light-button" id="btnOcrMore" hidden>继续识别后续页</button></div><div class="actions"><button class="light-button" id="btnOcrCancel">取消</button><button class="light-button" id="btnOcrSplit" hidden>按页拆分为多文档</button><button class="act star" id="btnOcrCreate">新建文档</button></div></dialog>
 <dialog id="historyDialog"><h2>运行记录</h2><div id="historyJobs"></div><div class="actions"><button class="light-button" id="btnHistoryClose">关闭</button></div></dialog>
 <dialog id="editorSettingsDialog"><div class="dialog-heading"><h2>编辑器设置</h2><button class="light-button icon-only" id="btnEditorSettingsClose" aria-label="关闭编辑器设置" title="关闭"></button></div><p class="hint">只调整本机编辑体验，修改立即生效。</p><div class="preference-row"><label for="prefFontSize">字体大小</label><div class="row"><button class="light-button icon-only" id="btnZoomOut" aria-label="缩小字号" title="缩小字号">A−</button><input id="prefFontSize" type="number" min="10" max="28" step="1" value="15" aria-label="编辑器字号"><span class="hint">px</span><button class="light-button icon-only" id="btnZoomIn" aria-label="增大字号" title="增大字号">A+</button></div></div><label class="preference-row" for="prefWordWrap"><span>自动换行<small>长行在编辑区域内折行，不改变源文件。</small></span><input id="prefWordWrap" type="checkbox" checked></label><label class="preference-row" for="prefMinimap"><span>代码小地图<small>在右侧展示全文缩略导航。</small></span><input id="prefMinimap" type="checkbox"></label><div class="actions"><button class="light-button" id="btnEditorReset">恢复默认</button><button class="act star" id="btnEditorDone">完成</button></div></dialog>
 <dialog id="commandDialog" class="command-palette" aria-label="命令面板"><div class="command-input-row"><span data-icon="search"></span><input id="commandInput" role="combobox" aria-controls="commandList" aria-expanded="false" aria-autocomplete="list" placeholder="输入命令或操作名称…" autocomplete="off"><kbd>Esc</kbd></div><div id="commandList" role="listbox" aria-label="可用命令"></div><div class="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 执行</span><span>所有操作均在本机执行</span></div></dialog>
@@ -65,17 +65,24 @@ function authUrl(url) {
 function openDialog(id) { const el = $(id); if (el.showModal) el.showModal(); }
 function closeDialog(id) { const el = $(id); if (el.close) el.close(); }
 let savedContent = "", savedHash = null, documentOrigin = "", loadingDocument = false;
+let compileLocation = null, problemsSource = null;
 function isDirty() { return !!curName && !!editor && editor.getValue() !== savedContent; }
 function updateSaveState() {
   $("saveState").textContent = !curName ? "未打开文档" : savingDocument ? "保存中…" : isDirty() ? "未保存修改" : documentOrigin === "sample" ? "已保存 · 示例" : "已保存";
   $("saveState").classList.toggle("dirty", isDirty());
   $("btnSave").disabled = !curName || busy || savingDocument;
+  updateHistoryControls();
   $("tabname").textContent = curName ? curName + (isDirty() ? " •" : "") : "未打开文档";
   $("workspaceFilename").textContent=curName||"未打开文档";
   document.title=(curName?curName+" · ":"")+"TeXada Studio";
 }
 function discardAllowed() { return !isDirty() || typeof confirm !== "function" || confirm("当前文档有未保存修改。放弃修改并继续？"); }
+function clearCompileLocation() {
+  compileLocation = null;
+  $("btnCompileLocation").hidden = true;
+}
 function invalidatePreview(message = "内容已变化，请重新编译预览。") {
+  clearCompileLocation();
   ++previewEpoch; lastPreviewTag = null; previewBinding = null; previewPages = []; previewPage = 0;
   setPdfAvailable(false); $("pvPrevious").disabled = true; $("pvNext").disabled = true;
   $("pvPage").textContent = "—"; $("pvTabStatus").textContent = ""; $("pvStatus").textContent = message;
@@ -243,19 +250,34 @@ async function analyze(options={reveal:false}) {
 }
 
 function renderProblems(problems) {
+  problemsSource = {name:curName, epoch:fileEpoch, content:currentContent()};
   $("probCount").textContent = problems.length;
   $("probCount").style.display="inline-block";
   if (!problems.length) {
     $("problems").innerHTML = `<div class="prob fixed">✓ 支持范围内未检出问题；数学含义仍需核对</div>`;
     return;
   }
-  $("problems").innerHTML = problems.map(p => `
-    <div class="prob ${p.type === "formula" ? "f" : "t"}" onclick="gotoLine(${p.line})">
-      <div>${p.type === "formula" ? "公式" : "表格合计"} · <span class="loc">L${p.line}</span>
-        ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</div>
-      <div class="loc">${esc((p.latex ?? p.reason ?? "").slice(0, 60))}</div>
-    </div>`).join("");
+  $("problems").innerHTML = problems.map(p => {
+    const line = Number.isSafeInteger(p.line) && p.line > 0 ? p.line : null;
+    const tag = line ? "button" : "div";
+    return `<${tag} class="prob ${p.type === "formula" ? "f" : "t"}"${line ? ` type="button" data-problem-line="${line}"` : ""}>
+      <span>${p.type === "formula" ? "公式" : "表格合计"}${line ? ` · L${line}` : ""}
+        ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</span>
+      ${p.reason ? `<span class="prob-reason">${esc(p.reason)}</span>` : ""}
+      ${p.latex ? `<span class="prob-source loc">${esc(p.latex.slice(0,100))}</span>` : ""}
+    </${tag}>`;
+  }).join("");
 }
+
+$("problems").addEventListener("click", event => {
+  const item = event.target.closest?.("button[data-problem-line]");
+  if (!item || !problemsSource) return;
+  if (problemsSource.name !== curName || problemsSource.epoch !== fileEpoch || problemsSource.content !== currentContent()) {
+    toast("文档已变化，请重新检查后跳转。",true);
+    return;
+  }
+  gotoLine(Number(item.dataset.problemLine));
+});
 
 function gotoLine(line) {
   const ed = diffShown && diffEditor ? diffEditor.getModifiedEditor() : editor;
@@ -352,9 +374,37 @@ $("pvPrevious").onclick = () => { if (previewPage > 0) { previewPage--; renderPr
 $("pvNext").onclick = () => { if (previewPage < previewPages.length - 1) { previewPage++; renderPreviewPage(); } };
 $("pvZoomFit").onclick = () => { pvZoom = "fit"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
 $("pvZoom100").onclick = () => { pvZoom = "raw"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
+function compileErrorSummary(log) {
+  const lines = String(log || "").split(/\r?\n/).map(line => line.trim());
+  const diagnostic = lines.find(line => /^error:\s*main\.tex:\d+:/i.test(line))
+    || lines.find(line => /^error:\s*!|^!\s/.test(line));
+  return diagnostic?.replace(/^error:\s*!?\s*|^!\s*/i,"").slice(0,240) || "";
+}
+function showCompileFailure(outcome, content) {
+  const location = outcome.diagnostic;
+  const summary = location?.message
+    ? `第 ${location.line} 行 · ${location.message}`
+    : compileErrorSummary(outcome.log);
+  invalidatePreview(summary ? "编译未通过：" + summary : "未能生成 PDF，请查看编译详情。");
+  $("pvTabStatus").textContent = "编译未通过";
+  $("pvLog").textContent = outcome.log || "编译器未返回详细信息。";
+  $("pvLog").classList.remove("hide");
+  if (Number.isSafeInteger(location?.line) && location.line >= 1 && location.line <= content.split("\n").length) {
+    compileLocation = {line:location.line, name:curName, epoch:previewEpoch, content};
+    $("btnCompileLocation").textContent = `转到第 ${location.line} 行`;
+    $("btnCompileLocation").hidden = false;
+  }
+}
+$("btnCompileLocation").onclick = () => {
+  const location = compileLocation;
+  if (location && location.name === curName && location.epoch === previewEpoch && location.content === currentContent()) {
+    gotoLine(location.line);
+  }
+};
 async function compilePreview(content) {
   if (!curName || !editor?.getModel()) return;
   const epoch = ++previewEpoch, name = curName;
+  clearCompileLocation();
   lastPreviewTag = null; previewBinding = null; setPdfAvailable(false);
   $("pvStatus").innerHTML = `<span class="spin"></span>正在编译文档…`; $("pvTabStatus").textContent = "编译中";
   $("pvLog").classList.add("hide");
@@ -373,9 +423,7 @@ async function compilePreview(content) {
       if (lastPreviewTag || d.pdf) setPdfAvailable(true);
       if (!previewPages.length && d.log) { $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log; }
     } else {
-      previewPages = []; $("pvStatus").textContent = "未能生成 PDF，请查看编译详情。"; $("pvTabStatus").textContent = "编译未通过";
-      $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log || "编译器未返回详细信息。";
-      $("pvImgWrap").innerHTML = '<div class="preview-empty"><b>▤</b>修正源码后，再试一次编译。</div>';
+      showCompileFailure(d, content);
     }
   } catch (error) { if (epoch === previewEpoch) { $("pvStatus").textContent = "编译请求失败：" + error.message; $("pvTabStatus").textContent = "请求失败"; } }
 }
@@ -386,6 +434,7 @@ $("btnAnalyze").onclick = () => analyze({reveal:true}).catch(error=>{warn(error)
 $("btnFix").onclick = async () => {
   if (busy || !curName) return;
   showCenter("edit"); invalidatePreview("正在生成候选…");
+  const repairPreviewEpoch = previewEpoch;
   busy = true; editor.updateOptions({readOnly:true}); $("btnUpload").disabled = true;
   $("btnAnalyze").disabled = true; $("btnCompile").disabled = true;
   $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = true; $("btnFix").disabled = true; $("btnFix").innerHTML = `<span class="spin"></span>Skill 修复中…`;
@@ -410,6 +459,9 @@ $("btnFix").onclick = async () => {
     }
   } catch(e){warn(e);$('joblog').innerHTML+='<br>'+lineStyle(e.message);toggleBottomPanel('log',true,$('btnFix'));}
   finally {
+    if (previewEpoch === repairPreviewEpoch) {
+      invalidatePreview("修复任务未完成，请查看日志。");
+    }
     activeJob=null; $("btnCancel").classList.add("hide");
     busy = false; editor.updateOptions({readOnly:false}); $("btnUpload").disabled = false;
     $("btnAnalyze").disabled = false; $("btnCompile").disabled = false;
@@ -439,7 +491,36 @@ async function applyResult(res, source = null) {
   source = source || await captureSource();
   await validateCandidate(res, source);
   if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
-  ++previewEpoch; lastResult = res; lastCandidateSource = source;
+  const unchanged = res.fixed_content === source.content;
+  clearCompileLocation();
+  lastResult = res; lastCandidateSource = unchanged ? null : source;
+  if (unchanged) {
+    const failed = [res.compile_after,res.compile_before].find(
+      outcome=>outcome && outcome.status !== "NOT_CHECKED" && !(outcome.compile_ok ?? outcome.ok)
+    );
+    const problems = res.problems_after;
+    disposeDiff();
+    $("btnDiff").disabled = true;
+    $("tab-diff").setAttribute("aria-disabled", "true");
+    $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = false;
+    showCenter("edit"); toggleAgentDrawer(true,$("btnAgent"));
+    renderProblems(problems);
+    const compiled = res.compile_after.compile_ok ?? res.compile_after.ok;
+    $("compile").textContent = failed ? "原文编译未通过" : compiled ? "原文编译通过" : "原文编译未检查";
+    $("preview").textContent = "本次没有需要审阅的差异。";
+    $("reviewHint").textContent = problems.length
+      ? `未生成修改。还有 ${problems.length} 项待核对。`
+      : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
+    if (failed) {
+      showCompileFailure(failed, source.content);
+    } else {
+      invalidatePreview("检查完成，未生成修改。可编译原文查看 PDF。");
+    }
+    if (problems.length) toggleBottomPanel("problems",true,$("btnFix"));
+    return;
+  }
+  ++previewEpoch;
+  $("pvStatus").textContent = "候选已生成，请核对差异。";
   $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
@@ -456,8 +537,8 @@ async function applyResult(res, source = null) {
   diffEditor.getModifiedEditor().onDidChangeCursorPosition?.(updateEditorStatus);diffEditor.getModifiedEditor().onDidChangeCursorSelection?.(updateEditorStatus);
   $("btnDiff").disabled = false;
   $("tab-diff").setAttribute("aria-disabled", "false");
-  renderProblems(res.problems_after.map(p => ({ ...p, status: "FIXED_REMAIN" })));
   showCenter("diff");toggleAgentDrawer(true,$('btnAgent'));
+  renderProblems(res.problems_after);
   $("compile").innerHTML =
     `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.status === "NOT_CHECKED" ? "未检查" : res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
     `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
@@ -553,7 +634,10 @@ async function decideCandidate(decision) {
       throw new Error("请求期间原文或文件已变化；本地未采用候选。");
     result.local_decision = decision; lastCandidateSource = null;
     if (decision === "accept") {
-      editor.setValue(result.fixed_content);
+      const model = editor.getModel();
+      model.pushStackElement();
+      model.pushEditOperations(editor.getSelections(), [{range:model.getFullModelRange(),text:result.fixed_content}], () => null);
+      model.pushStackElement();
       showCenter("edit");
       $("reviewHint").textContent = "已采用候选到编辑器。请保存到本地，或导出文档。"; updateSaveState();
       analyze().catch(warn); compilePreview(editor.getValue());
@@ -721,7 +805,7 @@ async function restoreJob(id,name) {
   if (name && name !== curName) { if (!discardAllowed()) return; await loadFile(name,true); }
   if (await sha256Text(editor.getValue()) !== d.result.original_sha256) return toast("当前原文与历史任务不同。记录已显示，候选不能应用到此版本。",true);
   if (d.result.local_decision || d.review?.decision) return toast("此候选已有审阅决定，请创建新的修复任务。");
-  await applyResult(d.result); closeDialog("historyDialog"); toast("历史候选已恢复，请审阅差异。");
+  await applyResult(d.result); closeDialog("historyDialog"); toast(d.result.fixed_content === editor.getValue() ? "已恢复历史检查结果。" : "历史候选已恢复，请审阅差异。");
 }
 for (const id of ["jobs","historyJobs"]) $(id).addEventListener("click", e => {
   const item=e.target.closest?.("[data-job]"); if (item) restoreJob(item.dataset.job,item.dataset.name).catch(warn);
@@ -735,7 +819,7 @@ $("btnCancel").onclick = async () => {
   catch(error) { warn(error); }
 };
 
-let studioConfig = null;
+let studioConfig = null, configRequestId = 0, modelDraftEdited = false;
 function displayModelConnection(available) {
   const state=available===true?'connected':available===false?'disconnected':'unchecked';
   $("modelIndicator").dataset.state=state;
@@ -748,10 +832,12 @@ function sameModelConfiguration(a,b) {
   const endpoint=value=>String(value||'').trim().replace(/\/+$/,'');
   return !!a&&!!b&&endpoint(a.base_url)===endpoint(b.base_url)&&String(a.model||'').trim()===String(b.model||'').trim();
 }
-function displayConfig(config) {
+function displayConfig(config, preserveDraft=false) {
   studioConfig=config;
-  $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
-  $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
+  if (!preserveDraft) {
+    $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
+    $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
+  }
   $("sb-model").textContent=/minicpm/i.test(config.model||"")?"MiniCPM":/qwen/i.test(config.model||"")?"Qwen":"本地模型";
   const available=config.model_available;
   displayModelConnection(available);
@@ -759,11 +845,35 @@ function displayConfig(config) {
   $("configStatus").textContent=[available === true ? "模型服务可用" : available === false ? "尚未连接到本地模型" : "连接状态尚未检查", `编译器：${tools.tectonic ? "可用" : "待安装"}`,`页面预览：${tools.pdftoppm ? "可用" : "待安装"}`].join(" · ");
   if (config.error) $("configStatus").textContent += " · " + config.error;
 }
-async function loadConfig(probe=false) { const d=await j(`/api/studio/config?token=${encodeURIComponent(T)}${probe ? "&probe=true" : ""}`); displayConfig(d); return d; }
-$("btnSettings").onclick = () => { openDialog("settingsDialog"); loadConfig().catch(warn); };
+async function loadConfig(probe=false) {
+  const requestId=++configRequestId;
+  const d=await j(`/api/studio/config?token=${encodeURIComponent(T)}${probe ? "&probe=true" : ""}`);
+  if (requestId===configRequestId) displayConfig(d,modelDraftEdited);
+  return d;
+}
+function openModelSettings() {
+  modelDraftEdited=false;
+  if (studioConfig) displayConfig(studioConfig);
+  openDialog("settingsDialog");
+  loadConfig().catch(warn);
+}
+for (const id of ["modelBaseUrl","modelName"]) $(id).addEventListener("input",()=>{modelDraftEdited=true;});
+$("btnSettings").onclick = openModelSettings;
 $("btnSettingsClose").onclick = () => closeDialog("settingsDialog");
 $("btnSettingsSave").onclick = async () => {
-  try { const d=await post("settings",{base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()}); displayConfig(d); closeDialog("settingsDialog"); toast("本地模型设置已保存。"); } catch(error) { warn(error); }
+  const controls=["btnSettingsSave","modelBaseUrl","modelName"].map($);
+  if (controls[0].disabled) return;
+  const draft={base_url:$("modelBaseUrl").value.trim(),model:$("modelName").value.trim()};
+  controls.forEach(control=>{control.disabled=true;});
+  try {
+    const d=await post("settings",draft);
+    ++configRequestId;
+    modelDraftEdited=false;
+    displayConfig(d);
+    closeDialog("settingsDialog");
+    toast("本地模型设置已保存。");
+  } catch(error) { warn(error); }
+  finally { controls.forEach(control=>{control.disabled=false;}); }
 };
 $("btnTestModel").onclick = async () => {
   $("btnTestModel").disabled=true; $("configStatus").textContent="正在检查本地模型…";
@@ -798,7 +908,9 @@ let ocrReviewActive = false, ocrReviewRevision = 0;
 function syncOcrControls() {
   $("btnOcr").disabled=busy || ocrRunning || ocrReviewActive || !ocrFile;
   $("btnOcr").setAttribute('aria-busy',String(ocrRunning));
-  $("btnOcrCreate").disabled=busy || ocrRunning;
+  const noPages = ocrReviewActive && !$("ocrPageSplitField").hidden && !checkedOcrPageNumbers().length;
+  $("btnOcrCreate").disabled=busy || ocrRunning || (noPages && !ocrEdited);
+  $("btnOcrSplit").disabled=busy || ocrRunning || noPages;
   setToolLabel("btnOcr",ocrRunning ? "识别中…" : "识别");
 }
 function cancelOcrReview() {
@@ -816,6 +928,7 @@ function chooseOcrFile(file) {
   if (!file) return;
   if (!(file.type === "application/pdf" || ["image/png","image/jpeg","image/webp"].includes(file.type))) return toast("请选择 PDF、PNG、JPEG 或 WebP 文件。",true);
   if (file.size > 12*1024*1024) return toast("请选择 12 MB 以内的文件。",true);
+  if (file !== ocrFile) $("ocrStart").value="1";
   ++ocrEpoch;ocrFile=file;$("ocrFileLabel").textContent=file.name;syncOcrControls();
   $("ocrHint").textContent=ocrReviewActive ? "请先完成或取消当前候选审阅，再识别新的原件。" : ocrRunning ? "已选择新原件。当前请求结束后可开始识别，新结果不会覆盖已有候选。" : "原件已就绪。点击识别后审阅候选。";
 }
@@ -848,21 +961,34 @@ $("btnOcr").onclick = async () => {
     $("ocrCandidate").value=d.content;ocrReviewActive=true;openDialog("ocrDialog");
     presentOcrPages(d,file);
     $("ocrHint").textContent="识别完成。请对照原件审阅候选，再创建文档。";
-  } catch(error) { if(current()){warn(error);$("ocrHint").textContent="识别未完成，请检查本地模型与文件后重试。";} }
+  } catch(error) {
+    if (current()) {
+      $("ocrHint").textContent = error instanceof Error && error.message
+        ? "识别未完成：" + error.message
+        : "识别未完成，请重试。";
+    }
+  }
   finally { if(requestId===ocrRequestId){ocrRunning=false;syncOcrControls();} }
 };
 $("btnOcrCancel").onclick = cancelOcrReview;
 $("btnOcrCreate").onclick = async () => {
   if(savingDocument)return toast("正在保存当前文档，请稍后新建识别文档。");
-  if (busy || ocrRunning || !discardAllowed()) return;
+  if ($("btnOcrCreate").disabled || busy || ocrRunning || !discardAllowed()) return;
   const name=$("ocrName").value.trim(),content=$("ocrCandidate").value;
-  try { await mutateDocument(async()=>{await post("create",{name,content});return name;},"识别候选已保存为新文档，请对照原件检查。");closeImportPanel();editor?.focus(); } catch(error) { warn(error); }
+  try {
+    await mutateDocument(async()=>{
+      await post("create",{name,content});
+      finishOcrReview();
+      return name;
+    },"识别候选已保存为新文档，请对照原件检查。");
+    editor?.focus();
+  } catch(error) { warn(error); }
 };
 
 // ---- PDF 分页切割:按页审阅、剔除、拆分为多个文档、继续识别后续批次 ----
 const OCR_PREAMBLE="% TeXada Studio local OCR candidate — compare with the original before use.\n\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\usepackage{amsmath,amssymb,graphicx,booktabs}\n\\begin{document}\n";
 let ocrEdited=false, ocrImportRecord=null, ocrPageSelection={};
-$("ocrCandidate").addEventListener("input",()=>{ocrEdited=true;});
+$("ocrCandidate").addEventListener("input",()=>{ocrEdited=true;syncOcrControls();});
 function checkedOcrPageNumbers(){
   return Object.keys(ocrPageSelection).filter(number=>ocrPageSelection[number]).map(Number).sort((a,b)=>a-b);
 }
@@ -883,7 +1009,10 @@ function rebuildOcrCandidate(){
   if(!ocrImportRecord||ocrEdited)return;
   const keep=new Set(checkedOcrPageNumbers());
   const kept=ocrImportRecord.d.pages.filter(page=>keep.has(page.page));
-  if(!kept.length)return;
+  if (!kept.length) {
+    $("ocrCandidate").value = "";
+    return;
+  }
   $("ocrCandidate").value=OCR_PREAMBLE+kept.map(page=>`% Source page ${page.page} — OCR candidate; review against original\n${page.body??page.text??""}`).join("\n\n\\clearpage\n\n")+"\n\\end{document}\n";
 }
 $("ocrPageList").addEventListener("change",event=>{
@@ -891,6 +1020,7 @@ $("ocrPageList").addEventListener("change",event=>{
   if(!item||item.dataset?.ocrPage===undefined)return;
   ocrPageSelection[Number(item.dataset.ocrPage)]=!!item.checked;
   rebuildOcrCandidate();
+  syncOcrControls();
 });
 $("btnOcrSplit").onclick = async () => {
   if(!ocrImportRecord)return;
@@ -900,17 +1030,29 @@ $("btnOcrSplit").onclick = async () => {
   const targets=ocrImportRecord.d.pages.filter(page=>keep.has(page.page));
   if(!targets.length)return toast("请至少勾选一页再拆分。",true);
   const stem=$("ocrName").value.trim().replace(/\.tex$/,"")||"识别文档";
+  const documents=targets.map(page=>({name:`${stem}-第${page.page}页.tex`,content:ocrPageDocument(page)}));
   try {
     await mutateDocument(async()=>{
-      for(const page of targets)await post("create",{name:`${stem}-第${page.page}页.tex`,content:ocrPageDocument(page)});
-      return `${stem}-第${targets[targets.length-1].page}页.tex`;
+      await post("create-split",{documents});
+      finishOcrReview();
+      return documents.at(-1).name;
     },`已按页拆分为 ${targets.length} 个文档，请逐页对照原件检查。`);
-    closeImportPanel();editor?.focus();
+    editor?.focus();
   } catch(error) { warn(error); }
 };
+function nextOcrPage() {
+  if (ocrImportRecord?.file !== ocrFile || !ocrImportRecord?.d.has_more_pages) return null;
+  return ocrImportRecord.d.pages.at(-1).page + 1;
+}
+function finishOcrReview() {
+  const next = nextOcrPage();
+  if (next !== null) $("ocrStart").value = String(next);
+  closeImportPanel();
+}
 $("btnOcrMore").onclick = () => {
-  if(!ocrImportRecord||busy||ocrRunning)return;
-  const next=ocrImportRecord.d.pages[ocrImportRecord.d.pages.length-1].page+1;
+  if (!ocrReviewActive || busy || ocrRunning) return;
+  const next = nextOcrPage();
+  if (next === null || !confirm("当前批次尚未保存。放弃本批候选并继续识别？")) return;
   $("ocrStart").value=String(next);
   cancelOcrReview();
   $("btnOcr").onclick();
@@ -1101,6 +1243,21 @@ function runEditorAction(id){
   if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
   target.focus();const action=target.getAction?.(id);if(action)return action.run();toast('编辑器尚未就绪，请稍后再试。',true);
 }
+function updateHistoryControls() {
+  const model = editor?.getModel();
+  const available = !!curName && !busy && !loadingDocument;
+  $("btnUndo").disabled = !available || !model?.canUndo();
+  $("btnRedo").disabled = !available || !model?.canRedo();
+}
+function runHistoryAction(direction) {
+  updateHistoryControls();
+  if ($(direction === "undo" ? "btnUndo" : "btnRedo").disabled) return;
+  showCenter("edit");
+  editor.focus();
+  return editor.getModel()[direction]();
+}
+$("btnUndo").onclick = () => runHistoryAction("undo");
+$("btnRedo").onclick = () => runHistoryAction("redo");
 $('btnFind').onclick=()=>runEditorAction('actions.find');$('btnReplace').onclick=()=>runEditorAction('editor.action.startFindReplaceAction');
 
 const EDITOR_COMMANDS=[
@@ -1108,6 +1265,8 @@ const EDITOR_COMMANDS=[
   {id:'file.open',label:'打开 LaTeX 文档',detail:'从本机导入 .tex',icon:'folder',keywords:'open import tex',button:'btnUpload'},
   {id:'file.new-template',label:'从模板新建',detail:'选择内置文档骨架创建本地文档',icon:'template',keywords:'template new create blank beamer exam',button:'btnNewFromTemplate'},
   {id:'file.save',label:'保存文档',detail:'保存当前修改到本机',icon:'save',keywords:'save',shortcut:'⌘/Ctrl S',button:'btnSave'},
+  {id:'editor.undo',label:'撤销',detail:'撤销当前文档的上一次编辑',icon:'history',keywords:'undo',shortcut:'⌘/Ctrl Z',button:'btnUndo'},
+  {id:'editor.redo',label:'重做',detail:'恢复当前文档已撤销的编辑',icon:'history',keywords:'redo',shortcut:'⌘/Ctrl ⇧ Z',button:'btnRedo'},
   {id:'editor.find',label:'查找',detail:'在当前文档中搜索',icon:'search',keywords:'find search',shortcut:'⌘/Ctrl F',button:'btnFind'},
   {id:'editor.replace',label:'查找和替换',detail:'打开编辑器替换面板',icon:'replace',keywords:'replace find',button:'btnReplace'},
   {id:'editor.outline',label:'转到章节',detail:'在文档大纲中跳转',icon:'outline',keywords:'outline section heading',shortcut:'⌘/Ctrl ⇧ O',button:'btnOutline'},
@@ -1134,7 +1293,7 @@ function renderCommands(){
   $('commandList').innerHTML=filteredCommands.length?filteredCommands.map((command,index)=>`<button id="command-option-${index}" class="command-option" role="option" aria-selected="${index===selectedCommand}" aria-disabled="${!commandEnabled(command)}" data-command-index="${index}" tabindex="-1"${commandEnabled(command)?'':' disabled'}>${toolIcon(command.icon)}<span class="command-label">${esc(command.label)}<small>${esc(command.detail)}</small></span>${command.shortcut?`<kbd>${esc(command.shortcut)}</kbd>`:''}</button>`).join(''):'<div class="empty">没有匹配命令，试试「保存」「查找」或「编译」。</div>';
   $('commandInput').setAttribute('aria-activedescendant',filteredCommands.length?`command-option-${selectedCommand}`:'');
 }
-function openCommandPalette(){commandPreviousFocus=document.activeElement||null;commandPaletteOpen=true;selectedCommand=0;$('commandInput').value='';$('commandInput').setAttribute('aria-expanded','true');renderCommands();openDialog('commandDialog');$('commandInput').focus?.();}
+function openCommandPalette(){updateHistoryControls();commandPreviousFocus=document.activeElement||null;commandPaletteOpen=true;selectedCommand=0;$('commandInput').value='';$('commandInput').setAttribute('aria-expanded','true');renderCommands();openDialog('commandDialog');$('commandInput').focus?.();}
 function closeCommandPalette(){commandPaletteOpen=false;$('commandInput').setAttribute('aria-expanded','false');closeDialog('commandDialog');if(commandPreviousFocus?.isConnected)commandPreviousFocus.focus?.();else editor?.focus();}
 async function executeCommand(index=selectedCommand){const command=filteredCommands[Number(index)];if(!command||!commandEnabled(command))return;closeCommandPalette();try{if(command.run)await command.run();else{const button=$(command.button);if(button.click)button.click();else await button.onclick?.();}}catch(error){warn(error);}}
 function moveCommandSelection(delta){if(!filteredCommands.length)return;for(let steps=0;steps<filteredCommands.length;steps++){selectedCommand=(selectedCommand+delta+filteredCommands.length)%filteredCommands.length;if(commandEnabled(filteredCommands[selectedCommand]))break;}renderCommands();$('commandList').querySelector?.('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});}
@@ -1262,7 +1421,7 @@ $('navigatorBackdrop').onclick=()=>toggleNavigator(false);
 $('btnProblems').onclick=()=>toggleBottomPanel('problems',undefined,$('btnProblems'));
 $('btnLog').onclick=()=>toggleBottomPanel('log',undefined,$('btnLog'));
 $('btnBottomClose').onclick=()=>{toggleBottomPanel(bottomPanelKind,false);restoreWorkspaceFocus(bottomPanelTrigger);};
-$('btnModelStatus').onclick=()=>{openDialog('settingsDialog');loadConfig().catch(warn);};
+$('btnModelStatus').onclick=openModelSettings;
 $('btnQuickOutline').onclick=openOutline;
 $('btnTogglePreview').onclick=togglePreviewPane;
 
@@ -1287,7 +1446,7 @@ function closeExportMenu(restoreFocus=true){if(openWorkspaceMenu==='exportMenu')
 function setPdfAvailable(available){$('btnPdf').classList.remove('hide');$('btnPdf').disabled=!available;$('btnPdf').setAttribute('aria-disabled',String(!available));}
 $('btnExportMenu').onclick=()=>toggleExportMenu();
 $('btnWorkspaceSettings').onclick=()=>toggleWorkspaceMenu('workspaceSettingsMenu',$('btnWorkspaceSettings'));
-$('btnEditorTools').onclick=()=>toggleWorkspaceMenu('editorToolsMenu',$('btnEditorTools'));
+$('btnEditorTools').onclick=()=>{updateHistoryControls();toggleWorkspaceMenu('editorToolsMenu',$('btnEditorTools'));};
 for(const id of ['exportMenu','workspaceSettingsMenu','editorToolsMenu']){
   const menu=$(id);
   for(const button of Array.from(menu.querySelectorAll?.('button')||[])){
