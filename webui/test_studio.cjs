@@ -277,6 +277,28 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     return {requires_review:true, fixed_content:fixed, original_sha256:hash(source), candidate_sha256:hash(fixed),
             problems_after:[], compile_before:{ok:true}, compile_after:{ok:true}};
   }
+  const same = resultFor('other file','other file');
+  context.noEditResult = {...same, problems_after:[{type:'formula',status:'NEEDS_HUMAN',line:15,reason:'unclosed_math'}],
+    compile_before:{compile_ok:false,log:'error: main.tex:15: Missing $ inserted'},
+    compile_after:{compile_ok:false,log:'error: !File ended while scanning use of section'}};
+  await run('applyResult(noEditResult)');
+  assert.equal(run('diffShown'),false);
+  assert.equal(get('btnAccept').disabled,true);
+  assert.equal(get('btnReject').disabled,true);
+  assert.equal(get('btnReport').disabled,false);
+  assert.match(get('reviewHint').textContent,/未生成修改.*1 项/);
+  assert.match(get('problems').innerHTML,/需人工/);
+  assert.match(get('pvStatus').textContent,/File ended while scanning/);
+  assert.match(get('pvLog').textContent,/File ended while scanning/);
+
+  context.cleanNoEditResult = same;
+  await run('applyResult(cleanNoEditResult)');
+  assert.match(get('reviewHint').textContent,/检查完成.*未生成修改/);
+  context.failedNoEditResult = {...same, compile_after:{compile_ok:false,log:'error: main.tex:4: Missing right'}};
+  await run('applyResult(failedNoEditResult)');
+  assert.match(get('reviewHint').textContent,/原文编译未通过/);
+  assert.match(get('pvStatus').textContent,/main.tex:4/);
+
   context.testEditor.setValue('source');
   context.guardResult = resultFor('source','candidate');
   await run('applyResult(guardResult)');

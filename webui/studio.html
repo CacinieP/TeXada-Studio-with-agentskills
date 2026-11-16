@@ -352,6 +352,12 @@ $("pvPrevious").onclick = () => { if (previewPage > 0) { previewPage--; renderPr
 $("pvNext").onclick = () => { if (previewPage < previewPages.length - 1) { previewPage++; renderPreviewPage(); } };
 $("pvZoomFit").onclick = () => { pvZoom = "fit"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
 $("pvZoom100").onclick = () => { pvZoom = "raw"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
+function compileErrorSummary(log) {
+  const lines = String(log || "").split(/\r?\n/).map(line => line.trim());
+  const diagnostic = lines.find(line => /^error:\s*main\.tex:\d+:/i.test(line))
+    || lines.find(line => /^error:\s*!|^!\s/.test(line));
+  return diagnostic?.replace(/^error:\s*!?\s*|^!\s*/i,"").slice(0,240) || "";
+}
 async function compilePreview(content) {
   if (!curName || !editor?.getModel()) return;
   const epoch = ++previewEpoch, name = curName;
@@ -373,7 +379,10 @@ async function compilePreview(content) {
       if (lastPreviewTag || d.pdf) setPdfAvailable(true);
       if (!previewPages.length && d.log) { $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log; }
     } else {
-      previewPages = []; $("pvStatus").textContent = "未能生成 PDF，请查看编译详情。"; $("pvTabStatus").textContent = "编译未通过";
+      previewPages = [];
+      const summary = compileErrorSummary(d.log);
+      $("pvStatus").textContent = summary ? "编译未通过：" + summary : "未能生成 PDF，请查看编译详情。";
+      $("pvTabStatus").textContent = "编译未通过";
       $("pvLog").classList.remove("hide"); $("pvLog").textContent = d.log || "编译器未返回详细信息。";
       $("pvImgWrap").innerHTML = '<div class="preview-empty"><b>▤</b>修正源码后，再试一次编译。</div>';
     }
@@ -439,7 +448,35 @@ async function applyResult(res, source = null) {
   source = source || await captureSource();
   await validateCandidate(res, source);
   if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
-  ++previewEpoch; lastResult = res; lastCandidateSource = source;
+  const unchanged = res.fixed_content === source.content;
+  lastResult = res; lastCandidateSource = unchanged ? null : source;
+  if (unchanged) {
+    const failed = [res.compile_after,res.compile_before].find(
+      outcome=>outcome && outcome.status !== "NOT_CHECKED" && !(outcome.compile_ok ?? outcome.ok)
+    );
+    const problems = res.problems_after;
+    disposeDiff();
+    $("btnDiff").disabled = true;
+    $("tab-diff").setAttribute("aria-disabled", "true");
+    $("btnAccept").disabled = true; $("btnReject").disabled = true; $("btnReport").disabled = false;
+    showCenter("edit"); toggleAgentDrawer(true,$("btnAgent"));
+    renderProblems(problems);
+    $("compile").textContent = failed ? "原文编译未通过" : res.compile_after.ok ? "原文编译通过" : "原文编译未检查";
+    $("preview").textContent = "本次没有需要审阅的差异。";
+    $("reviewHint").textContent = problems.length
+      ? `未生成修改。还有 ${problems.length} 项待核对。`
+      : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
+    if (failed) {
+      const summary = compileErrorSummary(failed.log);
+      invalidatePreview(summary ? "编译未通过：" + summary : "原文编译未通过，请查看诊断。");
+      $("pvTabStatus").textContent = "编译未通过";
+      $("pvLog").textContent = failed.log || "编译器未返回详细信息。";
+      $("pvLog").classList.remove("hide");
+    }
+    if (problems.length) toggleBottomPanel("problems",true,$("btnFix"));
+    return;
+  }
+  ++previewEpoch;
   $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
@@ -721,7 +758,7 @@ async function restoreJob(id,name) {
   if (name && name !== curName) { if (!discardAllowed()) return; await loadFile(name,true); }
   if (await sha256Text(editor.getValue()) !== d.result.original_sha256) return toast("当前原文与历史任务不同。记录已显示，候选不能应用到此版本。",true);
   if (d.result.local_decision || d.review?.decision) return toast("此候选已有审阅决定，请创建新的修复任务。");
-  await applyResult(d.result); closeDialog("historyDialog"); toast("历史候选已恢复，请审阅差异。");
+  await applyResult(d.result); closeDialog("historyDialog"); toast(d.result.fixed_content === editor.getValue() ? "已恢复历史检查结果。" : "历史候选已恢复，请审阅差异。");
 }
 for (const id of ["jobs","historyJobs"]) $(id).addEventListener("click", e => {
   const item=e.target.closest?.("[data-job]"); if (item) restoreJob(item.dataset.job,item.dataset.name).catch(warn);
