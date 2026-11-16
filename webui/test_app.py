@@ -200,6 +200,26 @@ class AppTest(unittest.TestCase):
         self.assertIn("二项式展开", body["log"])
         self.assertIn("\ufffd", body["log"])
 
+    def test_compile_location_uses_source_error_before_log_tail(self):
+        messages = (b"error: nested/main.tex:1: nested error\n"
+                    b"error: main.tex:99: detached line\n"
+                    b"error: ./main.tex:2: Missing delimiter\n" + b"long trace\n" * 300)
+        compiler = SimpleNamespace(returncode=1, stdout=b"", stderr=messages)
+        with patch.object(studio.subprocess, "run", return_value=compiler):
+            response = self.client.post("/api/studio/preview", params=self.auth,
+                                        json={"name": "example.tex", "content": "one\ntwo"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["diagnostic"], {"line": 2, "message": "Missing delimiter"})
+
+    def test_external_file_diagnostic_never_jumps_into_current_document(self):
+        compiler = SimpleNamespace(returncode=1, stdout=b"",
+                                   stderr=b"error: include.tex:2: undefined macro\nl.2 included text")
+        with patch.object(studio.subprocess, "run", return_value=compiler):
+            response = self.client.post("/api/studio/preview", params=self.auth,
+                                        json={"name": "example.tex", "content": "one\ntwo"})
+        self.assertIsNone(response.json()["diagnostic"])
+        self.assertIn("include.tex:2", response.json()["log"])
+
     def test_failed_compile_log_reaches_the_repair_job(self):
         job_id = "e" * 32
         failure = {"ok": False, "compile_ok": False, "log": "! File ended while scanning use of \\frac ."}

@@ -137,8 +137,19 @@ for(const tag of markup.matchAll(/<\/?([A-Za-z][\w:-]*)\b[^>]*>/g)) {
 }
 const get = id => elements.get(id);
 function model(value) {
-  return { value, version: 1, disposed: false, getValue() { return this.value; },
-    getVersionId() { return this.version; }, setValue(v) { this.value = v; this.version++; },
+  return { value, version: 1, disposed: false, undoHistory:[], redoHistory:[], getValue() { return this.value; },
+    getVersionId() { return this.version; },
+    setValue(v) { this.value = v; this.version++; this.undoHistory=[]; this.redoHistory=[]; },
+    getFullModelRange() { return {start:0,end:this.value.length}; },
+    pushStackElement() {},
+    pushEditOperations(_selections, [edit]) {
+      assert.deepEqual(edit.range, this.getFullModelRange());
+      this.undoHistory.push(this.value); this.redoHistory=[]; this.value=edit.text; this.version++;
+    },
+    canUndo() { return this.undoHistory.length > 0; },
+    canRedo() { return this.redoHistory.length > 0; },
+    undo() { this.redoHistory.push(this.value); this.value=this.undoHistory.pop(); this.version++; },
+    redo() { this.undoHistory.push(this.value); this.value=this.redoHistory.pop(); this.version++; },
     getOffsetAt(p) { return this.value.split('\n').slice(0, p.lineNumber - 1).reduce((n, s) => n + s.length + 1, 0) + p.column - 1; },
     dispose() { this.disposed = true; } };
 }
@@ -149,6 +160,7 @@ function editor(value = '') {
     setValue(value) { this.model.setValue(value); this.position=null; },
     getPosition() { return this.position || {lineNumber:1,column:(this.cursor || 0)+1}; },
     getSelection() { const p=this.getPosition(); return this.selection || {getStartPosition:()=>p,getEndPosition:()=>p}; },
+    getSelections() { return [this.getSelection()]; },
     options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true;context.document.activeElement=this===context.testEditor?get('editor'):get('diff'); },
     getAction(id) { return {run:async()=>{this.lastAction=id;}}; },
     dispose() { this.disposed = true; },
@@ -277,6 +289,28 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     return {requires_review:true, fixed_content:fixed, original_sha256:hash(source), candidate_sha256:hash(fixed),
             problems_after:[], compile_before:{ok:true}, compile_after:{ok:true}};
   }
+  const same = resultFor('other file','other file');
+  context.noEditResult = {...same, problems_after:[{type:'formula',status:'NEEDS_HUMAN',line:15,reason:'unclosed_math'}],
+    compile_before:{compile_ok:false,log:'error: main.tex:15: Missing $ inserted'},
+    compile_after:{compile_ok:false,log:'error: !File ended while scanning use of section'}};
+  await run('applyResult(noEditResult)');
+  assert.equal(run('diffShown'),false);
+  assert.equal(get('btnAccept').disabled,true);
+  assert.equal(get('btnReject').disabled,true);
+  assert.equal(get('btnReport').disabled,false);
+  assert.match(get('reviewHint').textContent,/未生成修改.*1 项/);
+  assert.match(get('problems').innerHTML,/需人工/);
+  assert.match(get('pvStatus').textContent,/File ended while scanning/);
+  assert.match(get('pvLog').textContent,/File ended while scanning/);
+
+  context.cleanNoEditResult = same;
+  await run('applyResult(cleanNoEditResult)');
+  assert.match(get('reviewHint').textContent,/检查完成.*未生成修改/);
+  context.failedNoEditResult = {...same, compile_after:{compile_ok:false,log:'error: main.tex:4: Missing right'}};
+  await run('applyResult(failedNoEditResult)');
+  assert.match(get('reviewHint').textContent,/原文编译未通过/);
+  assert.match(get('pvStatus').textContent,/main.tex:4/);
+
   context.testEditor.setValue('source');
   context.guardResult = resultFor('source','candidate');
   await run('applyResult(guardResult)');
@@ -297,6 +331,24 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnSave').disabled,false,'accepted candidate must be immediately saveable');
   await get('btnAccept').onclick();
   assert.equal(context.testEditor.model.version,beforeVersion+1,'duplicate adoption must not apply again');
+  const historyModel=context.testEditor.model;
+  context.testEditor.setValue('earlier source');
+  historyModel.pushEditOperations([], [{range:historyModel.getFullModelRange(),text:'manually edited'}]);
+  context.historyCandidate=resultFor('manually edited','candidate line one\ncandidate line two');
+  await run('applyResult(historyCandidate)');
+  await get('btnAccept').onclick();
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'manually edited','one undo reverses the entire candidate');
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'earlier source','manual edits remain in the history before the candidate');
+  await get('btnRedo').onclick();
+  await get('btnRedo').onclick();
+  assert.equal(context.testEditor.getValue(),'candidate line one\ncandidate line two');
+  assert.equal(context.historyCandidate.local_decision,'accept');
+  context.testEditor.setValue('different document');
+  run('updateHistoryControls()');
+  assert.equal(get('btnUndo').disabled,true,'replacing the loaded document resets its history');
+
 
   function handoffResult(body) {
     const points=Array.from(body.content), range=body.source_range;
@@ -412,6 +464,25 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.doesNotMatch(get('pvImgWrap').innerHTML,/<img/,'invalidating a version removes its stale page, not just its export binding');
   assert.equal(get('pvLog').textContent,'','previous-document compiler details must not remain attached to the new version');
   assert.equal(get('pvLog').classList.contains('hide'),true);
+
+  context.testEditor.setValue('line one\nline two');
+  context.locatedFailure=async()=>({compile_ok:false,log:'compiled stderr',diagnostic:{line:2,message:'Undefined control sequence'}});
+  run('j=locatedFailure');
+  await pageCompilePreview('line one\nline two');
+  assert.equal(get('btnCompileLocation').hidden,false);
+  assert.equal(get('btnCompileLocation').textContent,'转到第 2 行');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position.lineNumber,2);
+  context.testEditor.setValue('different source');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position,null,'a stale location does not move the cursor');
+  run('invalidatePreview()');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  context.unlocatedFailure=async()=>({compile_ok:false,log:'error: included.tex:2: failure',diagnostic:null});
+  run('j=unlocatedFailure');
+  await pageCompilePreview('different source');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  assert.match(get('pvLog').textContent,/included.tex/);
 
   // Even a response whose PDF bytes arrive later must keep its source binding.
   context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};setPdfAvailable(true);");
@@ -935,8 +1006,13 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   // Problem links dismiss floating review/navigation and focus the requested source line.
   get('activityAgent').click();
   context.testEditor.focused=false;
-  const problemHandler=get('problems').innerHTML.match(/onclick="([^"]+)"/)?.[1];
-  assert.ok(problemHandler,'rendered problem exposes a working line action');run(problemHandler);
+  run("renderProblems([{type:'formula',status:'NEEDS_HUMAN',line:3,latex:'x_+',reason:'Missing <index>'}])");
+  assert.match(get('problems').innerHTML,/<button[^>]*data-problem-line="3"/);
+  assert.match(get('problems').innerHTML,/Missing &lt;index&gt;/);
+  const openProblem=()=>get('problems').listeners.get('click')({target:{
+    closest:()=>({dataset:{problemLine:"3"}})
+  }});
+  openProblem();
   assert.equal(get('inspectorBackdrop').classList.contains('hide'),true);
   assert.equal(get('navigatorBackdrop').classList.contains('hide'),true);
   assert.equal(context.testEditor.position.lineNumber,3);

@@ -368,6 +368,19 @@ def _subprocess_text(value) -> str:
     return value
 
 
+def _source_compile_error(output: str, source: Path, line_count: int):
+    """Return a location only when Tectonic names the compiled source file."""
+    source_paths = {source.name, "./" + source.name, str(source)}
+    for match in _re.finditer(r"^error:[ \t]*([^:\r\n]+):(\d{1,8}):[ \t]*([^\r\n]+)", output, _re.M):
+        filename, line, message = match.groups()
+        if filename not in source_paths:
+            continue
+        number = int(line)
+        if 1 <= number <= line_count:
+            return {"line": number, "message": message.strip()[:240]}
+    return None
+
+
 def _append_compiler_log(log, outcome) -> None:
     """失败时把编译器原文写进任务日志，成功时不重复成功输出。"""
     if outcome.get("ok"):
@@ -403,9 +416,12 @@ def _studio_compile(content: str, name: str, tag: str):
             return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
-        log = (_subprocess_text(run.stderr) or _subprocess_text(run.stdout))[-2400:]
+        output = _subprocess_text(run.stderr) or _subprocess_text(run.stdout)
+        log = output[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
-            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。"}
+            diagnostic = _source_compile_error(output, texf, content.count("\n") + 1)
+            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。",
+                    "diagnostic": diagnostic}
         base = f"/api/studio/preview/{quote(name)}/{tag}"
         result.update(compile_ok=True, pdf=f"/api/studio/pdf/{quote(name)}/{tag}", log=log)
         page_count = 1
