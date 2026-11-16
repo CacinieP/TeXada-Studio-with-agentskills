@@ -132,8 +132,11 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
                 if candidate.exists():
                     return str(candidate)
             return None
-        if entry.startswith("@executable_path") or entry.startswith("@loader_path"):
-            return None  # 同包内引用,重写后自洽
+        if entry.startswith("@loader_path/"):
+            candidate = loader_dir / entry.removeprefix("@loader_path/")
+            return str(candidate) if candidate.is_file() else None
+        if entry.startswith("@executable_path/"):
+            return None  # @executable_path is relative to the root binary.
         return entry if Path(entry).exists() else None
 
     def is_system(path: str) -> bool:
@@ -165,7 +168,7 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
                 shutil.copy2(source, target)
                 os.chmod(target, 0o755)
             relocated[source] = target
-            queue.append((target, Path(source).parent))
+            queue.append((target, Path(source).resolve().parent))
         for entry in dependencies:
             source = resolve(entry, rpaths, loader_dir)
             if source is None or is_system(source):
@@ -224,6 +227,8 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
             originals[str(staging / "bin" / name)] = tool
         count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
+        for name, flag in (("tectonic", "--version"), ("pdfinfo", "-v"), ("pdftoppm", "-v")):
+            run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
