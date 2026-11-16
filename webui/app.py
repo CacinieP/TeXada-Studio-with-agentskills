@@ -531,10 +531,12 @@ def _verify_formula(latex: str):
         return {"status": "NEEDS_ENV", "reason": "公式检查器不可用，请检查 SymPy / antlr 依赖与服务日志"}
 
 
-def _formula_problems(content: str, emit=None):
+def _formula_problems(content: str, emit=None, *, deterministic_only=False):
     problems = []
     parsed = analyze_math(content)
     for node in parsed["nodes"]:
+        if deterministic_only and (not node["checkable"] or deterministic_candidate(node["latex"]) is None):
+            continue
         if node["checkable"]:
             vj = _verify_formula(node["latex"])
         else:
@@ -696,13 +698,14 @@ def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, rem
     return {"accepted": accepted, "check": check, "scope": scope, "reason": reason}
 
 
-def _apply_fixes(content: str, log, *, provider=None, emit=None):
+def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True):
     provider = provider if provider is not None else PROVIDER
-    if provider is None:
+    if use_model and provider is None:
         provider = _new_provider()
     emit = emit or (lambda action, **fields: None)
     edits, replacements = [], []
-    fp = _formula_problems(content, emit)
+    fp = (_formula_problems(content, emit) if use_model
+          else _formula_problems(content, emit, deterministic_only=True))
     verifier_unavailable = False
     for p in fp:
         if verifier_unavailable or p["status"] == "NEEDS_ENV":
@@ -743,7 +746,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
             else:
                 previous_candidate, rejection_reason = deterministic, _formula_rejection_feedback(outcome)
                 feedback_check = outcome["check"]
-        for attempt in (() if ok or verifier_unavailable else (1, 2)):
+        for attempt in (() if ok or verifier_unavailable or not use_model else (1, 2)):
             log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 模型文本修复（第 {attempt} 次）")
             context = _formula_repair_context(attempt, feedback_check, previous_candidate, rejection_reason)
             emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex, repair_context=context)
@@ -963,16 +966,36 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         emit("CANDIDATE_EDIT", **{k: v for k, v in edit.items() if k not in {"start", "end"}})
     public_edits = [{k: v for k, v in edit.items() if k not in {"start", "end"}} for edit in edits]
     log.append(f"[planner] 执行 {summary['executed']}，拒绝 {summary['rejected']}；候选需人工采用")
+    if any(node["state"] not in {"ok", "candidate"} for node in summary["nodes"]):
+        # Only independently reproducible patches can proceed after a model deferral.
+        resolved = set()
+
+        def emit_fallback(action, **fields):
+            if action == "CANDIDATE_EDIT" and fields.get("node_id", "").startswith("f-"):
+                resolved.add(fields["node_id"])
+            emit(action, **fields)
+
+        fixed, local_edits = _apply_fixes(fixed, log, emit=emit_fallback, use_model=False)
+        public_edits.extend(local_edits)
+        if local_edits:
+            summary["deterministic_resolved"] = sorted(resolved)
+            emit("DETERMINISTIC_FALLBACK", edits=len(local_edits), model_calls=0)
+            log.append(f"[studio] 规划后确认 {len(local_edits)} 处确定性修复")
     return fixed, public_edits, summary
 
 
-def _planned_problems(summary):
-    # Planner candidates have already been checked. Re-running the whole source
-    # here would execute unchosen checks after a refusal or an exhausted budget.
-    return [{"id": node["id"], "type": "formula" if node["kind"] == "formula" else "table_total",
-             "line": node.get("line", 1), "status": "NEEDS_HUMAN",
-             "reason": node.get("human_reason", "planner_unresolved")}
-            for node in summary["nodes"] if node["state"] not in {"ok", "candidate"}]
+def _planned_problems(summary, content):
+    problems = []
+    resolved = set(summary.get("deterministic_resolved", ()))
+    for node in summary["nodes"]:
+        if node["state"] in {"ok", "candidate"} or node["id"] in resolved:
+            continue
+        if node["kind"] == "table":
+            problems.extend(_table_problems(content))
+        else:
+            problems.append({"id": node["id"], "type": "formula", "line": node.get("line", 1),
+                             "status": "NEEDS_HUMAN", "reason": node.get("human_reason", "planner_unresolved")})
+    return problems
 
 
 def _job_path(job_id):
@@ -1091,7 +1114,8 @@ def _studio_job(name: str, content: str, job_id: str):
         _append_compiler_log(log, after)
         job["result"] = {"fixed_content": fixed, "edits": edits,
                          "compile_before": before, "compile_after": after,
-                         "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
+                         "problems_after": (_planned_problems(planner_summary, fixed)
+                                            if planner_summary is not None else _analyze(fixed)),
                          "model": getattr(provider, "model", REPAIR_MODEL) if model_calls else None,
                          "configured_model": getattr(provider, "model", REPAIR_MODEL), "model_calls": model_calls,
                          "provider": provider.name if model_calls else "deterministic-checks",
