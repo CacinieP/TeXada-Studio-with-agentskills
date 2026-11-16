@@ -137,8 +137,19 @@ for(const tag of markup.matchAll(/<\/?([A-Za-z][\w:-]*)\b[^>]*>/g)) {
 }
 const get = id => elements.get(id);
 function model(value) {
-  return { value, version: 1, disposed: false, getValue() { return this.value; },
-    getVersionId() { return this.version; }, setValue(v) { this.value = v; this.version++; },
+  return { value, version: 1, disposed: false, undoHistory:[], redoHistory:[], getValue() { return this.value; },
+    getVersionId() { return this.version; },
+    setValue(v) { this.value = v; this.version++; this.undoHistory=[]; this.redoHistory=[]; },
+    getFullModelRange() { return {start:0,end:this.value.length}; },
+    pushStackElement() {},
+    pushEditOperations(_selections, [edit]) {
+      assert.deepEqual(edit.range, this.getFullModelRange());
+      this.undoHistory.push(this.value); this.redoHistory=[]; this.value=edit.text; this.version++;
+    },
+    canUndo() { return this.undoHistory.length > 0; },
+    canRedo() { return this.redoHistory.length > 0; },
+    undo() { this.redoHistory.push(this.value); this.value=this.undoHistory.pop(); this.version++; },
+    redo() { this.undoHistory.push(this.value); this.value=this.redoHistory.pop(); this.version++; },
     getOffsetAt(p) { return this.value.split('\n').slice(0, p.lineNumber - 1).reduce((n, s) => n + s.length + 1, 0) + p.column - 1; },
     dispose() { this.disposed = true; } };
 }
@@ -149,6 +160,7 @@ function editor(value = '') {
     setValue(value) { this.model.setValue(value); this.position=null; },
     getPosition() { return this.position || {lineNumber:1,column:(this.cursor || 0)+1}; },
     getSelection() { const p=this.getPosition(); return this.selection || {getStartPosition:()=>p,getEndPosition:()=>p}; },
+    getSelections() { return [this.getSelection()]; },
     options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true;context.document.activeElement=this===context.testEditor?get('editor'):get('diff'); },
     getAction(id) { return {run:async()=>{this.lastAction=id;}}; },
     dispose() { this.disposed = true; },
@@ -319,6 +331,24 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnSave').disabled,false,'accepted candidate must be immediately saveable');
   await get('btnAccept').onclick();
   assert.equal(context.testEditor.model.version,beforeVersion+1,'duplicate adoption must not apply again');
+  const historyModel=context.testEditor.model;
+  context.testEditor.setValue('earlier source');
+  historyModel.pushEditOperations([], [{range:historyModel.getFullModelRange(),text:'manually edited'}]);
+  context.historyCandidate=resultFor('manually edited','candidate line one\ncandidate line two');
+  await run('applyResult(historyCandidate)');
+  await get('btnAccept').onclick();
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'manually edited','one undo reverses the entire candidate');
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'earlier source','manual edits remain in the history before the candidate');
+  await get('btnRedo').onclick();
+  await get('btnRedo').onclick();
+  assert.equal(context.testEditor.getValue(),'candidate line one\ncandidate line two');
+  assert.equal(context.historyCandidate.local_decision,'accept');
+  context.testEditor.setValue('different document');
+  run('updateHistoryControls()');
+  assert.equal(get('btnUndo').disabled,true,'replacing the loaded document resets its history');
+
 
   function handoffResult(body) {
     const points=Array.from(body.content), range=body.source_range;
