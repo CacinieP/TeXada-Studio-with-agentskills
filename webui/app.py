@@ -18,6 +18,7 @@ import threading
 import time
 from pathlib import Path
 from urllib.parse import quote
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -26,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
 from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
+from managed_models import ManagedModels
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -41,7 +43,15 @@ def _tectonic_command():
     """编译器命令;每次读取环境,使会话内安装的 Tectonic 立即生效。"""
     return os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
-app = FastAPI(title="TeXada Studio Local")
+@asynccontextmanager
+async def lifespan(_app):
+    try:
+        yield
+    finally:
+        managed_models.close()
+
+
+app = FastAPI(title="TeXada Studio Local", lifespan=lifespan)
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 
 
@@ -208,6 +218,7 @@ def index():
 @app.get("/api/nodeinfo")
 def nodeinfo(token: str = Query("")):
     _guard(token)
+    managed = managed_models.connection()
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
     configured_model = REPAIR_MODEL
@@ -220,7 +231,8 @@ def nodeinfo(token: str = Query("")):
             "python": platform.python_version(), "configured_model": configured_model,
             "model": configured_model,
             # 按任务模型契约(#23):状态接口暴露修复线与 OCR 线的实际模型。
-            "repair_model": REPAIR_MODEL, "ocr_model": OCR_MODEL,
+            "repair_model": managed["model"] if managed else REPAIR_MODEL,
+            "ocr_model": managed["model"] if managed else OCR_MODEL,
             # Empty legacy fields keep older clients compatible without probing hardware.
             "gpu": "", "mem": "", "models": ""}
 
@@ -304,6 +316,7 @@ OCR_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
+managed_models = ManagedModels(STUDIO_STATE)
 STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
@@ -318,8 +331,9 @@ def _new_provider(*, skill_selection=False):
     return OpenAICompatibleProvider(VLM_BASE_URL, REPAIR_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
-def _local_runtime():
-    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"), model=REPAIR_MODEL)
+def _local_runtime(*, managed=True):
+    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"),
+                        model=REPAIR_MODEL, active_model=managed_models.connection() if managed else None)
 
 
 try:
@@ -1150,10 +1164,40 @@ def studio_config(token: str = Query(""), probe: bool = False):
 @app.post("/api/studio/settings")
 def studio_settings(token: str = Query(""), body: dict = None):
     _guard(token)
-    result = _runtime_call(lambda: _local_runtime().update_settings(body))
+    with managed_models.lock:
+        active = managed_models.connection()
+        if active and active == body:
+            return _local_runtime().get_config()
+        job = managed_models.job
+        if job and job["action"] == "start" and job["state"] == "running":
+            raise HTTPException(status_code=409, detail="请等当前模型启动结束。")
+        result = _runtime_call(lambda: _local_runtime(managed=False).update_settings(body))
+        if active:
+            _runtime_call(managed_models.stop)
     # Settings are per-Studio; no user-global agent/model configuration is changed.
     return {**result, "local_mode": True, "offline": True,
             "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+
+
+def _guard_local_models(token):
+    _guard(token)
+    if os.environ.get("TEXADA_LOCAL_MODE", "1") != "1":
+        raise HTTPException(status_code=404, detail="内置模型仅用于本地 Studio。")
+
+
+@app.get("/api/studio/models")
+def studio_models(token: str = Query("")):
+    _guard_local_models(token)
+    return managed_models.status()
+
+
+@app.post("/api/studio/models/{action}")
+def studio_model_action(action: str, token: str = Query(""), body: dict = None):
+    _guard_local_models(token)
+    if action == "stop":
+        _runtime_call(managed_models.stop)
+        return managed_models.status()
+    return _runtime_call(lambda: managed_models.submit(action, (body or {}).get("profile")))
 
 
 @app.post("/api/studio/tools/install")

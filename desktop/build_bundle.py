@@ -194,7 +194,7 @@ def tex_cache_manifest(cache: Path) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def stage_resources(staging: Path, skip_poppler: bool) -> dict:
+def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool = False) -> dict:
     """把运行所需源码与数据放进 staging(其后整体合并进 .app/Contents/Resources)。"""
     sizes = {}
     copy_tree(REPO_ROOT / "webui", staging / "webui")
@@ -217,18 +217,27 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     shutil.copy2(TECTONIC, staging / "bin" / "tectonic")
     os.chmod(staging / "bin" / "tectonic", 0o755)
 
-    if not skip_poppler:
-        originals = {}
-        for name in ("pdfinfo", "pdftoppm"):
-            tool = shutil.which(name)
-            require(tool is not None, f"未找到 {name};先 brew install poppler")
-            shutil.copy2(tool, staging / "bin" / name)
-            os.chmod(staging / "bin" / name, 0o755)
-            originals[str(staging / "bin" / name)] = tool
+    originals = {}
+    tools = [] if skip_poppler else ["pdfinfo", "pdftoppm"]
+    if with_llama_server:
+        tools.append("llama-server")
+    for name in tools:
+        tool = shutil.which(name)
+        require(tool is not None, f"未找到 {name}；请安装所需的 Homebrew 构建依赖")
+        destination = staging / "bin" / name
+        shutil.copy2(tool, destination)
+        os.chmod(destination, 0o755)
+        originals[str(destination)] = str(Path(tool).resolve())
+    if with_llama_server:
+        license_file = Path(originals[str(staging / "bin" / "llama-server")]).parents[1] / "LICENSE"
+        require(license_file.is_file(), "未找到 llama.cpp 的 LICENSE")
+        shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
+    if tools:
         count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
-        for name, flag in (("tectonic", "--version"), ("pdfinfo", "-v"), ("pdftoppm", "-v")):
-            run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
+    for name in ["tectonic", *tools]:
+        flag = "-v" if name in {"pdfinfo", "pdftoppm"} else "--version"
+        run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
@@ -247,6 +256,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="构建自包含 TeXada Studio.app")
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "dist")
     parser.add_argument("--skip-poppler", action="store_true", help="不捆绑 Poppler(PDF 导入/预览仍需系统安装)")
+    parser.add_argument("--with-llama-server", action="store_true", help="捆绑 Homebrew llama.cpp 运行时")
     args = parser.parse_args(argv)
     args.output = args.output.expanduser().resolve()  # py2app 子进程以 desktop/ 为 cwd,必须绝对路径
     require(sys.platform == "darwin", "自包含包仅支持 macOS")
@@ -273,7 +283,7 @@ def main(argv=None) -> int:
         raise SystemExit("无法生成 Studio 图标：请检查品牌源图、sips 和 iconutil。")
 
     print("② 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
-    sizes = stage_resources(staging, args.skip_poppler)
+    sizes = stage_resources(staging, args.skip_poppler, args.with_llama_server)
     for area, size in sizes.items():
         print(f"   {area}: {size / 1_048_576:.1f} MiB")
 

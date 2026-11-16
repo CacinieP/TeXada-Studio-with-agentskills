@@ -116,6 +116,14 @@ macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口�
 
 ## 本机模型连接
 
+自包含 macOS 安装包可在「本地模型 → Studio 管理的模型」选择 MiniCPM-V 4.7
+1B（约 1.8 GB）或 35B-A3B（约 22.3 GB），点击「下载模型」，校验完成后点击
+「启动并使用」。权重与视觉投影来自 OpenBMB，支持续传与 SHA-256 校验。
+Studio 在本机启动 llama-server，该模型同时供修复与图片转写使用。
+关闭 Studio 或点击「停止」会结束它启动的模型。此前保存的本机服务连接
+会重新生效。源码运行需先安装兼容的 llama.cpp（build 11609 或更新版本）。
+
+
 本地模式仅允许 HTTP 回环地址：`localhost`、`127.0.0.1`、`[::1]`。请求绕过环境与系统代理，拒绝重定向，不读取或发送云 API Key，也没有云端自动回退。
 
 支持 OpenAI-compatible `/v1/models` 和 `/v1/chat/completions`。图片识别还需要端点实际支持 `image_url`。仅在模型列表中看到名称，不等于已验证该端点的视觉能力。

@@ -233,10 +233,11 @@ def _document(candidate_pages):
 
 
 class LocalRuntime:
-    def __init__(self, state_dir, *, base_url=None, model=None):
+    def __init__(self, state_dir, *, base_url=None, model=None, active_model=None):
         self.state_dir = Path(state_dir)
         self.settings_path = self.state_dir / "local-runtime.json"
         self._lock = threading.RLock()
+        self._active_model = active_model
         self._defaults = {"base_url": validate_base_url(base_url or DEFAULT_BASE), "model": _model_name(model or DEFAULT_MODEL)}
 
     def _settings(self):
@@ -253,7 +254,7 @@ class LocalRuntime:
 
     def get_config(self):
         with self._lock:
-            values = self._settings()
+            values = self._active_model or self._settings()
         return {**values, "local_mode": True, "offline": True, "model_available": None,
                 "tools": {name: bool(shutil.which(name)) for name in ("tectonic", "pdftoppm", "pdfinfo")},
                 "limits": {"file_bytes": MAX_FILE_BYTES, "pdf_pages": MAX_PDF_PAGES,
