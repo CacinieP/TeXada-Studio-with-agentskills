@@ -140,8 +140,19 @@ for(const tag of markup.matchAll(/<\/?([A-Za-z][\w:-]*)\b[^>]*>/g)) {
 }
 const get = id => elements.get(id);
 function model(value) {
-  return { value, version: 1, disposed: false, getValue() { return this.value; },
-    getVersionId() { return this.version; }, setValue(v) { this.value = v; this.version++; },
+  return { value, version: 1, disposed: false, undoHistory:[], redoHistory:[], getValue() { return this.value; },
+    getVersionId() { return this.version; },
+    setValue(v) { this.value = v; this.version++; this.undoHistory=[]; this.redoHistory=[]; },
+    getFullModelRange() { return {start:0,end:this.value.length}; },
+    pushStackElement() {},
+    pushEditOperations(_selections, [edit]) {
+      assert.deepEqual(edit.range, this.getFullModelRange());
+      this.undoHistory.push(this.value); this.redoHistory=[]; this.value=edit.text; this.version++;
+    },
+    canUndo() { return this.undoHistory.length > 0; },
+    canRedo() { return this.redoHistory.length > 0; },
+    undo() { this.redoHistory.push(this.value); this.value=this.undoHistory.pop(); this.version++; },
+    redo() { this.undoHistory.push(this.value); this.value=this.redoHistory.pop(); this.version++; },
     getOffsetAt(p) { return this.value.split('\n').slice(0, p.lineNumber - 1).reduce((n, s) => n + s.length + 1, 0) + p.column - 1; },
     dispose() { this.disposed = true; } };
 }
@@ -152,6 +163,7 @@ function editor(value = '') {
     setValue(value) { this.model.setValue(value); this.position=null; },
     getPosition() { return this.position || {lineNumber:1,column:(this.cursor || 0)+1}; },
     getSelection() { const p=this.getPosition(); return this.selection || {getStartPosition:()=>p,getEndPosition:()=>p}; },
+    getSelections() { return [this.getSelection()]; },
     options:{}, layout() {}, updateOptions(options) { this.options={...this.options,...options}; }, revealLineInCenter(line) { this.line = line; }, setPosition(position) { this.position=position; }, focus() { this.focused=true;context.document.activeElement=this===context.testEditor?get('editor'):get('diff'); },
     getAction(id) { return {run:async()=>{this.lastAction=id;}}; },
     dispose() { this.disposed = true; },
@@ -287,6 +299,29 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     return {requires_review:true, fixed_content:fixed, original_sha256:hash(source), candidate_sha256:hash(fixed),
             problems_after:[], compile_before:{ok:true}, compile_after:{ok:true}};
   }
+  const same = resultFor('other file','other file');
+  context.noEditResult = {...same, problems_after:[{type:'formula',status:'NEEDS_HUMAN',line:15,reason:'unclosed_math'}],
+    compile_before:{compile_ok:false,log:'error: main.tex:15: Missing $ inserted'},
+    compile_after:{compile_ok:false,log:'error: !File ended while scanning use of section'}};
+  await run('applyResult(noEditResult)');
+  assert.equal(run('diffShown'),false);
+  assert.equal(get('btnAccept').disabled,true);
+  assert.equal(get('btnReject').disabled,true);
+  assert.equal(get('btnReport').disabled,false);
+  assert.match(get('reviewHint').textContent,/未生成修改.*1 项/);
+  assert.match(get('problems').innerHTML,/需人工/);
+  assert.match(get('pvStatus').textContent,/File ended while scanning/);
+  assert.match(get('pvLog').textContent,/File ended while scanning/);
+
+  context.cleanNoEditResult = same;
+  await run('applyResult(cleanNoEditResult)');
+  assert.match(get('reviewHint').textContent,/检查完成.*未生成修改/);
+  assert.match(get('pvStatus').textContent,/检查完成.*未生成修改/);
+  context.failedNoEditResult = {...same, compile_after:{compile_ok:false,log:'error: main.tex:4: Missing right'}};
+  await run('applyResult(failedNoEditResult)');
+  assert.match(get('reviewHint').textContent,/原文编译未通过/);
+  assert.match(get('pvStatus').textContent,/main.tex:4/);
+
   context.testEditor.setValue('source');
   context.guardResult = resultFor('source','candidate');
   await run('applyResult(guardResult)');
@@ -307,6 +342,24 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnSave').disabled,false,'accepted candidate must be immediately saveable');
   await get('btnAccept').onclick();
   assert.equal(context.testEditor.model.version,beforeVersion+1,'duplicate adoption must not apply again');
+  const historyModel=context.testEditor.model;
+  context.testEditor.setValue('earlier source');
+  historyModel.pushEditOperations([], [{range:historyModel.getFullModelRange(),text:'manually edited'}]);
+  context.historyCandidate=resultFor('manually edited','candidate line one\ncandidate line two');
+  await run('applyResult(historyCandidate)');
+  await get('btnAccept').onclick();
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'manually edited','one undo reverses the entire candidate');
+  await get('btnUndo').onclick();
+  assert.equal(context.testEditor.getValue(),'earlier source','manual edits remain in the history before the candidate');
+  await get('btnRedo').onclick();
+  await get('btnRedo').onclick();
+  assert.equal(context.testEditor.getValue(),'candidate line one\ncandidate line two');
+  assert.equal(context.historyCandidate.local_decision,'accept');
+  context.testEditor.setValue('different document');
+  run('updateHistoryControls()');
+  assert.equal(get('btnUndo').disabled,true,'replacing the loaded document resets its history');
+
 
   function handoffResult(body) {
     const points=Array.from(body.content), range=body.source_range;
@@ -422,6 +475,25 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.doesNotMatch(get('pvImgWrap').innerHTML,/<img/,'invalidating a version removes its stale page, not just its export binding');
   assert.equal(get('pvLog').textContent,'','previous-document compiler details must not remain attached to the new version');
   assert.equal(get('pvLog').classList.contains('hide'),true);
+
+  context.testEditor.setValue('line one\nline two');
+  context.locatedFailure=async()=>({compile_ok:false,log:'compiled stderr',diagnostic:{line:2,message:'Undefined control sequence'}});
+  run('j=locatedFailure');
+  await pageCompilePreview('line one\nline two');
+  assert.equal(get('btnCompileLocation').hidden,false);
+  assert.equal(get('btnCompileLocation').textContent,'转到第 2 行');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position.lineNumber,2);
+  context.testEditor.setValue('different source');
+  get('btnCompileLocation').onclick();
+  assert.equal(context.testEditor.position,null,'a stale location does not move the cursor');
+  run('invalidatePreview()');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  context.unlocatedFailure=async()=>({compile_ok:false,log:'error: included.tex:2: failure',diagnostic:null});
+  run('j=unlocatedFailure');
+  await pageCompilePreview('different source');
+  assert.equal(get('btnCompileLocation').hidden,true);
+  assert.match(get('pvLog').textContent,/included.tex/);
 
   // Even a response whose PDF bytes arrive later must keep its source binding.
   context.testEditor.setValue('PDF A');run("curName='a.tex';showCenter('edit');lastPreviewTag='live-a';previewBinding={name:'a.tex',content:'PDF A',pdf:'/api/studio/pdf/a.tex/live-a'};setPdfAvailable(true);");
@@ -600,9 +672,9 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnOcr').disabled,false);
 
   const ocrFailed=get('btnOcr').onclick();await flushOcr();
-  ocrRequests[5].reject(new Error('model unavailable'));await ocrFailed;
+  ocrRequests[5].reject(run("new Error('model unavailable')"));await ocrFailed;
   assert.equal(run('ocrRunning'),false);assert.equal(get('btnOcr').disabled,false,'a current failure can be retried');
-  assert.match(get('ocrHint').textContent,/识别未完成/);
+  assert.equal(get('ocrHint').textContent,'识别未完成：model unavailable');
   const ocrRetried=get('btnOcr').onclick();await flushOcr();
   assert.equal(ocrRequests[6].body.name,'B.png');
   ocrRequests[6].resolve(recognized('retry.tex','retry candidate'));await ocrRetried;
@@ -623,6 +695,13 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnOcrSplit').hidden,false);
   assert.equal(get('btnOcrMore').hidden,false);
   assert.match(get('btnOcrMore').textContent,/第 5 页起/,'continuation proposes the next batch');
+  let askedToDiscard=false;
+  context.confirm=()=>{askedToDiscard=true;return false;};
+  get('btnOcrMore').onclick();
+  assert.equal(askedToDiscard,true);
+  assert.equal(get('ocrDialog').open,true,'declining continuation preserves the current batch');
+  assert.equal(get('ocrStart').value,'3');
+  delete context.confirm;
   assert.match(get('ocrPageList').innerHTML,/data-ocr-page="3"/,'page checkboxes are rendered');
   assert.equal(run('JSON.stringify(checkedOcrPageNumbers())'),'[3,4]');
   const togglePage=(page,checked)=>get('ocrPageList').listeners.get('change')({target:{checked,dataset:{ocrPage:String(page)}}});
@@ -630,22 +709,41 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.match(get('ocrCandidate').value,/page three body/);
   assert.doesNotMatch(get('ocrCandidate').value,/page four body/,'unchecked pages drop out of the merged candidate');
   assert.equal(get('ocrCandidate').value.split('\\clearpage').length-1,0,'a single remaining page has no page break');
+  togglePage(3,false);
+  assert.equal(get('ocrCandidate').value,'','unchecking all pages clears the stale generated candidate');
+  assert.equal(get('btnOcrCreate').disabled,true);
+  assert.equal(get('btnOcrSplit').disabled,true);
+  togglePage(3,true);
+  assert.equal(get('btnOcrCreate').disabled,false);
   get('ocrCandidate').value='my manual edits';get('ocrCandidate').listeners.get('input')({});
   togglePage(3,false);
   assert.equal(get('ocrCandidate').value,'my manual edits','manual edits are never clobbered by page toggles');
   togglePage(3,true);togglePage(4,true);
   context.testEditor.setValue('split base');run("savedContent='split base';documentOrigin='local';busy=false;");
   let splitCreates=[];
-  context.createWire=(url,options)=>{const body=JSON.parse(options.body);splitCreates.push(body);return Promise.resolve({name:body.name});};
+  context.createWire=(url,options)=>{
+    if (url.includes('/files?')) return Promise.resolve({files:[]});
+    if (url.includes('/file?')) return Promise.resolve({content:splitCreates.at(-1).at(-1).content,sha256:'last-page',origin:'local'});
+    if (url.includes('/analyze?')) return Promise.resolve({problems:[]});
+    if (url.includes('/preview?')) return Promise.resolve({compile_ok:false});
+    assert.match(url,/\/create-split\?/);
+    splitCreates.push(JSON.parse(options.body).documents);
+    return splitCreates.length===1 ? Promise.reject(new Error('file conflict')) : Promise.resolve({ok:true});
+  };
   run('j=createWire');
   get('ocrName').value='split-doc.tex';
   await get('btnOcrSplit').onclick();
-  assert.equal(splitCreates.length,2,'each checked page becomes its own document');
-  assert.deepEqual(splitCreates.map(body=>body.name),['split-doc-第3页.tex','split-doc-第4页.tex']);
-  assert.match(splitCreates[0].content,/page three body/);
-  assert.match(splitCreates[1].content,/page four body/);
-  assert.match(splitCreates[0].content,/\\begin\{document\}/,'split documents remain compilable');
-  assert.match(splitCreates[0].content,/\\end\{document\}/);
+  assert.equal(get('ocrDialog').open,true,'a failed batch leaves the review open');
+  assert.equal(get('ocrCandidate').value,'my manual edits');
+  await get('btnOcrSplit').onclick();
+  assert.equal(splitCreates.length,2,'send one batch per attempt');
+  assert.equal(get('ocrStart').value,'5','saving the batch prepares the next source page');
+  const [firstPage,secondPage]=splitCreates[1];
+  assert.deepEqual(splitCreates[1].map(body=>body.name),['split-doc-第3页.tex','split-doc-第4页.tex']);
+  assert.match(firstPage.content,/page three body/);
+  assert.match(secondPage.content,/page four body/);
+  assert.match(firstPage.content,/\\begin\{document\}/,'split documents remain compilable');
+  assert.match(firstPage.content,/\\end\{document\}/);
   run('ocrReviewActive=true;openDialog("ocrDialog");');
   get('ocrName').value='retry.tex';get('ocrCandidate').value='retry candidate';
   run('savingDocument=true');await get('btnOcrCreate').onclick();
@@ -919,8 +1017,13 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   // Problem links dismiss floating review/navigation and focus the requested source line.
   get('activityAgent').click();
   context.testEditor.focused=false;
-  const problemHandler=get('problems').innerHTML.match(/onclick="([^"]+)"/)?.[1];
-  assert.ok(problemHandler,'rendered problem exposes a working line action');run(problemHandler);
+  run("renderProblems([{type:'formula',status:'NEEDS_HUMAN',line:3,latex:'x_+',reason:'Missing <index>'}])");
+  assert.match(get('problems').innerHTML,/<button[^>]*data-problem-line="3"/);
+  assert.match(get('problems').innerHTML,/Missing &lt;index&gt;/);
+  const openProblem=()=>get('problems').listeners.get('click')({target:{
+    closest:()=>({dataset:{problemLine:"3"}})
+  }});
+  openProblem();
   assert.equal(get('inspectorBackdrop').classList.contains('hide'),true);
   assert.equal(get('navigatorBackdrop').classList.contains('hide'),true);
   assert.equal(context.testEditor.position.lineNumber,3);
@@ -988,6 +1091,32 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('modelIndicator').dataset.state,'connected','a failed draft probe does not downgrade a different active model');
   assert.match(get('modelConnectionStatus').textContent,/已连接/);
   assert.equal(run('studioConfig.model'),'MiniCPM-V-4.7-1B');
+
+  let finishConfigRead;
+  context.delayedConfigWire=()=>new Promise(resolve=>{finishConfigRead=resolve;});
+  run('j=delayedConfigWire;openModelSettings()');
+  get('modelBaseUrl').value='http://127.0.0.1:11434/v1';
+  get('modelBaseUrl').listeners.get('input')();
+  get('modelName').value='minicpm-ocr:latest';
+  get('modelName').listeners.get('input')();
+  finishConfigRead(context.activeConfig);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(get('modelBaseUrl').value,'http://127.0.0.1:11434/v1','slow config reads preserve the edited address');
+  assert.equal(get('modelName').value,'minicpm-ocr:latest','slow config reads preserve the edited model');
+
+  const olderRead=run('loadConfig()');
+  let savedModelSettings;
+  context.saveModelWire=async(url,options)=>{
+    assert.match(url,/\/settings\?/);
+    savedModelSettings=JSON.parse(options.body);
+    return {...context.activeConfig,...savedModelSettings};
+  };
+  run('j=saveModelWire');
+  await get('btnSettingsSave').onclick();
+  finishConfigRead(context.activeConfig);
+  await olderRead;
+  assert.equal(savedModelSettings.model,'minicpm-ocr:latest');
+  assert.equal(run('studioConfig.model'),'minicpm-ocr:latest','pre-save reads cannot replace the confirmed settings');
   for(const node of domNodes)assert.doesNotMatch(node.textContent+node.innerHTML,/PRIVATE-(?:HOST|PLATFORM)-SENTINEL/);
 
   assert.match(html, /<script src="\/static\/monaco\/0\.52\.2\/min\/vs\/loader\.js"><\/script>/);
@@ -1018,6 +1147,62 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('preview').children[0].tagName, 'IMG');
   assert.equal(get('preview').children[0].alt, '修复候选 PDF 预览');
   assert.match(get('preview').children[0].src, /^\/api\/studio\/preview\/tok\.tex\/after-1\?page=1&token=/);
+
+  // scheduleManagedModelRefresh continues polling in background when job.action === 'start'
+  // even after settingsDialog is closed, so loadConfig(true) updates #localBadge on startup completion.
+  {
+    const scheduled = [];
+    const origSetTimeout = context.setTimeout;
+    const origJ = run('j');
+    try {
+      context.setTimeout = (fn, ms) => { scheduled.push({ fn, ms }); return scheduled.length; };
+      get('settingsDialog').open = false;
+      run(`modelDraftEdited = false; studioConfig = { local_mode: true, base_url: 'http://127.0.0.1:18147/v1', model: 'old-model' };`);
+      run(`managedModelStatus = {
+        runtime_available: true, active: null,
+        job: { profile: '1b', action: 'start', state: 'running', bytes: 0, total: 1 },
+        profiles: [{ id: '1b', name: '1B', model: 'minicpm-v4.7-1b-q4_k_m', size: 1000, downloaded: true }]
+      };`);
+      run('scheduleManagedModelRefresh()');
+      assert.equal(scheduled.length, 1, 'start job must continue polling even when settingsDialog is closed');
+      let probedAfterStart = false;
+      context.managedWire = async (url) => {
+        if (String(url).startsWith('/api/studio/models')) {
+          return {
+            runtime_available: true,
+            active: { base_url: 'http://127.0.0.1:43210/v1', model: 'minicpm-v4.7-1b-q4_k_m' },
+            job: { profile: '1b', action: 'start', state: 'done', bytes: 1, total: 1 },
+            profiles: [{ id: '1b', name: '1B', model: 'minicpm-v4.7-1b-q4_k_m', size: 1000, downloaded: true }],
+          };
+        }
+        if (String(url).includes('/api/studio/config') && String(url).includes('probe=true')) {
+          probedAfterStart = true;
+          return {
+            local_mode: true, offline: true, model_available: true,
+            base_url: 'http://127.0.0.1:43210/v1', model: 'minicpm-v4.7-1b-q4_k_m',
+            tools: { tectonic: true, pdftoppm: true, pdfinfo: true },
+          };
+        }
+        return {};
+      };
+      run('j = managedWire');
+      scheduled.shift().fn();
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+      assert.equal(probedAfterStart, true, 'completing background start job must trigger loadConfig(true)');
+      assert.equal(get('localBadge').textContent, '本地模型已连接');
+      assert.equal(get('modelName').value, 'minicpm-v4.7-1b-q4_k_m');
+
+      // By contrast, a download job does not need background polling when settingsDialog is closed.
+      scheduled.length = 0;
+      run(`managedModelStatus.job = { profile: '1b', action: 'download', state: 'running', bytes: 0, total: 1 };`);
+      run('scheduleManagedModelRefresh()');
+      assert.equal(scheduled.length, 0, 'download job stops UI polling while settingsDialog is closed');
+    } finally {
+      context.setTimeout = origSetTimeout;
+      context.origJ = origJ;
+      run('j = origJ');
+    }
+  }
 
   // formulaAtSelection skips $$...$$ display math, comments/\verb, and handles TeX \\ before $.
   for (const [doc, target, shouldRejectAt] of [

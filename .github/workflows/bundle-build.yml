@@ -71,12 +71,17 @@ jobs:
         run: |
           .venv/bin/python scripts/install_local_tools.py
           echo "$HOME/.texada/bin" >> "$GITHUB_PATH"
-      - name: Install Poppler
-        run: brew install poppler
+      - name: Install Poppler and llama.cpp
+        run: brew install poppler llama.cpp
       - name: Prepare TeX resource cache
         run: .venv/bin/python scripts/prepare-local-tex.py --download-resources
       - name: Build self-contained app
-        run: .venv/bin/python desktop/build_bundle.py --output dist-app
+        run: .venv/bin/python desktop/build_bundle.py --output dist-app --with-llama-server
+      - name: Verify Studio app icon
+        run: |
+          APP="dist-app/TeXada Studio.app/Contents"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Info.plist")" = AppIcon
+          test -s "$APP/Resources/AppIcon.icns"
       - name: Isolated smoke test (no repo, no brew, no network in the test env)
         run: |
           R="dist-app/TeXada Studio.app/Contents/Resources"
@@ -86,12 +91,32 @@ jobs:
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/tectonic" --version
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdfinfo" -v
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/pdftoppm" -v
+          env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin "$R/bin/llama-server" --version
           WORK="$RUNNER_TEMP/smoke"
           mkdir -p "$WORK/out"
           printf '\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n$x^2+1$\n\\end{document}\n' > "$WORK/smoke.tex"
           env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
             "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
           test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
+
+          # Compile the same layout with and without visible CJK glyphs. The
+          # broken renderer produces the same blank image for both PDFs.
+          for variant in cjk blank; do
+            body='微积分笔记'
+            if [ "$variant" = blank ]; then body='\phantom{微积分笔记}'; fi
+            printf '\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\pagestyle{empty}\n\\begin{document}\n%s\n\\end{document}\n' \
+              "$body" > "$WORK/$variant.tex"
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+              "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/$variant.tex"
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+              "$R/bin/pdftoppm" -f 1 -l 1 -png -r 100 -singlefile \
+              "$WORK/out/$variant.pdf" "$WORK/out/$variant"
+            test -s "$WORK/out/$variant.png"
+          done
+          if cmp -s "$WORK/out/cjk.png" "$WORK/out/blank.png"; then
+            echo "Bundled renderer dropped all CJK glyphs" >&2
+            exit 1
+          fi
 
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'

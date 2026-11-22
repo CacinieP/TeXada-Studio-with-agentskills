@@ -49,7 +49,7 @@ jobs:
           node skills/latex-cleanup/tests/test_audit_math.cjs
       - name: Python and launcher syntax
         run: |
-          python -m compileall -q harness webui scripts skills
+          python -W error -m compileall -q -f harness webui scripts skills
           bash -n scripts/backup.sh
           bash -n scripts/package.sh
           sh -n scripts/run-minicpm-v47-studio.sh

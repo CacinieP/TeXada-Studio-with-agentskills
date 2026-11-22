@@ -37,16 +37,19 @@
 
 | 组件 | 许可证 | 调用方式 |
 | --- | --- | --- |
-| poppler(pdfinfo、pdftoppm,Homebrew 构建) | GPL-2.0-or-later | 独立进程命令行调用,**不链接、不 import** |
+| Poppler（Homebrew pdfinfo、libpoppler 及独立 PNG 渲染程序） | GPL-2.0-or-later | Studio 通过独立进程调用；渲染程序链接 libpoppler-cpp |
 | 其依赖链(freetype、libpng、zlib、libjpeg-turbo、openjpeg 等,由构建脚本收集并重写加载路径) | 各自宽松许可(FTL/BSD/Zlib/GPL 兼容) | 仅被上述二进制动态链接 |
 
 结论:GPL 程序以独立进程 + 命令行参数方式使用,属 mere aggregation;AGPL-3.0-only 的 Studio 代码不因此变成 GPL 衍生作品。
 再分发义务:随包提供本审计文件、GPL-2.0 文本与源码获取途径(见下)。
 
+固定版本的 Poppler 编码数据随包写入 `Resources/poppler-data/`。Adobe CMap 与其余编码映射的许可文本来自 [poppler-data 上游发行包](https://poppler.freedesktop.org/) 并存放于 `Resources/licenses/poppler-data/`。渲染程序对应源码见 `desktop/poppler_render.cpp`。
+
 ## 4. 其他
 
 | 组件 | 许可证 |
 | --- | --- |
+| llama.cpp（可选，自包含发行包经 Homebrew 构建） | MIT；随包附许可证，作为独立进程调用。模型由用户启动下载 |
 | Monaco 0.52.2(已 vendored) | MIT |
 | 本项目代码/文档/合成样本 | AGPL-3.0-only(见 LICENSE、THIRD_PARTY_NOTICES.md) |
 
@@ -57,6 +60,7 @@
 - Tectonic:https://github.com/tectonic-typesetting/tectonic(tag `tectonic@0.17.0`);
 - TeX 资源:Tectonic 官方 bundle(构建说明见上);
 - Poppler 及依赖:`brew info poppler` 指向的 Homebrew formula 与上游 https://gitlab.freedesktop.org/poppler/poppler;
+- llama.cpp: https://github.com/ggml-org/llama.cpp;
 - Homebrew 构建脚本:https://github.com/Homebrew/homebrew-core(各 formula)。
 
 如需完整对应源码包,按上表来源自行获取,或联系维护者索取构建时所用的确切版本清单。

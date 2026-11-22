@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -125,6 +126,20 @@ class LauncherTests(unittest.TestCase):
             self.assertFalse(desktop_app.seed_tex_cache(source, target, copier=copier), "目标已存在不重复种子")
             self.assertFalse(desktop_app.seed_tex_cache(Path(tmp) / "missing", target, copier=copier))
             self.assertEqual(copied, [(str(source), str(target))])
+
+    def test_seed_tex_cache_adds_missing_files_to_existing_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "source", Path(tmp) / "target"
+            relative = Path("bundles") / "data" / ("a" * 64)
+            for root in (source, target):
+                (root / relative).mkdir(parents=True)
+            (source / relative / "cmmi5.pfb").write_bytes(b"new font")
+            (source / relative / "other").write_bytes(b"bundled copy")
+            (target / relative / "other").write_bytes(b"already cached")
+            self.assertTrue(desktop_app.seed_tex_cache(source, target))
+            self.assertEqual((target / relative / "cmmi5.pfb").read_bytes(), b"new font")
+            self.assertEqual((target / relative / "other").read_bytes(), b"already cached")
+            self.assertFalse(desktop_app.seed_tex_cache(source, target))
 
 
 class BuildTests(unittest.TestCase):
@@ -249,6 +264,82 @@ class TerminateWatchdogTests(unittest.TestCase):
         self.assertEqual(exited, [0], "无清理钩子也不能卡死")
 
 
+class TerminateFallbackTests(unittest.TestCase):
+    """SIGTERM 在窗口建立前的启动窗口也必须有界 code=0（E2E-5 发行契约）。
+
+    抓什么：SIGTERM 落在「nodeinfo 就绪但 window_closer 未注册」的窗口期时，
+    曾走 SIG_DFL 重抛（-15）违反契约；必须跑清理钩子后以 0 退出。
+    """
+
+    def test_sigterm_without_window_closer_cleans_up_and_exits_zero(self):
+        calls = []
+        state = {"window_closer": None, "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["cleanup", ("exit", 0)])
+
+    def test_sigterm_window_closer_failure_still_exits_zero(self):
+        calls = []
+
+        def broken():
+            calls.append("closer")
+            raise RuntimeError("boom")
+
+        state = {"window_closer": broken, "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["closer", "cleanup", ("exit", 0)])
+
+    def test_windowed_sigterm_keeps_normal_cleanup_path(self):
+        calls = []
+        state = {"window_closer": lambda: calls.append("closer"),
+                 "shutdown": lambda: calls.append("cleanup")}
+        desktop_app._terminate_action(
+            signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
+        self.assertEqual(calls, ["closer"], "窗口路径不强制退出，主循环走正常收尾")
+
+    def test_close_shown_windows_skips_unshown_window_and_falls_back_to_shutdown(self):
+        import types
+
+        unshown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=threading.Event()),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned: list[str] = []
+        exits: list[int] = []
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([unshown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        unshown.destroy.assert_not_called()
+        self.assertEqual(cleaned, ["shutdown"])
+        self.assertEqual(exits, [0])
+
+        shown_event = threading.Event()
+        shown_event.set()
+        shown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=shown_event),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned.clear()
+        exits.clear()
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([shown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        shown.destroy.assert_called_once()
+        self.assertEqual(cleaned, [])
+        self.assertEqual(exits, [])
+
+
 class NativeTerminateIntegrationTests(unittest.TestCase):
     """原生集成验证:真实 Cocoa 事件循环中 SIGTERM 必须有界退出(#50)。
 
@@ -288,11 +379,15 @@ class NativeTerminateIntegrationTests(unittest.TestCase):
             "    'model': '', 'owned_model_pid': None,\n"
             "    'created_at': time.time(), 'running': True}))\n"
             "import webview\n"
-            "orig = webview.start\n"
-            "def start(*args, **kwargs):\n"
-            "    print('IN_RUNLOOP', flush=True)\n"
-            "    return orig(*args, **kwargs)\n"
-            "webview.start = start\n"
+            "orig_create = webview.create_window\n"
+            "def create_window(*args, **kwargs):\n"
+            "    win = orig_create(*args, **kwargs)\n"
+            "    def on_shown():\n"
+            "        from PyObjCTools import AppHelper\n"
+            "        AppHelper.callAfter(lambda: print('IN_RUNLOOP', flush=True))\n"
+            "    win.events.shown += on_shown\n"
+            "    return win\n"
+            "webview.create_window = create_window\n"
             "spec = importlib.util.spec_from_file_location(\n"
             "    'texada_desktop_app', os.path.join(repo, 'desktop', 'app.py'))\n"
             "mod = importlib.util.module_from_spec(spec)\n"
@@ -613,10 +708,12 @@ class StartupLifecycleTests(unittest.TestCase):
                     break
                 if not line and proc.poll() is not None:
                     break
-            self.assertTrue(ready, f"驱动进程未进入启动等待:{proc.stderr.read()}")
+            if not ready:
+                self.fail(f"驱动进程未进入启动等待:{proc.stderr.read()}")
             spawned_child_pid = int(child_pid_file.read_text(encoding="utf-8").strip())
             proc.send_signal(15)  # SIGTERM
-            proc.wait(timeout=10)
+            code = proc.wait(timeout=10)
+            self.assertEqual(code, 0, "启动等待阶段收到 SIGTERM 必须有界以退出码 0 结束")
 
             saved = json.loads((self.state / "session.json").read_text(encoding="utf-8"))
             self.assertIs(saved.get("running"), False, "启动等待阶段收到 SIGTERM 必须擦除 running=True")
@@ -695,9 +792,11 @@ class StartupLifecycleTests(unittest.TestCase):
                     break
                 if not line and proc.poll() is not None:
                     break
-            self.assertTrue(ready, f"捆绑驱动未进入 wait_for_http:{proc.stderr.read()}")
+            if not ready:
+                self.fail(f"捆绑驱动未进入 wait_for_http:{proc.stderr.read()}")
             proc.send_signal(15)  # SIGTERM
-            proc.wait(timeout=10)
+            code = proc.wait(timeout=10)
+            self.assertEqual(code, 0, "捆绑模式 wait_for_http 阶段收到 SIGTERM 必须有界以退出码 0 结束")
             saved = json.loads((self.state / "session.json").read_text(encoding="utf-8"))
             self.assertIs(saved.get("running"), False)
             self.assertIsNone(saved.get("url"))
@@ -931,10 +1030,13 @@ class BundleAndIconHygieneTests(unittest.TestCase):
             self.assertTrue((lib_dir / "libpoppler.140.dylib").exists())
 
     def test_build_bundle_passes_out_of_tree_bdist_base_to_py2app(self):
+        import plistlib
         import build_bundle
 
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "dist-out"
+            fake_icon = Path(tmp) / "fake.icns"
+            fake_icon.write_bytes(b"icns")
             py2app_calls: list[list[str]] = []
 
             def fake_run(argv, **kwargs):
@@ -943,6 +1045,9 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                     dist_idx = argv.index("--dist-dir") + 1
                     dummy_app = Path(argv[dist_idx]) / "TeXada Studio.app"
                     (dummy_app / "Contents" / "Resources").mkdir(parents=True)
+                    (dummy_app / "Contents" / "Info.plist").write_bytes(
+                        plistlib.dumps({"CFBundleIconFile": "PythonApplet"})
+                    )
                 return subprocess.CompletedProcess(argv, 0, "", "")
 
             def fake_probe(argv, **kwargs):
@@ -954,10 +1059,13 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                                             else os.path.exists(self)), \
                  unittest.mock.patch.object(build_bundle.subprocess, "run", side_effect=fake_probe), \
                  unittest.mock.patch.object(build_bundle, "stage_resources", return_value={}), \
-                 unittest.mock.patch.object(build_bundle, "build_icon", return_value=None), \
+                 unittest.mock.patch.object(build_bundle, "build_icon", return_value=fake_icon), \
                  unittest.mock.patch.object(build_bundle, "seal_app_bundle"), \
                  unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run):
                 code = build_bundle.main(["--output", str(out_dir), "--skip-poppler"])
+                with unittest.mock.patch.object(build_bundle, "build_icon", return_value=None):
+                    with self.assertRaises(SystemExit):
+                        build_bundle.main(["--output", str(out_dir), "--skip-poppler"])
 
             self.assertEqual(code, 0)
             self.assertEqual(len(py2app_calls), 1)
@@ -967,6 +1075,158 @@ class BundleAndIconHygieneTests(unittest.TestCase):
             expected_bdist = str(out_dir.resolve() / ".bundle-work" / "py2app-build")
             self.assertEqual(bdist_val, expected_bdist)
             self.assertFalse((build_bundle.DESKTOP / "build").exists())
+
+    def test_bundle_poppler_forwards_resolved_pdfinfo_and_renderer_origins(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brew_bin = root / "opt" / "homebrew" / "bin"
+            opt_poppler = root / "opt" / "homebrew" / "opt" / "poppler"
+            cellar_poppler = root / "opt" / "homebrew" / "Cellar" / "poppler" / "25.0"
+            (cellar_poppler / "bin").mkdir(parents=True)
+            (cellar_poppler / "lib").mkdir(parents=True)
+            brew_bin.mkdir(parents=True)
+            opt_poppler.parent.mkdir(parents=True, exist_ok=True)
+            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+
+            real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
+            real_pdfinfo.write_bytes(b"pdfinfo")
+            symlink_pdfinfo = brew_bin / "pdfinfo"
+            symlink_pdfinfo.symlink_to(os.path.relpath(real_pdfinfo, brew_bin))
+
+            real_cpp_lib = cellar_poppler / "lib" / "libpoppler-cpp.0.dylib"
+            real_cpp_lib.write_bytes(b"dylib")
+            (cellar_poppler / "lib" / "libpoppler-cpp.dylib").symlink_to("libpoppler-cpp.0.dylib")
+
+            staging = root / "staging"
+            (staging / "bin").mkdir(parents=True)
+            captured_originals = {}
+
+            def fake_run(argv, **kwargs):
+                if argv[:3] == ["brew", "--prefix", "poppler"]:
+                    return subprocess.CompletedProcess(argv, 0, str(opt_poppler) + "\n", "")
+                if argv[0] == "xcrun":
+                    out_idx = argv.index("-o") + 1
+                    Path(argv[out_idx]).write_bytes(b"renderer")
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            def fake_bundle_dylibs(bin_dir, lib_dir, originals=None):
+                captured_originals.update(originals or {})
+                return 2
+
+            with unittest.mock.patch.object(build_bundle.shutil, "which", return_value=str(symlink_pdfinfo)), \
+                 unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run), \
+                 unittest.mock.patch.object(build_bundle, "install_poppler_data"), \
+                 unittest.mock.patch.object(build_bundle, "bundle_dylibs", side_effect=fake_bundle_dylibs):
+                count = build_bundle.bundle_poppler(staging)
+
+            self.assertEqual(count, 2)
+            self.assertEqual(
+                captured_originals,
+                {
+                    str(staging / "bin" / "pdfinfo"): str(real_pdfinfo.resolve()),
+                    str(staging / "bin" / "pdftoppm"): str(real_cpp_lib.resolve()),
+                },
+            )
+
+    def test_stage_resources_merges_poppler_and_llama_server_into_single_bundle_dylibs_pass(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brew_bin = root / "opt" / "homebrew" / "bin"
+            opt_poppler = root / "opt" / "homebrew" / "opt" / "poppler"
+            cellar_poppler = root / "opt" / "homebrew" / "Cellar" / "poppler" / "25.0"
+            cellar_llama = root / "opt" / "homebrew" / "Cellar" / "llama.cpp" / "12000"
+            (cellar_poppler / "bin").mkdir(parents=True)
+            (cellar_poppler / "lib").mkdir(parents=True)
+            (cellar_llama / "libexec" / "bin").mkdir(parents=True)
+            brew_bin.mkdir(parents=True)
+            opt_poppler.parent.mkdir(parents=True, exist_ok=True)
+            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+
+            real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
+            real_pdfinfo.write_bytes(b"pdfinfo")
+            symlink_pdfinfo = brew_bin / "pdfinfo"
+            symlink_pdfinfo.symlink_to(os.path.relpath(real_pdfinfo, brew_bin))
+
+            real_cpp_lib = cellar_poppler / "lib" / "libpoppler-cpp.0.dylib"
+            real_cpp_lib.write_bytes(b"dylib")
+            (cellar_poppler / "lib" / "libpoppler-cpp.dylib").symlink_to("libpoppler-cpp.0.dylib")
+
+            real_llama = cellar_llama / "libexec" / "bin" / "llama-server"
+            real_llama.write_bytes(b"llama")
+            symlink_llama = brew_bin / "llama-server"
+            symlink_llama.symlink_to(os.path.relpath(real_llama, brew_bin))
+            (cellar_llama / "LICENSE").write_text("MIT License - llama.cpp\n", encoding="utf-8")
+
+            fake_tectonic = root / "tectonic"
+            fake_tectonic.write_bytes(b"tectonic")
+            fake_tex_cache = root / "tex-cache"
+            fake_tex_cache.mkdir()
+            (fake_tex_cache / "sample.fmt").write_bytes(b"fmt")
+
+            staging = root / "staging"
+            staging.mkdir()
+            bundle_calls: list[dict[str, str]] = []
+            smoke_cmds: list[tuple[str, str]] = []
+
+            def fake_which(name):
+                if name == "pdfinfo":
+                    return str(symlink_pdfinfo)
+                if name == "llama-server":
+                    return str(symlink_llama)
+                return None
+
+            def fake_run(argv, **kwargs):
+                if argv[:3] == ["brew", "--prefix", "poppler"]:
+                    return subprocess.CompletedProcess(argv, 0, str(opt_poppler) + "\n", "")
+                if argv[0] == "xcrun":
+                    out_idx = argv.index("-o") + 1
+                    Path(argv[out_idx]).write_bytes(b"renderer")
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                if len(argv) == 2 and Path(argv[0]).parent == staging / "bin":
+                    smoke_cmds.append((Path(argv[0]).name, argv[1]))
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            def fake_bundle_dylibs(bin_dir, lib_dir, originals=None):
+                bundle_calls.append(dict(originals or {}))
+                return 3
+
+            with unittest.mock.patch.object(build_bundle, "TECTONIC", fake_tectonic), \
+                 unittest.mock.patch.object(build_bundle, "TEX_CACHE", fake_tex_cache), \
+                 unittest.mock.patch.object(build_bundle, "copy_tree",
+                                            side_effect=lambda src, dst, ignore=None: dst.mkdir(parents=True, exist_ok=True)), \
+                 unittest.mock.patch.object(build_bundle.shutil, "which", side_effect=fake_which), \
+                 unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run), \
+                 unittest.mock.patch.object(build_bundle, "install_poppler_data"), \
+                 unittest.mock.patch.object(build_bundle, "bundle_dylibs", side_effect=fake_bundle_dylibs):
+                build_bundle.stage_resources(staging, skip_poppler=False, with_llama_server=True)
+
+            self.assertEqual(len(bundle_calls), 1, "bundle_dylibs must run in a single combined pass")
+            self.assertEqual(
+                bundle_calls[0],
+                {
+                    str(staging / "bin" / "pdfinfo"): str(real_pdfinfo.resolve()),
+                    str(staging / "bin" / "pdftoppm"): str(real_cpp_lib.resolve()),
+                    str(staging / "bin" / "llama-server"): str(real_llama.resolve()),
+                },
+            )
+            self.assertEqual(
+                (staging / "licenses" / "llama.cpp-LICENSE.txt").read_text(encoding="utf-8"),
+                "MIT License - llama.cpp\n",
+            )
+            self.assertEqual(
+                smoke_cmds,
+                [
+                    ("tectonic", "--version"),
+                    ("pdfinfo", "-v"),
+                    ("pdftoppm", "-v"),
+                    ("llama-server", "--version"),
+                ],
+            )
 
 
 if __name__ == "__main__":

@@ -22,12 +22,16 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic"
 TEX_CACHE = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
+POPPLER_DATA_VERSION = "0.4.12"
+POPPLER_DATA_SHA256 = "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
 BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 
 PY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "test_*.py", "tests", "*.bak*")
@@ -192,7 +196,7 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
                 shutil.copy2(source, target)
                 os.chmod(target, 0o755)
             relocated[source] = target
-            queue.append((target, Path(source).parent))
+            queue.append((target, Path(source).resolve().parent))
         for entry in dependencies:
             source = _resolve_dep(entry, loader_dir, rpaths=rpaths, bin_dir=bin_dir)
             if source is None or is_system(source):
@@ -218,7 +222,51 @@ def tex_cache_manifest(cache: Path) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def stage_resources(staging: Path, skip_poppler: bool) -> dict:
+def install_poppler_data(staging: Path) -> None:
+    archive_name = f"poppler-data-{POPPLER_DATA_VERSION}"
+    url = f"https://poppler.freedesktop.org/{archive_name}.tar.gz"
+    with tempfile.TemporaryDirectory(prefix="texada-poppler-") as tmp:
+        work = Path(tmp)
+        archive = work / "poppler-data.tar.gz"
+        with urllib.request.urlopen(url, timeout=60) as response, archive.open("wb") as target:
+            shutil.copyfileobj(response, target)
+        require(hashlib.sha256(archive.read_bytes()).hexdigest() == POPPLER_DATA_SHA256,
+                "Poppler 字符映射包的 SHA-256 不匹配")
+        run(["tar", "-xzf", str(archive), "-C", str(work)])
+        source = work / archive_name
+        for directory in ("cMap", "cidToUnicode", "nameToUnicode", "unicodeMap"):
+            copy_tree(source / directory, staging / "poppler-data" / directory)
+        notices = staging / "licenses" / "poppler-data"
+        notices.mkdir()
+        for license_file in source.glob("COPYING*"):
+            shutil.copy2(license_file, notices)
+
+
+def stage_poppler(staging: Path) -> dict[str, str]:
+    pdfinfo = shutil.which("pdfinfo")
+    require(pdfinfo is not None, "未找到 pdfinfo;先 brew install poppler")
+    prefix = Path(run(["brew", "--prefix", "poppler"], capture_output=True, text=True).stdout.strip())
+    target = staging / "bin" / "pdfinfo"
+    shutil.copy2(pdfinfo, target)
+    target.chmod(0o755)
+    renderer = staging / "bin" / "pdftoppm"
+    poppler_cpp_lib = prefix / "lib" / "libpoppler-cpp.dylib"
+    run(["xcrun", "clang++", "-std=c++17", "-O2", "-mmacosx-version-min=15.0",
+         "-I", str(prefix / "include" / "poppler" / "cpp"),
+         str(DESKTOP / "poppler_render.cpp"), str(poppler_cpp_lib),
+         "-o", str(renderer)])
+    install_poppler_data(staging)
+    return {
+        str(target): str(Path(pdfinfo).resolve()),
+        str(renderer): str(poppler_cpp_lib.resolve()),
+    }
+
+
+def bundle_poppler(staging: Path) -> int:
+    return bundle_dylibs(staging / "bin", staging / "tools-lib", stage_poppler(staging))
+
+
+def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool = False) -> dict:
     """把运行所需源码与数据放进 staging(其后整体合并进 .app/Contents/Resources)。"""
     sizes = {}
     copy_tree(REPO_ROOT / "webui", staging / "webui")
@@ -241,22 +289,39 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     shutil.copy2(TECTONIC, staging / "bin" / "tectonic")
     os.chmod(staging / "bin" / "tectonic", 0o755)
 
+    originals: dict[str, str] = {}
+    smoke: list[tuple[str, str]] = [("tectonic", "--version")]
     if not skip_poppler:
-        originals = {}
-        for name in ("pdfinfo", "pdftoppm"):
-            tool = shutil.which(name)
-            require(tool is not None, f"未找到 {name};先 brew install poppler")
-            shutil.copy2(tool, staging / "bin" / name)
-            os.chmod(staging / "bin" / name, 0o755)
-            originals[str(staging / "bin" / name)] = str(Path(tool).resolve())
+        originals.update(stage_poppler(staging))
+        smoke.extend((("pdfinfo", "-v"), ("pdftoppm", "-v")))
+    if with_llama_server:
+        tool = shutil.which("llama-server")
+        require(tool is not None, "未找到 llama-server；请安装所需的 Homebrew 构建依赖")
+        destination = staging / "bin" / "llama-server"
+        shutil.copy2(tool, destination)
+        os.chmod(destination, 0o755)
+        resolved = str(Path(tool).resolve())
+        originals[str(destination)] = resolved
+        license_file = next(
+            (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
+            None,
+        )
+        require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
+        shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
+        smoke.append(("llama-server", "--version"))
+    if originals:
         count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
+    for name, flag in smoke:
+        run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
+    run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
+        env={**os.environ, "TECTONIC": str(TECTONIC)})
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
     (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
         tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")
-    for area in ("webui", "tex-cache", "bin", "tools-lib"):
+    for area in ("webui", "tex-cache", "bin", "tools-lib", "poppler-data"):
         path = staging / area
         if path.exists():
             sizes[area] = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
@@ -267,6 +332,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="构建自包含 TeXada Studio.app")
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "dist")
     parser.add_argument("--skip-poppler", action="store_true", help="不捆绑 Poppler(PDF 导入/预览仍需系统安装)")
+    parser.add_argument("--with-llama-server", action="store_true", help="捆绑 Homebrew llama.cpp 运行时")
     args = parser.parse_args(argv)
     args.output = args.output.expanduser().resolve()  # py2app 子进程以 desktop/ 为 cwd,必须绝对路径
     require(sys.platform == "darwin", "自包含包仅支持 macOS")
@@ -287,15 +353,15 @@ def main(argv=None) -> int:
     staging = workdir / "Resources"
     staging.mkdir(parents=True)
 
-    print("① 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
-    sizes = stage_resources(staging, args.skip_poppler)
-    for area, size in sizes.items():
-        print(f"   {area}: {size / 1_048_576:.1f} MiB")
-
-    print("② 生成图标…")
+    print("① 生成图标…")
     icon = build_icon(workdir)
     if icon is None:
-        print("   跳过(sips/iconutil 或源图缺失)")
+        raise SystemExit("无法生成 Studio 图标：请检查品牌源图、sips 和 iconutil。")
+
+    print("② 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
+    sizes = stage_resources(staging, args.skip_poppler, args.with_llama_server)
+    for area, size in sizes.items():
+        print(f"   {area}: {size / 1_048_576:.1f} MiB")
 
     print("③ py2app 冻结程序部分(首次较慢)…")
     py2app_dist = workdir / "py2app-dist"
@@ -313,8 +379,7 @@ def main(argv=None) -> int:
     resources = app / "Contents" / "Resources"
     for item in staging.iterdir():
         shutil.move(str(item), str(resources / item.name))
-    if icon is not None:
-        install_app_icon(app, icon)
+    install_app_icon(app, icon)
     seal_app_bundle(app)
     shutil.rmtree(workdir, ignore_errors=True)
 

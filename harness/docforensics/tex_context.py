@@ -71,6 +71,304 @@ _KNOWN_COMMANDS = frozenset("""
     big Big bigg Bigg bigl bigr Bigl Bigr biggl biggr Biggl Biggr
 """.split())
 _ENVIRONMENT = re.compile(r"\\(begin|end)\s*\{([^{}\r\n]+)\}")
+_GRID_ENVIRONMENTS = frozenset({"matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases"})
+_TEX_UNITS = r"(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)"
+_TEX_DIMEN_ATOM = (
+    rf"[+-]?\s*(?:(?:\d+(?:\.\d*)?|\.\d+)\s*(?:true\s*)?(?:{_TEX_UNITS}|\\[A-Za-z@]+)|\\[A-Za-z@]+)"
+)
+_ROW_SPACING = re.compile(
+    rf"^\s*{_TEX_DIMEN_ATOM}(?:\s+plus\s+{_TEX_DIMEN_ATOM})?(?:\s+minus\s+{_TEX_DIMEN_ATOM})?\s*$",
+    re.I,
+)
+_GRID_PAIRS = {
+    "{": "}",
+    "(": ")",
+    "[": "]",
+    r"\{": r"\}",
+    r"\langle": r"\rangle",
+    r"\lvert": r"\rvert",
+    r"\lVert": r"\rVert",
+}
+_GRID_CLOSERS = frozenset(_GRID_PAIRS.values())
+_GRID_LR_DELIMITERS = frozenset({
+    "(", ")", "[", "]", "|", "/", ".",
+    r"\{", r"\}", r"\|",
+    r"\vert", r"\rvert", r"\lvert", r"\Vert", r"\lVert", r"\rVert",
+    r"\langle", r"\rangle",
+})
+_GRID_ONE_ARG_COMMANDS = frozenset({
+    r"\sqrt", r"\mathrm", r"\mathit", r"\mathbf", r"\mathsf", r"\mathtt",
+    r"\mathcal", r"\mathbb", r"\boldsymbol", r"\overline", r"\underline",
+    r"\hat", r"\widehat", r"\bar", r"\vec", r"\dot", r"\ddot",
+    r"\tilde", r"\widetilde",
+})
+_GRID_BINARY_ONLY = frozenset({
+    "*", "/", r"\cdot", r"\times", r"\div", r"\oplus", r"\otimes",
+    "=", "<", ">", "≤", "≥", "≠",
+    r"\le", r"\leq", r"\ge", r"\geq", r"\ne", r"\neq",
+    r"\equiv", r"\approx", r"\sim", r"\simeq", r"\propto",
+    r"\in", r"\notin", r"\ni", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
+    r"\to", r"\mapsto", r"\rightarrow", r"\leftarrow", r"\leftrightarrow",
+    r"\Rightarrow", r"\Leftarrow", r"\Leftrightarrow", r"\iff", r"\implies",
+})
+_GRID_UNARY_OR_BINARY = frozenset({"+", "-", r"\pm", r"\mp"})
+_GRID_TEXT_COMMANDS = frozenset({
+    "text", "textrm", "textbf", "textit", "textsf", "texttt", "textnormal", "emph", "mbox",
+})
+
+
+def _is_row_spacing(spec):
+    if any(ch in spec for ch in "\r\n&{}") or not _ROW_SPACING.match(spec):
+        return False
+    for match in re.finditer(r"\\([A-Za-z@]+)", spec):
+        if match.group(1) in _KNOWN_COMMANDS | _DEFINITIONS | {"begin", "end", "verb", "cr"}:
+            return False
+    return True
+
+
+def _replace_inline_text_boxes(expr):
+    parts = []
+    cursor = 0
+    while cursor < len(expr):
+        if expr[cursor] == "%":
+            return None
+        if expr[cursor] == "\\":
+            command, after = _command(expr, cursor)
+            if command in _GRID_TEXT_COMMANDS:
+                brace_pos = after
+                while brace_pos < len(expr) and expr[brace_pos].isspace():
+                    brace_pos += 1
+                if brace_pos >= len(expr) or expr[brace_pos] != "{":
+                    return None
+                end = _balanced_end(expr, brace_pos, "{", "}")
+                if end is None:
+                    return None
+                inner = expr[brace_pos + 1:end - 1]
+                if not inner.strip():
+                    return None
+                pos = 0
+                while pos < len(inner):
+                    ch = inner[pos]
+                    if ch in "%$":
+                        return None
+                    if ch == "\\":
+                        inner_cmd, pos = _command(inner, pos)
+                        if inner_cmd in {"", "verb", "begin", "end", "\\", "(", ")", "[", "]"} or inner_cmd in _DEFINITIONS:
+                            return None
+                        continue
+                    pos += 1
+                parts.append("(x)")
+                cursor = end
+                continue
+            parts.append(expr[cursor:after])
+            cursor = after
+            continue
+        parts.append(expr[cursor])
+        cursor += 1
+    return "".join(parts)
+
+
+def _valid_grid_fragment(expr):
+    if not isinstance(expr, str) or not expr.strip():
+        return False
+    sanitized = _replace_inline_text_boxes(expr)
+    if sanitized is None or not sanitized.strip():
+        return False
+    supported, _ = _checkability(sanitized, "inline")
+    if not supported:
+        return False
+    from .formula_repair import _tokens, deterministic_candidate, repair_blocker
+
+    if repair_blocker(sanitized, allow_parser_gaps=True) is not None or deterministic_candidate(sanitized) is not None:
+        return False
+    tokens = _tokens(sanitized)
+    if not tokens:
+        return False
+
+    def is_postfix_script(idx):
+        return idx >= 2 and tokens[idx - 1].text == "^" and tokens[idx].text in {"+", "-", "*"}
+
+    stack = []
+    left_depths = []
+    brace_depth = 0
+    index = 0
+    while index < len(tokens):
+        tok = tokens[index].text
+        if tok == "{" and index + 1 < len(tokens) and tokens[index + 1].text == "}":
+            return False
+        if tok in {r"\left", r"\right"}:
+            if index + 1 >= len(tokens) or tokens[index + 1].text not in _GRID_LR_DELIMITERS:
+                return False
+            if tok == r"\left":
+                left_depths.append(brace_depth)
+            else:
+                if not left_depths or left_depths[-1] != brace_depth:
+                    return False
+                left_depths.pop()
+            delim = tokens[index + 1].text
+            if delim in _GRID_PAIRS:
+                stack.append((delim, brace_depth))
+            elif delim in _GRID_CLOSERS:
+                if not stack or _GRID_PAIRS[stack[-1][0]] != delim or stack[-1][1] != brace_depth:
+                    return False
+                stack.pop()
+            index += 2
+            continue
+        if tok == r"\middle":
+            if not left_depths or index + 1 >= len(tokens) or tokens[index + 1].text not in _GRID_LR_DELIMITERS:
+                return False
+            index += 2
+            continue
+        if tok in _GRID_PAIRS:
+            stack.append((tok, brace_depth))
+            if tok == "{":
+                brace_depth += 1
+        elif tok in _GRID_CLOSERS:
+            if tok == "}":
+                brace_depth -= 1
+                if brace_depth < 0:
+                    return False
+            if not stack or _GRID_PAIRS[stack[-1][0]] != tok or stack[-1][1] != brace_depth:
+                return False
+            stack.pop()
+
+        if tok in {"^", "_"}:
+            if index + 1 >= len(tokens) or tokens[index + 1].text in {"(", "[", ")", "]"}:
+                return False
+        if tok in _GRID_ONE_ARG_COMMANDS:
+            arg_idx = index + 1
+            if tok == r"\sqrt" and arg_idx < len(tokens) and tokens[arg_idx].text == "[":
+                depth_b = 0
+                while arg_idx < len(tokens):
+                    if tokens[arg_idx].text == "[":
+                        depth_b += 1
+                    elif tokens[arg_idx].text == "]":
+                        depth_b -= 1
+                        if depth_b == 0:
+                            arg_idx += 1
+                            break
+                    arg_idx += 1
+            if arg_idx >= len(tokens) or tokens[arg_idx].text in (
+                _GRID_CLOSERS | {r"\right"} | _GRID_BINARY_ONLY | _GRID_UNARY_OR_BINARY | {",", ";"}
+            ):
+                return False
+        if tok in _GRID_BINARY_ONLY and not is_postfix_script(index):
+            if index == 0 or index == len(tokens) - 1:
+                return False
+            prev = tokens[index - 1].text
+            nxt = tokens[index + 1].text
+            if prev in (_GRID_PAIRS.keys() | _GRID_BINARY_ONLY | _GRID_UNARY_OR_BINARY | {"^", "_", ",", ";"}):
+                if not ((tok == "=" and prev in {"<", ">"}) or is_postfix_script(index - 1)):
+                    return False
+            if nxt in (_GRID_CLOSERS | {r"\right", ",", ";"}):
+                return False
+        if tok in _GRID_UNARY_OR_BINARY and not is_postfix_script(index):
+            if index == len(tokens) - 1:
+                return False
+            nxt = tokens[index + 1].text
+            if nxt in (_GRID_CLOSERS | {r"\right"} | _GRID_BINARY_ONLY | _GRID_UNARY_OR_BINARY | {",", ";"}):
+                return False
+            if tok == "+" and index > 0 and tokens[index - 1].text == "{":
+                if not (index >= 2 and tokens[index - 2].text in {"^", "_"}):
+                    return False
+        index += 1
+    return not stack and not left_depths
+
+
+def check_math_grids(latex):
+    """Check the row/column shape and scalar cell/outer syntax of matrix/cases blocks."""
+    controls = list(_ENVIRONMENT.finditer(latex))
+    if not controls or len(controls) % 2 != 0 or any(match[2] not in _GRID_ENVIRONMENTS for match in controls):
+        return None
+    skeleton_parts = []
+    last_end = 0
+    grids = []
+    for index in range(0, len(controls), 2):
+        opening = controls[index]
+        closing = controls[index + 1]
+        if opening[1] != "begin" or closing[1] != "end" or opening[2] != closing[2]:
+            return None
+        if opening.start() < last_end:
+            return None
+        skeleton_parts.append(latex[last_end:opening.start()])
+        skeleton_parts.append("(x)")
+        last_end = closing.end()
+        body = latex[opening.end():closing.start()]
+        if "%" in body or r"\verb" in body or r"\cr" in body:
+            return None
+        rows = []
+        row_cells = []
+        cursor, depth, cell_start = 0, 0, 0
+        while cursor < len(body):
+            char = body[cursor]
+            if char == "\\":
+                cmd_start = cursor
+                command, next_cursor = _command(body, cursor)
+                if command == "\\" and depth == 0:
+                    row_cells.append(body[cell_start:cmd_start])
+                    rows.append(row_cells)
+                    row_cells = []
+                    cursor = next_cursor
+                    if cursor < len(body) and body[cursor] == "*":
+                        cursor += 1
+                    had_space = False
+                    while cursor < len(body) and body[cursor] in " \t":
+                        had_space = True
+                        cursor += 1
+                    if cursor < len(body) and body[cursor] == "[":
+                        end = _balanced_end(body, cursor, "[", "]")
+                        if end is None:
+                            return None
+                        if _is_row_spacing(body[cursor + 1:end - 1]):
+                            cursor = end
+                        elif not had_space:
+                            return None
+                    cell_start = cursor
+                    continue
+                cursor = next_cursor
+                continue
+            depth += (char == "{") - (char == "}")
+            if depth < 0:
+                return None
+            if char == "&" and depth == 0:
+                row_cells.append(body[cell_start:cursor])
+                cell_start = cursor + 1
+            cursor += 1
+        if depth:
+            return None
+        tail = body[cell_start:]
+        if row_cells or tail.strip():
+            row_cells.append(tail)
+            rows.append(row_cells)
+        widths = [len(row) for row in rows]
+        env_name = opening[2]
+        if env_name == "cases":
+            if not widths or len(set(widths)) > 1 or widths[0] not in {1, 2}:
+                return {"status": "NEEDS_HUMAN", "reason": f"cases 各行列数为 {widths}，预期每行 1 或 2 列，请核对排版。"}
+        elif env_name in {"vmatrix", "Vmatrix"}:
+            fixed_width = len(widths)
+            if not widths or len(set(widths)) > 1 or widths[0] != fixed_width:
+                return {"status": "NEEDS_HUMAN", "reason": f"{env_name} 各行列数为 {widths}，预期每行 {fixed_width} 列，请核对排版。"}
+        else:
+            if not widths or len(set(widths)) > 1:
+                return {"status": "NEEDS_HUMAN", "reason": f"{env_name} 各行列数为 {widths}，请核对排版。"}
+        grids.append((env_name, rows))
+    skeleton_parts.append(latex[last_end:])
+    outer_skeleton = re.sub(r"(?<=\))\s*[.,;]\s*$", "", "".join(skeleton_parts))
+    if not _valid_grid_fragment(outer_skeleton):
+        return None
+    for env_name, rows in grids:
+        for row in rows:
+            for col_idx, cell in enumerate(row):
+                cell_clean = cell
+                if env_name == "cases":
+                    if col_idx == 0:
+                        cell_clean = re.sub(r"[,;]\s*$", "", cell_clean)
+                    else:
+                        cell_clean = re.sub(r"[.,;]\s*$", "", cell_clean)
+                if not _valid_grid_fragment(cell_clean):
+                    return None
+    return {"status": "OK", "reason": "", "scope": "grid_shape"}
 
 
 def _is_command_letter(char):

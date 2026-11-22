@@ -19,6 +19,7 @@ import threading
 import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -27,9 +28,18 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
 from local_runtime import (
-    DEFAULT_BASE, DEFAULT_MODEL, MAX_FILE_BYTES, MAX_IMAGE_PIXELS, MAX_PDF_PAGES,
-    LocalRuntime, LocalRuntimeError, make_local_provider,
+    DEFAULT_BASE,
+    DEFAULT_MODEL,
+    MAX_FILE_BYTES,
+    MAX_IMAGE_PIXELS,
+    MAX_PDF_PAGES,
+    LocalRuntime,
+    LocalRuntimeError,
+    _model_name,
+    make_local_provider,
+    validate_base_url,
 )
+from managed_models import ManagedModels, PROFILES
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -61,7 +71,25 @@ def _tectonic_command():
     """编译器命令;每次读取环境,使会话内安装的 Tectonic 立即生效。"""
     return os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
-app = FastAPI(title="TeXada Studio Local")
+@asynccontextmanager
+async def lifespan(_app):
+    global _DEFAULT_MANAGED_MODELS, managed_models
+    if managed_models is _DEFAULT_MANAGED_MODELS and _DEFAULT_MANAGED_MODELS.closed.is_set():
+        _DEFAULT_MANAGED_MODELS = managed_models = ManagedModels(_DEFAULT_STUDIO_STATE)
+    try:
+        yield
+    finally:
+        managed_models.close()
+        if _DEFAULT_MANAGED_MODELS is not managed_models:
+            _DEFAULT_MANAGED_MODELS.close()
+        with _scoped_models_lock:
+            scoped = list(_scoped_managed_models.values())
+            _scoped_managed_models.clear()
+        for manager in scoped:
+            manager.close()
+
+
+app = FastAPI(title="TeXada Studio Local", lifespan=lifespan)
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -269,10 +297,11 @@ def index():
 @app.get("/api/nodeinfo")
 def nodeinfo(token: str = Query("")):
     _guard(token)
+    managed = _managed_models().connection()
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
-    configured_model = REPAIR_MODEL
-    if _is_local_mode():
+    configured_model = managed["model"] if managed else REPAIR_MODEL
+    if not managed and _is_local_mode():
         try:
             configured_model = _local_runtime().get_config()["model"]
         except LocalRuntimeError:
@@ -281,7 +310,8 @@ def nodeinfo(token: str = Query("")):
             "python": platform.python_version(), "configured_model": configured_model,
             "model": configured_model,
             # 按任务模型契约(#23):状态接口暴露修复线与 OCR 线的实际模型。
-            "repair_model": REPAIR_MODEL, "ocr_model": OCR_MODEL,
+            "repair_model": managed["model"] if managed else REPAIR_MODEL,
+            "ocr_model": managed["model"] if managed else OCR_MODEL,
             # Empty legacy fields keep older clients compatible without probing hardware.
             "gpu": "", "mem": "", "models": ""}
 
@@ -354,7 +384,7 @@ from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
-from docforensics.tex_context import analyze_math, extract_math, mask_opaque  # noqa: E402
+from docforensics.tex_context import analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
 from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
 from docforensics.__main__ import repair_model_default  # noqa: E402
 
@@ -365,22 +395,46 @@ OCR_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
+_DEFAULT_STUDIO_STATE = Path(STUDIO_STATE)
+_DEFAULT_MANAGED_MODELS = managed_models = ManagedModels(STUDIO_STATE)
+_scoped_managed_models: dict[Path, ManagedModels] = {}
+_scoped_models_lock = threading.Lock()
 STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
+def _managed_models() -> ManagedModels:
+    if managed_models is not _DEFAULT_MANAGED_MODELS:
+        return managed_models
+    state_path = Path(STUDIO_STATE)
+    if state_path == _DEFAULT_STUDIO_STATE:
+        return _DEFAULT_MANAGED_MODELS
+    with _scoped_models_lock:
+        manager = _scoped_managed_models.get(state_path)
+        if manager is None or manager.closed.is_set():
+            manager = ManagedModels(state_path)
+            _scoped_managed_models[state_path] = manager
+        return manager
+
+
 def _new_provider(*, skill_selection=False):
     # Selection must see metadata first; do not eagerly load the fixed formula body.
     if _is_local_mode():
-        config = _local_runtime().get_config()
+        runtime = _local_runtime()
+        config = runtime.get_config()
+        active = _managed_models().connection()
+        managed_1b = (active is not None and active["model"] == config["model"] == PROFILES["1b"].model
+                      and active["base_url"] == config["base_url"])
         return make_local_provider(config["base_url"], config["model"],
-                                   skill_mode="off" if skill_selection else SKILL_MODE)
+                                   skill_mode="off" if skill_selection else SKILL_MODE,
+                                   constrain_planner=managed_1b)
     return OpenAICompatibleProvider(VLM_BASE_URL, REPAIR_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
-def _local_runtime():
-    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"), model=REPAIR_MODEL)
+def _local_runtime(*, managed=True):
+    return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"),
+                        model=REPAIR_MODEL, active_model=_managed_models().connection() if managed else None)
 
 
 try:
@@ -429,6 +483,19 @@ def _subprocess_text(value) -> str:
     return value
 
 
+def _source_compile_error(output: str, source: Path, line_count: int):
+    """Return a location only when Tectonic names the compiled source file."""
+    source_paths = {source.name, "./" + source.name, str(source)}
+    for match in _re.finditer(r"^error:[ \t]*([^:\r\n]+):(\d{1,8}):[ \t]*([^\r\n]+)", output, _re.M):
+        filename, line, message = match.groups()
+        if filename not in source_paths:
+            continue
+        number = int(line)
+        if 1 <= number <= line_count:
+            return {"line": number, "message": message.strip()[:240]}
+    return None
+
+
 def _append_compiler_log(log, outcome) -> None:
     """失败时把编译器原文写进任务日志，成功时不重复成功输出。"""
     if outcome.get("ok"):
@@ -464,9 +531,12 @@ def _studio_compile(content: str, name: str, tag: str):
             return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
-        log = (_subprocess_text(run.stderr) or _subprocess_text(run.stdout))[-2400:]
+        output = _subprocess_text(run.stderr) or _subprocess_text(run.stdout)
+        log = output[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
-            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。"}
+            diagnostic = _source_compile_error(output, texf, content.count("\n") + 1)
+            return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。",
+                    "diagnostic": diagnostic}
         base = f"/api/studio/preview/{quote(name)}/{tag}"
         result.update(compile_ok=True, pdf=f"/api/studio/pdf/{quote(name)}/{tag}", log=log)
         page_count = 1
@@ -569,12 +639,20 @@ def _math_boundary_problems(diagnostics):
             for index, diagnostic in enumerate(diagnostics)]
 
 
-def _formula_problems(content: str, emit=None):
+def _formula_problems(content: str, emit=None, *, deterministic_only=False, skip_ordinals=()):
+    skipped = set(skip_ordinals)
     problems = []
     parsed = analyze_math(content)
-    for node in parsed["nodes"]:
-        vj = (_verify_formula(node["latex"]) if node["checkable"] else
-              {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]})
+    for ordinal, node in enumerate(parsed["nodes"], 1):
+        if ordinal in skipped:
+            continue
+        if deterministic_only and (not node["checkable"] or deterministic_candidate(node["latex"]) is None):
+            continue
+        if node["checkable"]:
+            vj = _verify_formula(node["latex"])
+        else:
+            grid = check_math_grids(node["latex"]) if node["reason"] == "structured_math" else None
+            vj = grid or {"status": "NEEDS_HUMAN", "reason": "复杂数学结构保留原文供人工核对：" + node["reason"]}
         if emit:
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=vj)
@@ -788,13 +866,14 @@ def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, rem
     return {"accepted": accepted, "check": check, "scope": scope, "reason": reason}
 
 
-def _apply_fixes(content: str, log, *, provider=None, emit=None):
+def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True, skip_ordinals=()):
     provider = provider if provider is not None else PROVIDER
-    if provider is None:
+    if use_model and provider is None:
         provider = _new_provider()
     emit = emit or (lambda action, **fields: None)
     edits, replacements = [], []
-    fp = _formula_problems(content, emit)
+    fp = (_formula_problems(content, emit) if use_model and not skip_ordinals
+          else _formula_problems(content, emit, deterministic_only=not use_model, skip_ordinals=skip_ordinals))
     verifier_unavailable = False
     for p in fp:
         if verifier_unavailable or p["status"] == "NEEDS_ENV":
@@ -835,7 +914,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
             else:
                 previous_candidate, rejection_reason = deterministic, _formula_rejection_feedback(outcome)
                 feedback_check = outcome["check"]
-        for attempt in (() if ok or verifier_unavailable else (1, 2)):
+        for attempt in (() if ok or verifier_unavailable or not use_model else (1, 2)):
             log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 模型文本修复（第 {attempt} 次）")
             context = _formula_repair_context(attempt, feedback_check, previous_candidate, rejection_reason)
             emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex, repair_context=context)
@@ -887,6 +966,12 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
     for start, end, replacement in sorted(replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
 
+    content, table_edits = _apply_table_fixes(content, log, emit)
+    return content, edits + table_edits
+
+
+def _apply_table_fixes(content, log, emit):
+    edits = []
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
     raw_lines = content.split("\n")
@@ -930,9 +1015,11 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         if node["kind"] == "formula":
             if verifier_unavailable:
                 result = {"status": "NEEDS_ENV", "reason": "checker_unavailable"}
+            elif node.get("checkable", True):
+                result = _verify_formula(node["latex"])
             else:
-                result = (_verify_formula(node["latex"]) if node.get("checkable", True) else
-                          {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")})
+                grid = check_math_grids(node["latex"]) if node.get("reason") == "structured_math" else None
+                result = grid or {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")}
             if result.get("status") == "NEEDS_ENV":
                 verifier_unavailable = True
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
@@ -1055,20 +1142,75 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             raise ValueError("candidate_source_mismatch")
         fixed = fixed[:edit["start"]] + edit["after"] + fixed[edit["end"]:]
         emit("CANDIDATE_EDIT", **{k: v for k, v in edit.items() if k not in {"start", "end"}})
-    summary["lexical_diagnostics"] = analyze_math(fixed)["diagnostics"]
     public_edits = [{k: v for k, v in edit.items() if k not in {"start", "end"}} for edit in edits]
     log.append(f"[planner] 执行 {summary['executed']}，拒绝 {summary['rejected']}；候选需人工采用")
+    if any(node.get("state") not in {"ok", "candidate"} for node in summary["nodes"]):
+        # Only independently reproducible patches can proceed after a model deferral.
+        pre_formulas = [n for n in summary["nodes"] if n.get("kind") == "formula" and "id" in n]
+        mid_formulas = extract_math(fixed)
+        if len(pre_formulas) == len(mid_formulas):
+            mid_to_pre = {mid["id"]: pre["id"] for pre, mid in zip(pre_formulas, mid_formulas)}
+            skip_ordinals = {
+                idx for idx, pre in enumerate(pre_formulas, 1)
+                if pre.get("state") in {"ok", "candidate"} or pre.get("attempts", 0) >= 1
+            }
+        else:
+            mid_to_pre = {}
+            skip_ordinals = set()
+        resolved = set()
+
+        def emit_fallback(action, **fields):
+            node_id = fields.get("node_id", "")
+            if action == "CANDIDATE_EDIT" and isinstance(node_id, str) and node_id.startswith("f-"):
+                resolved.add(mid_to_pre.get(node_id, node_id))
+            emit(action, **fields)
+
+        if verifier_unavailable or planner.remaining_seconds() <= 0:
+            fixed, local_edits = _apply_table_fixes(fixed, log, emit_fallback)
+        else:
+            fixed, local_edits = _apply_fixes(
+                fixed, log, emit=emit_fallback, use_model=False, skip_ordinals=skip_ordinals
+            )
+        public_edits.extend(local_edits)
+        if local_edits:
+            summary["deterministic_resolved"] = sorted(resolved)
+            emit("DETERMINISTIC_FALLBACK", edits=len(local_edits), model_calls=0)
+            log.append(f"[studio] 规划后确认 {len(local_edits)} 处确定性修复")
+    summary["lexical_diagnostics"] = analyze_math(fixed)["diagnostics"]
     return fixed, public_edits, summary
 
 
-def _planned_problems(summary, fixed=None):
+def _planned_problems(summary, content=None):
     # Planner candidates have already been checked. Re-running the whole source
     # here would execute unchosen checks after a refusal or an exhausted budget.
-    problems = [{"id": node["id"], "type": "formula" if node["kind"] == "formula" else "table_total",
-                 "line": node.get("line", 1), "status": "NEEDS_HUMAN",
-                 "reason": node.get("human_reason", "planner_unresolved")}
-                for node in summary["nodes"] if node["state"] not in {"ok", "candidate"}]
-    diagnostics = analyze_math(fixed)["diagnostics"] if isinstance(fixed, str) else summary.get("lexical_diagnostics", [])
+    problems = []
+    resolved = set(summary.get("deterministic_resolved", ()))
+    pre_formulas = [n for n in summary["nodes"] if n.get("kind") == "formula" and "id" in n]
+    post_line_by_id = {}
+    if isinstance(content, str):
+        parsed = analyze_math(content)
+        post_formulas = parsed["nodes"]
+        diagnostics = parsed["diagnostics"]
+        if len(pre_formulas) == len(post_formulas):
+            post_line_by_id = {pre["id"]: post["line"] for pre, post in zip(pre_formulas, post_formulas)}
+    else:
+        diagnostics = summary.get("lexical_diagnostics", [])
+    for node in summary["nodes"]:
+        node_id = node.get("id")
+        if node.get("state") in {"ok", "candidate"} or (node_id is not None and node_id in resolved):
+            continue
+        if node.get("kind") == "table":
+            if isinstance(content, str):
+                problems.extend(_table_problems(content))
+            else:
+                problems.append({"id": node_id or "table-document", "type": "table_total",
+                                 "line": node.get("line", 1), "status": "NEEDS_HUMAN",
+                                 "reason": node.get("human_reason", "planner_unresolved")})
+        else:
+            problems.append({"id": node_id, "type": "formula",
+                             "line": post_line_by_id.get(node_id, node.get("line", 1)),
+                             "status": "NEEDS_HUMAN",
+                             "reason": node.get("human_reason", "planner_unresolved")})
     return problems + _math_boundary_problems(diagnostics)
 
 
@@ -1262,12 +1404,25 @@ def _runtime_call(operation):
         raise HTTPException(status_code=error.status, detail=error.message) from None
 
 
+def _studio_tools():
+    return {
+        "tectonic": bool(shutil.which(_tectonic_command())),
+        "pdftoppm": bool(shutil.which("pdftoppm")),
+        "pdfinfo": bool(shutil.which("pdfinfo")),
+    }
+
+
+def _normalize_settings_body(body):
+    if not isinstance(body, dict) or set(body) != {"base_url", "model"}:
+        raise LocalRuntimeError("invalid_settings", "连接设置仅支持本机地址和模型名称。")
+    return {"base_url": validate_base_url(body["base_url"]), "model": _model_name(body["model"])}
+
+
 @app.get("/api/studio/config")
 def studio_config(token: str = Query(""), probe: bool = False):
     _guard(token)
     local_mode = _is_local_mode()
-    tools = {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm")),
-             "pdfinfo": bool(shutil.which("pdfinfo"))}
+    tools = _studio_tools()
     if local_mode:
         config = _runtime_call(lambda: _local_runtime().probe() if probe else _local_runtime().get_config())
     else:
@@ -1285,10 +1440,43 @@ def studio_config(token: str = Query(""), probe: bool = False):
 @app.post("/api/studio/settings")
 def studio_settings(token: str = Query(""), body: dict = None):
     _guard(token)
-    result = _runtime_call(lambda: _local_runtime().update_settings(body))
+    models = _managed_models()
+    with models.lock:
+        active = models.connection()
+        if active:
+            normalized = _runtime_call(lambda: _normalize_settings_body(body))
+            if normalized == active:
+                return {**_local_runtime().get_config(), "local_mode": True, "offline": True, "tools": _studio_tools()}
+        job = models.job
+        if job and job["action"] == "start" and job["state"] == "running":
+            raise HTTPException(status_code=409, detail="请等当前模型启动结束。")
+        result = _runtime_call(lambda: _local_runtime(managed=False).update_settings(body))
+        if active:
+            _runtime_call(models.stop)
     # Settings are per-Studio; no user-global agent/model configuration is changed.
-    return {**result, "local_mode": True, "offline": True,
-            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+    return {**result, "local_mode": True, "offline": True, "tools": _studio_tools()}
+
+
+def _guard_local_models(token):
+    _guard(token)
+    if not _is_local_mode():
+        raise HTTPException(status_code=404, detail="内置模型仅用于本地 Studio。")
+
+
+@app.get("/api/studio/models")
+def studio_models(token: str = Query("")):
+    _guard_local_models(token)
+    return _managed_models().status()
+
+
+@app.post("/api/studio/models/{action}")
+def studio_model_action(action: str, token: str = Query(""), body: dict = None):
+    _guard_local_models(token)
+    models = _managed_models()
+    if action == "stop":
+        _runtime_call(models.stop)
+        return models.status()
+    return _runtime_call(lambda: models.submit(action, (body or {}).get("profile")))
 
 
 @app.post("/api/studio/tools/install")
@@ -1344,6 +1532,17 @@ def studio_create(token: str = Query(""), body: dict = None):
     _guard(token)
     name, content = _document_body(body)
     return _document_call(lambda: _documents().save(name, content, create=True))
+
+
+@app.post("/api/studio/create-split")
+def studio_create_split(token: str = Query(""), body: dict = None):
+    _guard(token)
+    documents = (body or {}).get("documents")
+    if (not isinstance(documents, list) or not 1 <= len(documents) <= MAX_PDF_PAGES
+            or any(not isinstance(document, dict) for document in documents)):
+        raise HTTPException(status_code=400, detail=f"每次请选择 1–{MAX_PDF_PAGES} 页拆分。")
+    entries = [_document_body(document) for document in documents]
+    return _document_call(lambda: _documents().create_many(entries))
 
 
 @app.post("/api/studio/save")
@@ -1472,6 +1671,12 @@ def studio_job_decision(job_id: str, token: str = Query(""), body: dict = None):
         if job.get("review") and job["review"]["decision"] != decision:
             raise HTTPException(status_code=409, detail="此候选已有相反的审阅决定。")
         if not job.get("review"):
+            if decision == "accept" and any(
+                edit.get("skill") == "doc-formula-verify"
+                and repair_blocker(edit.get("before")) == "missing_script_operand"
+                for edit in result.get("edits", [])
+            ):
+                raise HTTPException(status_code=409, detail="此旧候选含有无法从原文确定的上下标，请核对原文后手动补全。")
             job["review"] = {"decision": decision, "at": time.time(),
                              "original_sha256": result["original_sha256"],
                              "candidate_sha256": result["candidate_sha256"]}

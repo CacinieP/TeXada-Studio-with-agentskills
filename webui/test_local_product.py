@@ -115,6 +115,88 @@ class LocalProductTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["content"], "explicit replacement")
 
+    def test_page_split_conflict_leaves_all_other_targets_available_for_retry(self):
+        self.create("notes-第4页.tex", "Keep this")
+        documents = [{"name": "notes-第3页.tex", "content": "$x$"},
+                     {"name": "notes-第4页.tex", "content": "$y$"}]
+        response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.get("file", name=documents[0]["name"]).status_code, 404)
+        self.assertEqual(self.get("file", name=documents[1]["name"]).json()["content"], "Keep this")
+
+        documents[1]["name"] = "notes-retry-第4页.tex"
+        response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["files"], [document["name"] for document in documents])
+        for document in documents:
+            self.assertEqual(self.get("file", name=document["name"]).json()["content"], document["content"])
+
+        # Case-only and NFD/NFC batch collisions must also be rejected atomically with 409.
+        self.assertEqual(self.post("create-split", {"documents": [
+            {"name": "Page-1.tex", "content": "$a$"},
+            {"name": "page-1.tex", "content": "$b$"},
+        ]}).status_code, 409)
+        self.assertEqual(self.post("create-split", {"documents": [
+            {"name": "caf\u00e9-1.tex", "content": "$a$"},
+            {"name": "cafe\u0301-1.tex", "content": "$b$"},
+        ]}).status_code, 409)
+
+    def test_matrix_and_cases_are_checked_for_shape(self):
+        matrices = self.post("analyze", {"content": (
+            r"$f(x)=\begin{vmatrix}2x&1&-1\\-x&x&x\\1&2&x\end{vmatrix}$ "
+            r"$\delta_{ij}=\begin{cases}1,&i=j\\0,&i\neq j\end{cases}$ "
+            r"$\begin{cases} x+y=1 \\ x-y=0 \end{cases}$ "
+            r"$f(x)=\begin{cases}x,&\text{if }x>0\\0,&\text{otherwise}\end{cases}$ "
+            r"$g(x)=\begin{cases}x^2,&0\le x\le 1\\0,&\text{其他}\end{cases}$"
+        )})
+        self.assertEqual(matrices.json()["problems"], [])
+        invalid = self.post("analyze", {"content": r"$\begin{cases}1,&i=j\\0\end{cases}$"})
+        [problem] = invalid.json()["problems"]
+        self.assertEqual(problem["status"], "NEEDS_HUMAN")
+        self.assertIn("[2, 1]", problem["reason"])
+        for broken in (
+            r"$$\frac{1}{ + \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} }}}} \foobar$$",
+            r"$$\begin{pmatrix} \frac{1}{ & 2 \\ 3 & 4 \end{pmatrix}$$",
+            r"$$\begin{pmatrix} 1 & 2 \\[x+1] 3 & 4 \end{pmatrix}$$",
+        ):
+            with self.subTest(broken=broken):
+                problems = self.post("analyze", {"content": broken}).json()["problems"]
+                self.assertEqual(len(problems), 1)
+                self.assertEqual(problems[0]["status"], "NEEDS_HUMAN")
+
+    def test_production_requirements_exclude_test_only_httpx(self):
+        req_lines = [
+            line.strip()
+            for line in (Path(studio.REPO) / "webui" / "requirements.txt").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertFalse(any(line.startswith("httpx") for line in req_lines), req_lines)
+
+    def test_old_guessed_script_candidate_cannot_be_adopted(self):
+        job_id, original, candidate = self.candidate(original="$a_+b$", candidate="$a_1+b$")
+        job = studio._jobs[job_id]
+        job["result"]["edits"] = [{"before": "a_+b", "after": "a_1+b", "skill": "doc-formula-verify"}]
+        response = self.decision(job_id, original, candidate)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("无法从原文确定", response.json()["detail"])
+        self.assertEqual(self.decision(job_id, original, candidate, decision="reject").status_code, 200)
+
+    def test_page_split_rolls_back_an_io_failure_during_publication(self):
+        documents = [{"name": "page-1.tex", "content": "$x$"},
+                     {"name": "page-2.tex", "content": "$y$"}]
+        real_link = os.link
+
+        def fail_second_link(source, target):
+            if target.name == "page-2.tex":
+                raise OSError("simulated write failure")
+            return real_link(source, target)
+
+        with patch("document_store.os.link", side_effect=fail_second_link):
+            response = self.post("create-split", {"documents": documents})
+        self.assertEqual(response.status_code, 500, response.text)
+        self.assertEqual(list(self.documents.iterdir()), [])
+        self.assertEqual(self.post("create-split", {"documents": documents}).status_code, 200)
+
     def test_stale_version_blocks_save_rename_and_delete(self):
         original = self.create()
         current = self.post("save", {"name": original["name"], "content": "newer",
@@ -476,7 +558,7 @@ class LocalProductTest(unittest.TestCase):
         for route in ("files", "file", "config", "jobs", "fixstatus"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get("/api/studio/" + route).status_code, 401)
-        for route in ("create", "save", "upload", "rename", "delete", "settings", "import", "math",
+        for route in ("create", "create-split", "save", "upload", "rename", "delete", "settings", "import", "math",
                       "jobs/" + "a" * 32 + "/decision", "jobs/" + "a" * 32 + "/cancel"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.post("/api/studio/" + route, json={}).status_code, 401)

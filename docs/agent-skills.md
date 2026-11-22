@@ -38,7 +38,7 @@ CLI 模型表格候选须同时通过 `assess_table_candidate` 来源范围守�
 `texada-studio` 与 `doc-ocr-extract` 分别是外部 Agent 操作说明和独立命令行提取工作流，未加入此运行时工具白名单。
 `doc-layout-parse` 和 `doc-report` 也分别是输入准备与证据交付约定，不会因此被自动注入 OCR 或报告请求。
 
-两份运行时 Skill 保留与各自 `capability.json` 一致的顶层 `version`（`doc-formula-verify` 为 `1.1.1`，`doc-table-audit` 为 `1.0.0`）。
+两份运行时 Skill 保留与各自 `capability.json` 一致的顶层 `version`（`doc-formula-verify` 为 `1.3.0`，`doc-table-audit` 为 `1.0.0`）。
 本次修订更正流程说明，没有改变 capability schema；正文 SHA256 会随修改变化，旧执行上下文不能据此冒充新运行。
 研究比较须保存实际正文、模型、输入和请求记录，不能从文字修订直接推断准确率提升。
 

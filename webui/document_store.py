@@ -6,6 +6,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import tempfile
 import threading
 import time
 import unicodedata
@@ -70,71 +71,73 @@ class DocumentStore:
         return path
 
     def read(self, name):
-        name = document_name(name)
-        user_path = self._path(self.documents, name)
-        path = user_path if user_path.is_file() else self._path(self.samples, name)
-        if not path.is_file():
-            raise DocumentError("文档不存在。", 404)
-        if path.stat().st_size > MAX_DOCUMENT_BYTES:
-            raise DocumentError("文档超过 2 MiB。", 413)
-        try:
-            content = path.read_text(encoding="utf-8-sig")
-        except UnicodeError:
-            raise DocumentError("文档不是有效的 UTF-8 文本。") from None
-        return {"name": name, "content": content, "sha256": text_hash(content),
-                "origin": "local" if path == user_path else "sample",
-                "saved_at": path.stat().st_mtime, "size": len(content.encode("utf-8"))}
+        with _LOCK:
+            name = document_name(name)
+            user_path = self._path(self.documents, name)
+            path = user_path if user_path.is_file() else self._path(self.samples, name)
+            if not path.is_file():
+                raise DocumentError("文档不存在。", 404)
+            if path.stat().st_size > MAX_DOCUMENT_BYTES:
+                raise DocumentError("文档超过 2 MiB。", 413)
+            try:
+                content = path.read_text(encoding="utf-8-sig")
+            except UnicodeError:
+                raise DocumentError("文档不是有效的 UTF-8 文本。") from None
+            return {"name": name, "content": content, "sha256": text_hash(content),
+                    "origin": "local" if path == user_path else "sample",
+                    "saved_at": path.stat().st_mtime, "size": len(content.encode("utf-8"))}
 
     def listing(self):
-        seen_names = set()
-        seen_casefold = set()
-        seen_inodes = set()
-        names = []
-        if self.documents.is_dir() and not self.documents.is_symlink():
-            for p in sorted(self.documents.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
-                if p.is_symlink() or not p.is_file():
-                    continue
+        with _LOCK:
+            seen_names = set()
+            seen_casefold = set()
+            seen_inodes = set()
+            names = []
+            if self.documents.is_dir() and not self.documents.is_symlink():
+                for p in sorted(self.documents.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    try:
+                        canonical_name = document_name(p.name)
+                        st = p.stat()
+                    except (DocumentError, OSError):
+                        continue
+                    inode = (st.st_dev, st.st_ino)
+                    if inode in seen_inodes or canonical_name in seen_names:
+                        continue
+                    seen_inodes.add(inode)
+                    seen_names.add(canonical_name)
+                    seen_casefold.add(canonical_name.casefold())
+                    names.append(canonical_name)
+            if self.samples.is_dir() and not self.samples.is_symlink():
+                for p in sorted(self.samples.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    try:
+                        name = document_name(p.name)
+                    except DocumentError:
+                        continue
+                    folded = name.casefold()
+                    if folded in seen_casefold:
+                        continue
+                    local_alias = self.documents / name
+                    if not self.documents.is_symlink() and not local_alias.is_symlink() and local_alias.is_file():
+                        try:
+                            lst = local_alias.stat()
+                        except OSError:
+                            pass
+                        else:
+                            if (lst.st_dev, lst.st_ino) in seen_inodes:
+                                continue
+                    seen_casefold.add(folded)
+                    names.append(name)
+            documents = []
+            for name in sorted(names):
                 try:
-                    canonical_name = document_name(p.name)
-                    st = p.stat()
-                except (DocumentError, OSError):
-                    continue
-                inode = (st.st_dev, st.st_ino)
-                if inode in seen_inodes or canonical_name in seen_names:
-                    continue
-                seen_inodes.add(inode)
-                seen_names.add(canonical_name)
-                seen_casefold.add(canonical_name.casefold())
-                names.append(canonical_name)
-        if self.samples.is_dir() and not self.samples.is_symlink():
-            for p in sorted(self.samples.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
-                if p.is_symlink() or not p.is_file():
-                    continue
-                try:
-                    name = document_name(p.name)
+                    documents.append({k: v for k, v in self.read(name).items() if k != "content"})
                 except DocumentError:
                     continue
-                folded = name.casefold()
-                if folded in seen_casefold:
-                    continue
-                local_alias = self.documents / name
-                if not self.documents.is_symlink() and not local_alias.is_symlink() and local_alias.is_file():
-                    try:
-                        lst = local_alias.stat()
-                    except OSError:
-                        pass
-                    else:
-                        if (lst.st_dev, lst.st_ino) in seen_inodes:
-                            continue
-                seen_casefold.add(folded)
-                names.append(name)
-        documents = []
-        for name in sorted(names):
-            try:
-                documents.append({k: v for k, v in self.read(name).items() if k != "content"})
-            except DocumentError:
-                continue
-        return {"files": [d["name"] for d in documents], "documents": documents}
+            return {"files": [d["name"] for d in documents], "documents": documents}
 
     def _write(self, path, content):
         self._safe_write_path(path)
@@ -193,6 +196,44 @@ class DocumentStore:
             if old_local is not None and old_local.exists() and not os.path.samefile(old_local, target):
                 old_local.unlink()
             return {"ok": True, **self.read(name)}
+
+    def create_many(self, documents):
+        with _LOCK:
+            normalized = [(document_name(name), document_text(content)) for name, content in documents]
+            paths = []
+            seen_folded = set()
+            for name, _ in normalized:
+                folded = name.casefold()
+                existing = self._path(self.documents, name)
+                target = self._path(self.documents, name, for_write=True)
+                if existing.exists() or self._path(self.samples, name).exists() or folded in seen_folded:
+                    raise DocumentError(f"「{name}」已存在或重复，请更换文件名。", 409)
+                self._safe_write_path(target)
+                seen_folded.add(folded)
+                paths.append(target)
+
+            published = []
+            try:
+                self.documents.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with tempfile.TemporaryDirectory(prefix=".split-", dir=self.documents) as temporary:
+                    staged = []
+                    for index, (_, content) in enumerate(normalized):
+                        path = Path(temporary) / str(index)
+                        self._write(path, content)
+                        staged.append(path)
+                    for source, target in zip(staged, paths):
+                        try:
+                            os.link(source, target)
+                        except FileExistsError:
+                            raise DocumentError(f"「{target.name}」已存在，请更换文件名。", 409) from None
+                        published.append(target)
+            except (OSError, DocumentError) as error:
+                for path in published:
+                    path.unlink(missing_ok=True)
+                if isinstance(error, DocumentError):
+                    raise
+                raise DocumentError("无法按页保存文档，请检查本地存储后重试。", 500) from None
+            return {"ok": True, "files": [path.name for path in paths]}
 
     def rename(self, name, new_name, expected_sha256):
         name, new_name = document_name(name), document_name(new_name)
