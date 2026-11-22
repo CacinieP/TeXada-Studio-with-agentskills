@@ -19,7 +19,12 @@ import sys
 
 from . import anchor_guard, source_report, state
 from .vlm import FixtureProvider, OllamaProvider
-from .formula_repair import assess_candidate, deterministic_candidate, repair_blocker
+from .formula_repair import (
+    assess_candidate,
+    can_attempt_structural_repair,
+    deterministic_candidate,
+    repair_blocker,
+)
 from .table_repair import assess_table_candidate
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -321,10 +326,10 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
     previous_candidate, rejection_reason, seen = None, None, set()
     if kind == "formula" and result.get("status") == "RETRY":
         blocked = repair_blocker(original)
-        if blocked:
+        if blocked and not can_attempt_structural_repair(original):
             result = {"status": "NEEDS_HUMAN", "reason": blocked}
             state.append(run_dir, **common, action="REPAIR_SKIPPED", reason=blocked)
-        else:
+        elif not blocked:
             candidate = deterministic_candidate(original)
             if candidate is not None:
                 scope = assess_candidate(original, candidate)
@@ -378,7 +383,7 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
         # Anchor findings name what a drifting candidate silently changed;
         # they never authorize an edit that the preservation scope rejects.
         anchor = anchor_guard.anchor_drift(original, candidate) if kind == "formula" else None
-        accepted = result.get("status") == "OK" and scope["allowed"]
+        accepted = result.get("status") == "OK" and scope["allowed"] and not (anchor and anchor["drift"])
         abstained = (not accepted and kind == "formula" and scope.get("method") == "unchanged"
                      and result.get("status") != "NEEDS_ENV" and result.get("reason") != "checker_error")
         state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,

@@ -56,12 +56,17 @@ class SkillSelectionTest(unittest.TestCase):
     def test_catalog_reads_metadata_without_loading_bodies(self):
         with patch("docforensics.skill_selection._read_skill", side_effect=AssertionError("body read is forbidden")):
             catalog = load_catalog()
-        self.assertEqual(set(catalog), {"doc-formula-verify", "doc-table-audit"})
+        self.assertEqual(set(catalog), {"doc-formula-verify", "doc-table-audit", "latex-cleanup"})
+        expected_versions = {
+            "doc-formula-verify": "1.4.0",
+            "doc-table-audit": "1.0.0",
+            "latex-cleanup": "0.2.3",
+        }
         for name, capability in catalog.items():
-            self.assertEqual(capability.version, "1.3.0" if name == "doc-formula-verify" else "1.0.0")
+            self.assertEqual(capability.version, expected_versions[name])
             self.assertEqual(capability.metadata_sha256, hashlib.sha256((ROOT / "skills" / name / "capability.json").read_bytes()).hexdigest())
         node = {"kind": "formula", "latex": "x+"}
-        for choice, reason in (("doc-table-audit", "skill_not_applicable"), ("ocr-layout", "skill_not_allowed"), (None, "selection_declined")):
+        for choice, reason in (("doc-table-audit", "skill_not_applicable"), ("latex-cleanup", "skill_not_applicable"), ("ocr-layout", "skill_not_allowed"), (None, "selection_declined")):
             self.assertEqual(validate_selection({"skill_id": choice, "state_rev": 2, "reason": "test"}, node, 2, catalog)[1], reason)
         self.assertEqual(validate_selection({"skill_id": "doc-formula-verify", "state_rev": True, "reason": "test"}, node, 2, catalog)[1], "stale_selection")
         self.assertEqual(validate_selection({"skill_id": [], "state_rev": 2, "reason": "test"}, node, 2, catalog)[1], "skill_not_allowed")
@@ -69,7 +74,7 @@ class SkillSelectionTest(unittest.TestCase):
     def test_body_version_and_paths_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("doc-formula-verify", "doc-table-audit"):
+            for name in ("doc-formula-verify", "doc-table-audit", "latex-cleanup"):
                 shutil.copytree(ROOT / "skills" / name, root / name)
             catalog = load_catalog(root)
             for name in catalog:
@@ -89,7 +94,7 @@ class SkillSelectionTest(unittest.TestCase):
     def test_unknown_metadata_capability_and_arbitrary_schema_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("doc-formula-verify", "doc-table-audit"):
+            for name in ("doc-formula-verify", "doc-table-audit", "latex-cleanup"):
                 shutil.copytree(ROOT / "skills" / name, root / name)
             path = root / "doc-table-audit" / "capability.json"
             original = json.loads(path.read_text())
