@@ -93,6 +93,71 @@ class DeterministicRepairTests(unittest.TestCase):
                 self.assertEqual(checker.check(original)[0], "RETRY")
                 self.assertEqual(checker.check(candidate)[0], "OK")
 
+    def test_checker_rejects_invalid_or_mismatched_left_right_and_duplicate_scripts(self):
+        path = Path(__file__).resolve().parents[2] / "skills/doc-formula-verify/scripts/verify.py"
+        spec = importlib.util.spec_from_file_location("formula_checker", path)
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+        for valid_precheck in (
+            r"\left(0,1\right]",
+            r"\left.\frac{d}{dx}x^2\right|_{x=1}=2",
+            r"\left\{ x \right\}",
+            r"\left\| x \right\Vert",
+            r"\left\lvert x \right\rvert",
+            r"\left\lVert x \right\rVert",
+            r"\left\langle x \right\rangle",
+            r"\left\lfloor x \right\rfloor",
+            r"\left\lceil x \right\rceil",
+            r"\left\backslash x \right/",
+            r"\left\uparrow x \right\downarrow",
+            r"\left\Uparrow x \right\Downarrow",
+            r"\left\updownarrow x \right\Updownarrow",
+            "x_1^2", "x^2_1", "x^12", "x^12^3", "{x^2}^3",
+        ):
+            with self.subTest(valid_precheck=valid_precheck):
+                self.assertIsNone(checker._lexical_error(valid_precheck))
+        for valid_parse in ("x_1^2", "x^2_1", "x^12", "x^12^3", "{x^2}^3", r"\left(a+b\right)"):
+            with self.subTest(valid_parse=valid_parse):
+                self.assertEqual(checker.check(valid_parse)[0], "OK")
+        for invalid in (
+            r"\left\lvert x \right",
+            r"x \left + y",
+            r"\frac{\left(x+1)}{2}",
+            r"\left(x+1)+2",
+            r"(x+1\right)",
+            r"\frac{\left(x+1}{2}\right)",
+            "x^2^3",
+            "x_i_j",
+            "x^2_1^3",
+            r"x^\alpha^\beta",
+            "x^{a}^{b}",
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(checker.check(invalid)[0], "RETRY")
+
+    def test_interleaved_and_control_word_duplicate_scripts_are_repair_blockers(self):
+        for value in ("x^2_1^3", "x_1^2_3", r"x^\alpha^\beta", r"x^\alpha_1^\beta", r"x_\alpha^\beta_\gamma"):
+            with self.subTest(value=value):
+                self.assertEqual(repair_blocker(value), "duplicate_script")
+                self.assertIsNone(deterministic_candidate(value))
+
+    def test_unbraced_single_char_arguments_and_empty_brace_arguments(self):
+        self.assertIsNone(repair_blocker(r"\frac12"))
+        self.assertIsNone(repair_blocker(r"\frac\alpha\beta"))
+        self.assertEqual(deterministic_candidate(r"\frac12 + \frac{a}{b"), r"\frac12 + \frac{a}{b}")
+        self.assertEqual(deterministic_candidate(r"\frac1{b"), r"\frac1{b}")
+        for invalid in (r"\frac1", r"\frac\alpha", r"\frac{}{3", r"\frac{3}{}", r"\frac{}{3}", r"\binom{}{k}"):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(repair_blocker(invalid), "missing_command_argument")
+                self.assertIsNone(deterministic_candidate(invalid))
+
+    def test_trailing_control_space_is_not_misclassified_as_incomplete_command(self):
+        self.assertIsNone(repair_blocker(r"x\ "))
+        self.assertIsNone(repair_blocker(r"\frac{a}{b\ "))
+        self.assertEqual(deterministic_candidate(r"\frac{a}{b\ "), r"\frac{a}{b\ }")
+        self.assertEqual(repair_blocker("x\\"), "incomplete_command")
+        self.assertFalse(assess_candidate(r"x + y\ ", "x + y\\")["allowed"])
+
     def test_combines_only_compatible_group_and_left_closures(self):
         self.assertEqual(deterministic_candidate(r"\left(\frac{a}{b"), r"\left(\frac{a}{b}\right)")
         self.assertEqual(assess_candidate(r"\left(\frac{a}{b", r"\left(\frac{a}{b}\right)")["method"],

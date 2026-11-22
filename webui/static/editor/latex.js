@@ -20,10 +20,10 @@
       "\\begin{equation*}", "\t${1:x = y}", "\\end{equation*}", "$0"
     ])},
     {name:"align", label:"\\begin{align}", detail:"多行对齐公式 · amsmath", prefixes:["align", "begin"], body:lines([
-      "\\begin{align}", "\t${1:a} &= ${2:b} \\\\", "\t${3:c} &= ${4:d}", "\\end{align}", "$0"
+      "\\begin{align}", "\t${1:a} &= ${2:b} \\\\\\\\", "\t${3:c} &= ${4:d}", "\\end{align}", "$0"
     ])},
     {name:"align-star", label:"\\begin{align*}", detail:"无编号对齐公式 · amsmath", prefixes:["align*", "alignstar", "begin"], body:lines([
-      "\\begin{align*}", "\t${1:a} &= ${2:b} \\\\", "\t${3:c} &= ${4:d}", "\\end{align*}", "$0"
+      "\\begin{align*}", "\t${1:a} &= ${2:b} \\\\\\\\", "\t${3:c} &= ${4:d}", "\\end{align*}", "$0"
     ])},
     {name:"display", label:"\\[ … \\]", detail:"显示公式", prefixes:["display", "math"], body:lines(["\\[", "\t${1:x = y}", "\\]", "$0"])},
     {name:"frac", label:"\\frac", detail:"分式", prefixes:["frac"], body:"\\frac{${1:numerator}}{${2:denominator}}$0"},
@@ -33,14 +33,14 @@
     {name:"sum", label:"\\sum", detail:"求和记号", prefixes:["sum"], body:"\\sum_{${1:i=1}}^{${2:n}} ${3:a_i}$0"},
     {name:"lim", label:"\\lim", detail:"极限记号", prefixes:["lim", "limit"], body:"\\lim_{${1:x \\to 0}} ${2:f(x)}$0"},
     {name:"matrix", label:"\\begin{pmatrix}", detail:"矩阵 · amsmath", prefixes:["matrix", "pmatrix", "begin"], body:lines([
-      "\\begin{pmatrix}", "\t${1:a} & ${2:b} \\\\", "\t${3:c} & ${4:d}", "\\end{pmatrix}$0"
+      "\\begin{pmatrix}", "\t${1:a} & ${2:b} \\\\\\\\", "\t${3:c} & ${4:d}", "\\end{pmatrix}$0"
     ])},
     {name:"cases", label:"\\begin{cases}", detail:"分段表达式 · amsmath", prefixes:["cases", "begin"], body:lines([
-      "\\begin{cases}", "\t${1:x}, & ${2:x > 0} \\\\", "\t${3:0}, & ${4:x \\leq 0}", "\\end{cases}$0"
+      "\\begin{cases}", "\t${1:x}, & ${2:x > 0} \\\\\\\\", "\t${3:0}, & ${4:x \\leq 0}", "\\end{cases}$0"
     ])},
     {name:"table", label:"\\begin{table}", detail:"表格、标题与引用标签", prefixes:["table", "tabular", "begin"], body:lines([
       "\\begin{table}[${1:htbp}]", "\t\\centering", "\t\\begin{tabular}{${2:ll}}", "\t\t\\hline",
-      "\t\t${3:Heading 1} & ${4:Heading 2} \\\\", "\t\t\\hline", "\t\t${5:Value 1} & ${6:Value 2} \\\\",
+      "\t\t${3:Heading 1} & ${4:Heading 2} \\\\\\\\", "\t\t\\hline", "\t\t${5:Value 1} & ${6:Value 2} \\\\\\\\",
       "\t\t\\hline", "\t\\end{tabular}", "\t\\caption{${7:Caption}}", "\t\\label{tab:${8:label}}", "\\end{table}", "$0"
     ])},
     {name:"figure", label:"\\begin{figure}", detail:"图片、标题与引用标签 · graphicx", prefixes:["figure", "fig", "begin"], body:lines([
@@ -84,10 +84,10 @@
     {name:"toc", label:"\\tableofcontents", detail:"生成目录", prefixes:["toc", "tableofcontents", "contents"], body:"\\tableofcontents\n$0"},
     {name:"usepackage", label:"\\usepackage", detail:"载入宏包", prefixes:["usepackage", "package"], body:"\\usepackage{${1:amsmath}}$0"},
     {name:"bmatrix", label:"\\begin{bmatrix}", detail:"方括号矩阵 · amsmath", prefixes:["bmatrix", "matrix", "begin"], body:lines([
-      "\\begin{bmatrix}", "\t${1:a} & ${2:b} \\\\", "\t${3:c} & ${4:d}", "\\end{bmatrix}$0"
+      "\\begin{bmatrix}", "\t${1:a} & ${2:b} \\\\\\\\", "\t${3:c} & ${4:d}", "\\end{bmatrix}$0"
     ])},
     {name:"vmatrix", label:"\\begin{vmatrix}", detail:"行列式 · amsmath", prefixes:["vmatrix", "matrix", "begin"], body:lines([
-      "\\begin{vmatrix}", "\t${1:a} & ${2:b} \\\\", "\t${3:c} & ${4:d}", "\\end{vmatrix}$0"
+      "\\begin{vmatrix}", "\t${1:a} & ${2:b} \\\\\\\\", "\t${3:c} & ${4:d}", "\\end{vmatrix}$0"
     ])},
     {name:"eqref", label:"\\eqref", detail:"公式编号引用 · amsmath", prefixes:["eqref"], body:"\\eqref{${1:eq:label}}$0"},
     {name:"cite", label:"\\cite", detail:"参考文献引用", prefixes:["cite"], body:"\\cite{${1:key}}$0"},

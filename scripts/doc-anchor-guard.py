@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""doc-anchor-guard：公式候选的算子/希腊字母/上下标锚点漂移判定。
+r"""doc-anchor-guard：公式候选的算子/希腊字母/上下标锚点漂移判定。
 
 输入（二选一）:
   - 命令行参数:  doc-anchor-guard.py '\\iint_D f' '\\int_D f'
@@ -28,9 +28,9 @@ EXIT_BAD_INPUT = 1
 
 
 def verdict(original, candidate):
-    result = anchor_drift(original, candidate)
     if not isinstance(original, str) or not isinstance(candidate, str):
         return {"status": "NEEDS_HUMAN", "reason": "bad_input", "findings": []}
+    result = anchor_drift(original, candidate)
     if result["drift"]:
         return {"status": "RETRY", "reason": result["reason"], "findings": result["findings"]}
     return {"status": "OK", "reason": result["reason"] or "no_anchor_drift", "findings": []}
@@ -41,12 +41,18 @@ def emit(record):
 
 
 def main(argv):
-    if len(argv) == 2:
-        emit(verdict(argv[0], argv[1]))
-        return EXIT_OK
+    if any(arg in ("-h", "--help") for arg in argv):
+        print(__doc__, file=sys.stderr)
+        return EXIT_BAD_INPUT
+    if (len(argv) == 2 and argv[0] not in ("-", "--stdin") and argv[1] not in ("-", "--stdin")
+            and not argv[0].startswith("--") and not argv[1].startswith("--")):
+        record = verdict(argv[0], argv[1])
+        emit(record)
+        return EXIT_BAD_INPUT if record["status"] == "NEEDS_HUMAN" else EXIT_OK
     if len(argv) != 1 or argv[0] not in ("-", "--stdin"):
         print(__doc__, file=sys.stderr)
         return EXIT_BAD_INPUT
+    exit_code = EXIT_OK
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -54,14 +60,18 @@ def main(argv):
         try:
             request = json.loads(line)
         except (json.JSONDecodeError, ValueError):
-            emit({"status": "NEEDS_HUMAN", "reason": "bad_input", "findings": []})
+            emit({"id": None, "status": "NEEDS_HUMAN", "reason": "bad_input", "findings": []})
+            exit_code = EXIT_BAD_INPUT
             continue
         if not isinstance(request, dict):
-            emit({"status": "NEEDS_HUMAN", "reason": "bad_input", "findings": []})
+            emit({"id": None, "status": "NEEDS_HUMAN", "reason": "bad_input", "findings": []})
+            exit_code = EXIT_BAD_INPUT
             continue
         record = verdict(request.get("original"), request.get("candidate"))
         emit({"id": request.get("id"), **record})
-    return EXIT_OK
+        if record["status"] == "NEEDS_HUMAN":
+            exit_code = EXIT_BAD_INPUT
+    return exit_code
 
 
 if __name__ == "__main__":

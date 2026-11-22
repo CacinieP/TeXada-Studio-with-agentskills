@@ -16,7 +16,7 @@ reason 枚举（对应 SKILL.md 的处置路径）:
 当前无图像重提取，只接受完整的十进制数字单元格；单位、百分比与会计括号需人工处理。
 
 两条校验线：
-  A. 表内自洽 —— 末行若为合计行（首格含 合计/总计/total），其各列数值必须等于数据行该列之和
+  A. 表内自洽 —— 末行若为合计行（首格去空白并忽略大小写后等于 合计/总计/total），其各列数值必须等于数据行该列之和
   B. 与基准对照 —— expected.totals 提供时，同样与数据行之和比对
 """
 
@@ -28,11 +28,20 @@ from decimal import Decimal, InvalidOperation, localcontext
 _NUM_RE = re.compile(r"[+\-]?(?:(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]*)?|\.[0-9]+)")
 
 
-def to_decimal(cell: str):
+def to_decimal(cell):
     """只接受整个单元格为有限十进制数，不从单位或表达式中猜取数字。"""
-    if isinstance(cell, bool) or not isinstance(cell, (str, int, float, Decimal)):
+    if isinstance(cell, bool):
         return None
-    text = str(cell).strip().replace("，", ",")
+    if isinstance(cell, Decimal):
+        return cell if cell.is_finite() else None
+    if isinstance(cell, int):
+        return Decimal(cell)
+    if isinstance(cell, float):
+        value = Decimal(str(cell))
+        return value if value.is_finite() else None
+    if not isinstance(cell, str):
+        return None
+    text = cell.strip().replace("，", ",")
     if not _NUM_RE.fullmatch(text):
         return None
     try:
@@ -103,8 +112,8 @@ def audit(rec: dict):
             return "NEEDS_HUMAN", "bad_expectation", f"total index {key} out of range"
 
     # 2) 表内自洽：识别合计行（A 线）
-    total_labels = ("合计", "总计", "total")
-    has_total_row = bool(rows) and any(k in str(rows[-1][0]).strip().lower() for k in total_labels)
+    total_labels = {"合计", "总计", "total"}
+    has_total_row = bool(rows) and bool(rows[-1]) and str(rows[-1][0]).strip().lower() in total_labels
     data_rows = rows[1:-1] if has_total_row else rows[1:]
     if has_total_row and not data_rows:
         return "NEEDS_HUMAN", "bad_input", "a total row requires at least one data row after the header"

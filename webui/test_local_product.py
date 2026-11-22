@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
+import unicodedata
 import unittest
 from unittest.mock import Mock, patch
 
@@ -129,6 +130,16 @@ class LocalProductTest(unittest.TestCase):
         self.assertEqual(response.json()["files"], [document["name"] for document in documents])
         for document in documents:
             self.assertEqual(self.get("file", name=document["name"]).json()["content"], document["content"])
+
+        # Case-only and NFD/NFC batch collisions must also be rejected atomically with 409.
+        self.assertEqual(self.post("create-split", {"documents": [
+            {"name": "Page-1.tex", "content": "$a$"},
+            {"name": "page-1.tex", "content": "$b$"},
+        ]}).status_code, 409)
+        self.assertEqual(self.post("create-split", {"documents": [
+            {"name": "caf\u00e9-1.tex", "content": "$a$"},
+            {"name": "cafe\u0301-1.tex", "content": "$b$"},
+        ]}).status_code, 409)
 
     def test_matrix_and_cases_are_checked_for_shape(self):
         matrices = self.post("analyze", {"content": (
@@ -551,6 +562,157 @@ class LocalProductTest(unittest.TestCase):
                       "jobs/" + "a" * 32 + "/decision", "jobs/" + "a" * 32 + "/cancel"):
             with self.subTest(route=route):
                 self.assertEqual(self.client.post("/api/studio/" + route, json={}).status_code, 401)
+
+    def test_unicode_nfd_filenames_normalize_to_nfc_across_store_and_routes(self):
+        for raw in ("cafe\u0301.tex", "\u304b\u3099.tex"):
+            nfc = unicodedata.normalize("NFC", raw)
+            self.assertNotEqual(raw, nfc)
+            self.assertEqual(studio.document_name(raw), nfc)
+            created = self.create(raw, f"Body for {nfc}")
+            self.assertEqual(created["name"], nfc)
+            opened_nfd = self.get("file", name=raw)
+            self.assertEqual(opened_nfd.status_code, 200, opened_nfd.text)
+            self.assertEqual(opened_nfd.json()["name"], nfc)
+            files = self.get("files").json()["files"]
+            self.assertIn(nfc, files)
+            self.assertNotIn(raw, files)
+
+    def test_listing_deduplicates_case_insensitive_sample_against_local_casing(self):
+        (self.samples / "welcome.tex").write_text("Sample welcome", encoding="utf-8")
+        uploaded = self.post("upload", {"name": "Welcome.tex", "content": "Local Welcome"})
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        listing = self.get("files").json()
+        matching = [f for f in listing["files"] if f.casefold() == "welcome.tex"]
+        self.assertEqual(matching, ["Welcome.tex"])
+        doc = next(d for d in listing["documents"] if d["name"].casefold() == "welcome.tex")
+        self.assertEqual(doc["name"], "Welcome.tex")
+        self.assertEqual(doc["origin"], "local")
+
+    def test_case_only_rename_succeeds_and_updates_directory_entry_casing(self):
+        created = self.create("draft.tex", "Case rename content")
+        renamed = self.post("rename", {"name": "draft.tex", "new_name": "Draft.tex",
+                                       "expected_sha256": created["sha256"]})
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        self.assertEqual(renamed.json()["name"], "Draft.tex")
+        disk_names = [p.name for p in self.documents.iterdir() if not p.name.startswith(".")]
+        self.assertEqual(disk_names, ["Draft.tex"])
+        listing = self.get("files").json()["files"]
+        self.assertIn("Draft.tex", listing)
+        self.assertNotIn("draft.tex", listing)
+        archived = list((self.documents / ".history").rglob("*.tex"))
+        self.assertEqual([p.read_text(encoding="utf-8") for p in archived], ["Case rename content"])
+
+    def test_build_artifacts_are_isolated_under_builds_and_removed_on_delete(self):
+        def fake_run(command, **kwargs):
+            if command[0] == studio._tectonic_command():
+                (Path(kwargs["cwd"]) / "main.pdf").write_bytes(b"%PDF-1.7\nisolated")
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if command[0] == "pdfinfo":
+                return SimpleNamespace(returncode=0, stdout="Pages: 1\n", stderr="")
+            if command[0] == "pdftoppm":
+                Path(command[-1] + ".png").write_bytes(b"\x89PNG\r\nisolated")
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            self.fail(f"unexpected command: {command}")
+
+        for special in ("documents.tex", "jobs.tex", "imports.tex"):
+            created = self.create(special, f"Content for {special}")
+            with patch.object(studio.subprocess, "run", side_effect=fake_run):
+                preview = self.post("preview", {"name": special, "content": created["content"]}).json()
+            stem = special.removesuffix(".tex")
+            build_dir = self.state / "builds" / stem / preview["tag"]
+            self.assertTrue((build_dir / "main.pdf").is_file())
+            self.assertFalse((self.state / stem / preview["tag"]).exists())
+            deleted = self.post("delete", {"name": special, "expected_sha256": created["sha256"]})
+            self.assertEqual(deleted.status_code, 200, deleted.text)
+            self.assertFalse((self.state / "builds" / stem).exists())
+
+    def test_cancelled_job_sets_cancelled_flag_and_jobs_summary_exposes_cancellation_fields(self):
+        self.assertTrue(studio._job_lock.acquire(blocking=False))
+        try:
+            self.assertTrue(studio._job_lock.acquire(blocking=False), "_job_lock must be reentrant RLock")
+            studio._job_lock.release()
+        finally:
+            studio._job_lock.release()
+
+        with patch.object(studio.threading, "Thread"):
+            started = self.post("fix", {"name": "notes.tex", "content": "plain"}).json()
+        job_id = started["job"]
+        self.post(f"jobs/{job_id}/cancel", {})
+        before_row = next(r for r in self.get("jobs").json()["jobs"] if r["id"] == job_id)
+        self.assertIs(before_row.get("cancel_requested"), True)
+        self.assertIs(before_row.get("cancelled"), False)
+
+        provider = Mock()
+        provider.fingerprint.return_value = {"kind": "test"}
+        with patch.object(studio, "_new_provider", return_value=provider), \
+                patch.object(studio, "_studio_compile"):
+            studio._studio_job("notes.tex", "plain", job_id)
+        after_row = next(r for r in self.get("jobs").json()["jobs"] if r["id"] == job_id)
+        self.assertIs(after_row.get("cancel_requested"), True)
+        self.assertIs(after_row.get("cancelled"), True)
+        stored = json.loads((self.state / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
+        self.assertIs(stored.get("cancelled"), True)
+
+    def test_save_removes_legacy_non_nfc_ghost_file_when_distinct_inode_exists(self):
+        # Simulate Linux ext4 where a pre-existing NFD file has a distinct inode from NFC target.
+        self.documents.mkdir(parents=True, exist_ok=True)
+        legacy_nfd = self.documents / "legacy_nfd_ghost.tex"
+        legacy_nfd.write_text("v1 from legacy NFD", encoding="utf-8")
+        nfc_name = unicodedata.normalize("NFC", "café.tex")
+        nfc_target = self.documents / nfc_name
+        store = studio._documents()
+        real_path = store._path
+
+        def simulated_ext4_path(directory, name, *, for_write=False):
+            norm = studio.document_name(name)
+            if directory == store.documents and norm == nfc_name:
+                if for_write:
+                    return nfc_target
+                if nfc_target.exists():
+                    return nfc_target
+                if legacy_nfd.exists():
+                    return legacy_nfd
+            return real_path(directory, name, for_write=for_write)
+
+        with patch.object(studio, "_documents", return_value=store), \
+                patch.object(store, "_path", side_effect=simulated_ext4_path):
+            opened = self.get("file", name="cafe\u0301.tex").json()
+            self.assertEqual(opened["content"], "v1 from legacy NFD")
+            saved = self.post("save", {"name": nfc_name, "content": "v2 canonical NFC",
+                                       "expected_sha256": opened["sha256"]})
+            self.assertEqual(saved.status_code, 200, saved.text)
+            self.assertTrue(nfc_target.is_file())
+            self.assertFalse(legacy_nfd.exists(), "legacy NFD ghost inode must be unlinked after NFC write")
+            deleted = self.post("delete", {"name": nfc_name, "expected_sha256": saved.json()["sha256"]})
+            self.assertEqual(deleted.status_code, 200, deleted.text)
+            self.assertEqual(self.get("file", name=nfc_name).status_code, 404)
+
+    def test_listing_preserves_distinct_case_sensitive_local_files_while_hiding_casefolded_samples(self):
+        # Simulate Linux ext4: draft.tex (ino 101) and Draft.tex (ino 102) are distinct local files,
+        # while Welcome.tex (ino 103) in documents still hides welcome.tex (ino 201) in samples.
+        def fake_entry(name, ino):
+            return SimpleNamespace(
+                name=name,
+                is_symlink=lambda: False,
+                is_file=lambda: True,
+                stat=lambda: SimpleNamespace(st_dev=1, st_ino=ino),
+            )
+
+        store = studio._documents()
+        local_entries = [fake_entry("Draft.tex", 102), fake_entry("Welcome.tex", 103), fake_entry("draft.tex", 101)]
+        sample_entries = [fake_entry("welcome.tex", 201), fake_entry("sample.tex", 202)]
+        records = {
+            "Draft.tex": {"name": "Draft.tex", "content": "upper", "sha256": digest("upper"), "origin": "local", "saved_at": 1.0, "size": 5},
+            "draft.tex": {"name": "draft.tex", "content": "lower", "sha256": digest("lower"), "origin": "local", "saved_at": 1.0, "size": 5},
+            "Welcome.tex": {"name": "Welcome.tex", "content": "local welcome", "sha256": digest("local welcome"), "origin": "local", "saved_at": 1.0, "size": 13},
+            "sample.tex": {"name": "sample.tex", "content": "sample", "sha256": digest("sample"), "origin": "sample", "saved_at": 1.0, "size": 6},
+        }
+        self.documents.mkdir(parents=True, exist_ok=True)
+        with patch.object(Path, "iterdir", autospec=True,
+                          side_effect=lambda p: iter(local_entries if p == store.documents else sample_entries if p == store.samples else [])), \
+                patch.object(store, "read", side_effect=lambda name: records[name]):
+            listed = store.listing()
+        self.assertEqual(listed["files"], ["Draft.tex", "Welcome.tex", "draft.tex", "sample.tex"])
 
 
 if __name__ == "__main__":

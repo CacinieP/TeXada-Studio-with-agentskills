@@ -24,7 +24,7 @@ class Provider:
         self.calls += 1
         self.last_trace = {"model_calls": 1, "model_called": True, "skill_loaded": True,
                            "skill_sha256": "a" * 64, "reason": "candidate", "provider": "mock"}
-        return "x+" if self.calls == 1 else "x+1"
+        return "x++" if self.calls == 1 else "x+1"
 
 
 class TraceTest(unittest.TestCase):
@@ -92,9 +92,9 @@ class TraceTest(unittest.TestCase):
         self.assertEqual(candidate, "Value $x+1$")
         self.assertEqual(len(edits), 1)
         rejected = [e for e in events if e["action"] == "CANDIDATE_REJECTED"]
-        self.assertEqual(rejected[0]["candidate"], "x+")
+        self.assertEqual(rejected[0]["candidate"], "x++")
         self.assertEqual(rejected[0]["check"]["reason"], "rejected")
-        self.assertEqual([e["candidate"] for e in events if e["action"] == "PROVIDER_RESULT"], ["x+", "x+1"])
+        self.assertEqual([e["candidate"] for e in events if e["action"] == "PROVIDER_RESULT"], ["x++", "x+1"])
         self.assertEqual(sum(e["provider_trace"]["model_calls"] for e in events if e["action"] == "PROVIDER_RESULT"), 2)
 
     def test_rule_only_job_survives_memory_loss_without_claiming_model_call(self):

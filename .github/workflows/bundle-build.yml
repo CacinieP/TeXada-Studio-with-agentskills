@@ -48,14 +48,16 @@ jobs:
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: |
           CERTFILE="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
           printf '%s' "$MACOS_CERTIFICATE" | base64 --decode -o "$CERTFILE"
           KEYCHAIN_PWD="$(uuidgen)"
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security set-keychain-settings -lut 21600 build.keychain-db
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain-db
-          security import "$CERTFILE" -k build.keychain-db -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" build.keychain-db
-          security list-keychains -d user -s build.keychain-db
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security import "$CERTFILE" -k "$KEYCHAIN" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s "$KEYCHAIN"
           rm -f "$CERTFILE"
 
       - name: Prepare build dependencies
@@ -63,6 +65,8 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -r webui/requirements.txt
           .venv/bin/pip install -r desktop/requirements.txt py2app
+      - name: Desktop regression on macOS
+        run: .venv/bin/python -m unittest discover -s desktop -p 'test_*.py'
       - name: Install Tectonic (pinned official release, SHA256 verified)
         run: |
           .venv/bin/python scripts/install_local_tools.py
@@ -97,7 +101,8 @@ jobs:
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'
         run: |
-          IDENTITY="$(security find-identity -v -p codesigning build.keychain-db | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/' || true)"
           if [ -z "$IDENTITY" ]; then
             echo "证书链中没有 Developer ID Application 身份;无法做分发签名。" >&2
             exit 1
@@ -115,14 +120,17 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
           if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
             printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/notary.p8"
             xcrun notarytool store-credentials NOTARY_PROFILE \
-              --key "$RUNNER_TEMP/notary.p8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID"
+              --key "$RUNNER_TEMP/notary.p8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+              --keychain "$KEYCHAIN"
             rm -f "$RUNNER_TEMP/notary.p8"
           elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
             xcrun notarytool store-credentials NOTARY_PROFILE \
-              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+              --keychain "$KEYCHAIN"
           else
             echo "缺少公证凭据(ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_P8 或 APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID)。" >&2
             exit 1
@@ -132,7 +140,8 @@ jobs:
         if: steps.detect.outputs.has_signing == 'true'
         run: |
           ditto -c -k --keepParent "dist-app/TeXada Studio.app" "$RUNNER_TEMP/app-for-notary.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/app-for-notary.zip" --keychain-profile NOTARY_PROFILE --wait
+          xcrun notarytool submit "$RUNNER_TEMP/app-for-notary.zip" \
+            --keychain-profile NOTARY_PROFILE --keychain "$RUNNER_TEMP/build.keychain-db" --wait
           .venv/bin/python desktop/staple_bundle.py "dist-app/TeXada Studio.app"
 
       - name: Create, sign and notarize the DMG
@@ -145,7 +154,8 @@ jobs:
           hdiutil create -volname "TeXada Studio" -srcfolder "$STAGE" -ov -format UDZO \
             "dist-app/TeXada-Studio-macOS-arm64.dmg"
           codesign --force --timestamp --sign "$IDENTITY" "dist-app/TeXada-Studio-macOS-arm64.dmg"
-          xcrun notarytool submit "dist-app/TeXada-Studio-macOS-arm64.dmg" --keychain-profile NOTARY_PROFILE --wait
+          xcrun notarytool submit "dist-app/TeXada-Studio-macOS-arm64.dmg" \
+            --keychain-profile NOTARY_PROFILE --keychain "$RUNNER_TEMP/build.keychain-db" --wait
           .venv/bin/python desktop/staple_bundle.py "dist-app/TeXada-Studio-macOS-arm64.dmg"
           spctl -a -t open --context context:primary-signature -vv "dist-app/TeXada-Studio-macOS-arm64.dmg"
           cd dist-app
@@ -175,3 +185,11 @@ jobs:
             dist-app/TeXada-Studio-macOS-arm64.zip
             dist-app/checksum.txt
           if-no-files-found: error
+
+      - name: Clean up temporary keychain
+        if: always()
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          if [ -f "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN" || rm -f "$KEYCHAIN"
+          fi
