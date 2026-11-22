@@ -316,7 +316,7 @@ class TerminateWatchdogTests(unittest.TestCase):
         self.assertEqual(cleaned, [])
         self.assertEqual(exited, [])
 
-    def test_post_wakeup_normal_teardown_eof_does_not_preempt_main_return(self):
+    def test_post_wakeup_normal_teardown_keeps_finalization_safety_net_without_early_preempt(self):
         import socket
 
         read_sock, write_sock = socket.socketpair()
@@ -328,20 +328,25 @@ class TerminateWatchdogTests(unittest.TestCase):
         thread = threading.Thread(
             target=desktop_app._terminate_watchdog,
             args=(read_sock, state),
-            kwargs={"deadline": 10.0, "exiter": lambda code: exited.append(code)},
+            kwargs={"deadline": 0.25, "exiter": lambda code: exited.append(code)},
             daemon=True,
         )
         thread.start()
-        write_sock.sendall(b"\x0f")
-        time.sleep(0.05)
-        desktop_app._close_terminate_watchdog(state)
-        thread.join(timeout=2)
-        self.assertFalse(thread.is_alive())
-        self.assertEqual(cleaned, [], "主线程已完成清理进入 finally 关闭看门狗时严禁重复 shutdown")
-        self.assertEqual(exited, [], "主线程正常返回关闭唤醒通道时严禁调用 os._exit(0) 抢跑")
-        self.assertFalse(thread.is_alive())
-        self.assertEqual(cleaned, [], "正常关闭唤醒 socket 产生 EOF 时不应触发异常退出")
-        self.assertEqual(exited, [])
+        try:
+            write_sock.sendall(b"\x0f")
+            time.sleep(0.05)
+            # 模拟主线程已完成清理进入 finally:置空 shutdown 并调用非强制 _close_terminate_watchdog
+            state["shutdown"] = None
+            desktop_app._close_terminate_watchdog(state)
+            # 非强制关闭不得立刻关 socket 抢跑 os._exit(0),让 main() 有充足时间返回并刷出缓冲
+            self.assertEqual(exited, [], "finally 期间严禁因提前关闭 socket 立即抢跑 os._exit(0)")
+            # 若解释器/WebKit 析构随后卡死,deadline 到期后看门狗仍必须兜底退出
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(cleaned, [], "shutdown 已由主线程完成置空,不应重复执行")
+            self.assertEqual(exited, [0], "deadline 到期后仍应兜底保证进程退出")
+        finally:
+            desktop_app._close_terminate_watchdog(state, force=True)
 
     def test_install_and_close_terminate_watchdog_uses_socketpair(self):
         state = {}

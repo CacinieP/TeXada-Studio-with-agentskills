@@ -467,6 +467,29 @@ def _on_terminate(signum, _frame):
     _terminate_action(signum, _terminate_state)
 
 
+def _nudge_cocoa_event_loop() -> None:
+    """macOS: NSApplication.stop_() 仅设置标志,无头 CI 无后续 NSEvent 时 run() 会阻塞;
+    排入一条空 AppDefined NSEvent 确保事件循环立即唤醒检查停止标志并从 webview.start() 返回。
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication, NSEvent
+        from PyObjCTools import AppHelper
+
+        def _post():
+            app = NSApplication.sharedApplication()
+            event = NSEvent.otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2_(
+                15, (0.0, 0.0), 0, 0.0, 0, None, 0, 0, 0
+            )
+            if event is not None:
+                app.postEvent_atStart_(event, True)
+
+        AppHelper.callAfter(_post)
+    except Exception:
+        pass
+
+
 def _close_shown_windows(windows) -> bool:
     """仅对已完成原生 shown 的窗口调用 destroy();未就绪窗口直接回退 shutdown 避免主线程死锁。"""
     ready = [
@@ -478,6 +501,7 @@ def _close_shown_windows(windows) -> bool:
         return False
     for window in ready:
         window.destroy()
+    _nudge_cocoa_event_loop()
     return True
 
 
@@ -546,10 +570,9 @@ def _read_wakeup_bytes(channel) -> bytes:
 def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter=None):
     """看门狗线程体:收到唤醒字节后有界等待,随后自行清理并强制退出。
 
-    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的 socketpair,读到非空字节即知
-    收到了信号。未收到真实唤醒字节前的任何 OSError/EOF(如平台不支持或正常退出关闭
-    socket)直接返回,绝不误杀进程;若主线程已完成正常窗口收尾进入 finally 关闭看门狗
-    (closing 标志或对端关闭产生 EOF),同样直接返回让 main() 正常返回。
+    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 通道,读到非空字节即知收到了信号。
+    未收到真实唤醒字节前的任何 OSError/EOF 直接返回,绝不误杀进程;收到首个信号后保持
+    deadline 秒兜底武装(防止主线程返回后解释器/WebKit 析构阶段卡死),除非 force 关闭。
     """
     exiter = os._exit if exiter is None else exiter
     woken = False
@@ -561,6 +584,7 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
         if not first or state.get("closing"):
             return
         woken = True
+        state["woken"] = True
         readable2, _, _ = select.select([read_channel], [], [], deadline)
         if state.get("closing"):
             return
@@ -592,9 +616,12 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
         exiter(0)
 
 
-def _close_terminate_watchdog(state) -> None:
-    """标记正常收尾、复位 set_wakeup_fd 并关闭保存的唤醒 socketpair。"""
+def _close_terminate_watchdog(state, *, force: bool = False) -> None:
+    """空闲退出时关闭唤醒 socketpair;若已收到终止信号且非 force,保持看门狗武装兜底析构卡死。"""
+    if state.get("woken") and not force:
+        return
     state["closing"] = True
+    state["woken"] = False
     sockets = state.pop("wakeup_sockets", None)
     if not sockets:
         return
@@ -612,8 +639,9 @@ def _close_terminate_watchdog(state) -> None:
 def _install_terminate_watchdog(state, deadline=_watchdog_deadline, *, os_name=None):
     """安装唤醒通道与看门狗线程:POSIX 用原生 os.pipe,Windows 用 Winsock socketpair。"""
     effective_os = os_name if os_name is not None else os.name
-    _close_terminate_watchdog(state)
+    _close_terminate_watchdog(state, force=True)
     state["closing"] = False
+    state["woken"] = False
     if effective_os != "nt":
         try:
             read_fd, write_fd = os.pipe()
