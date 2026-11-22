@@ -605,6 +605,7 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(checks, [r"\frac{a}{b"], "abstained original must not be re-verified")
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX shell launcher")
 class MiniCPMProfileTest(unittest.TestCase):
     def test_example_env_preserves_exported_credentials_and_profile_endpoint_default(self):
         check = (
