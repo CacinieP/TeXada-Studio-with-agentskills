@@ -26,7 +26,16 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
-from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
+from local_runtime import (
+    DEFAULT_BASE,
+    DEFAULT_MODEL,
+    MAX_PDF_PAGES,
+    LocalRuntime,
+    LocalRuntimeError,
+    _model_name,
+    make_local_provider,
+    validate_base_url,
+)
 from managed_models import ManagedModels, PROFILES
 import tool_fetch
 
@@ -45,10 +54,20 @@ def _tectonic_command():
 
 @asynccontextmanager
 async def lifespan(_app):
+    global _DEFAULT_MANAGED_MODELS, managed_models
+    if managed_models is _DEFAULT_MANAGED_MODELS and _DEFAULT_MANAGED_MODELS.closed.is_set():
+        _DEFAULT_MANAGED_MODELS = managed_models = ManagedModels(_DEFAULT_STUDIO_STATE)
     try:
         yield
     finally:
         managed_models.close()
+        if _DEFAULT_MANAGED_MODELS is not managed_models:
+            _DEFAULT_MANAGED_MODELS.close()
+        with _scoped_models_lock:
+            scoped = list(_scoped_managed_models.values())
+            _scoped_managed_models.clear()
+        for manager in scoped:
+            manager.close()
 
 
 app = FastAPI(title="TeXada Studio Local", lifespan=lifespan)
@@ -218,11 +237,11 @@ def index():
 @app.get("/api/nodeinfo")
 def nodeinfo(token: str = Query("")):
     _guard(token)
-    managed = managed_models.connection()
+    managed = _managed_models().connection()
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
-    configured_model = REPAIR_MODEL
-    if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
+    configured_model = managed["model"] if managed else REPAIR_MODEL
+    if not managed and os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
         try:
             configured_model = _local_runtime().get_config()["model"]
         except LocalRuntimeError:
@@ -316,10 +335,27 @@ OCR_MODEL = os.environ.get("OCR_MODEL", "minicpm-ocr:latest")
 
 SAMPLE_DOCS = os.path.join(REPO, "samples", "docs")
 STUDIO_STATE = os.environ.get("TEXADA_STUDIO_STATE_DIR", os.path.join(REPO, "state", "studio"))
-managed_models = ManagedModels(STUDIO_STATE)
+_DEFAULT_STUDIO_STATE = Path(STUDIO_STATE)
+_DEFAULT_MANAGED_MODELS = managed_models = ManagedModels(STUDIO_STATE)
+_scoped_managed_models: dict[Path, ManagedModels] = {}
+_scoped_models_lock = threading.Lock()
 STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
+
+
+def _managed_models() -> ManagedModels:
+    if managed_models is not _DEFAULT_MANAGED_MODELS:
+        return managed_models
+    state_path = Path(STUDIO_STATE)
+    if state_path == _DEFAULT_STUDIO_STATE:
+        return _DEFAULT_MANAGED_MODELS
+    with _scoped_models_lock:
+        manager = _scoped_managed_models.get(state_path)
+        if manager is None or manager.closed.is_set():
+            manager = ManagedModels(state_path)
+            _scoped_managed_models[state_path] = manager
+        return manager
 
 
 def _new_provider(*, skill_selection=False):
@@ -327,7 +363,7 @@ def _new_provider(*, skill_selection=False):
     if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
         runtime = _local_runtime()
         config = runtime.get_config()
-        active = managed_models.connection()
+        active = _managed_models().connection()
         managed_1b = (active is not None and active["model"] == config["model"] == PROFILES["1b"].model
                       and active["base_url"] == config["base_url"])
         return make_local_provider(config["base_url"], config["model"],
@@ -338,7 +374,7 @@ def _new_provider(*, skill_selection=False):
 
 def _local_runtime(*, managed=True):
     return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"),
-                        model=REPAIR_MODEL, active_model=managed_models.connection() if managed else None)
+                        model=REPAIR_MODEL, active_model=_managed_models().connection() if managed else None)
 
 
 try:
@@ -536,10 +572,13 @@ def _verify_formula(latex: str):
         return {"status": "NEEDS_ENV", "reason": "公式检查器不可用，请检查 SymPy / antlr 依赖与服务日志"}
 
 
-def _formula_problems(content: str, emit=None, *, deterministic_only=False):
+def _formula_problems(content: str, emit=None, *, deterministic_only=False, skip_ordinals=()):
+    skipped = set(skip_ordinals)
     problems = []
     parsed = analyze_math(content)
-    for node in parsed["nodes"]:
+    for ordinal, node in enumerate(parsed["nodes"], 1):
+        if ordinal in skipped:
+            continue
         if deterministic_only and (not node["checkable"] or deterministic_candidate(node["latex"]) is None):
             continue
         if node["checkable"]:
@@ -703,14 +742,14 @@ def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, rem
     return {"accepted": accepted, "check": check, "scope": scope, "reason": reason}
 
 
-def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True):
+def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True, skip_ordinals=()):
     provider = provider if provider is not None else PROVIDER
     if use_model and provider is None:
         provider = _new_provider()
     emit = emit or (lambda action, **fields: None)
     edits, replacements = [], []
-    fp = (_formula_problems(content, emit) if use_model
-          else _formula_problems(content, emit, deterministic_only=True))
+    fp = (_formula_problems(content, emit) if use_model and not skip_ordinals
+          else _formula_problems(content, emit, deterministic_only=not use_model, skip_ordinals=skip_ordinals))
     verifier_unavailable = False
     for p in fp:
         if verifier_unavailable or p["status"] == "NEEDS_ENV":
@@ -977,19 +1016,34 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         emit("CANDIDATE_EDIT", **{k: v for k, v in edit.items() if k not in {"start", "end"}})
     public_edits = [{k: v for k, v in edit.items() if k not in {"start", "end"}} for edit in edits]
     log.append(f"[planner] 执行 {summary['executed']}，拒绝 {summary['rejected']}；候选需人工采用")
-    if any(node["state"] not in {"ok", "candidate"} for node in summary["nodes"]):
+    if any(node.get("state") not in {"ok", "candidate"} for node in summary["nodes"]):
         # Only independently reproducible patches can proceed after a model deferral.
+        pre_formulas = [n for n in summary["nodes"] if n.get("kind") == "formula" and "id" in n]
+        mid_formulas = extract_math(fixed)
+        if len(pre_formulas) == len(mid_formulas):
+            mid_to_pre = {mid["id"]: pre["id"] for pre, mid in zip(pre_formulas, mid_formulas)}
+            skip_ordinals = {
+                idx for idx, pre in enumerate(pre_formulas, 1)
+                if pre.get("state") in {"ok", "candidate"} or pre.get("attempts", 0) >= 1
+            }
+        else:
+            mid_to_pre = {}
+            skip_ordinals = set()
         resolved = set()
 
         def emit_fallback(action, **fields):
-            if action == "CANDIDATE_EDIT" and fields.get("node_id", "").startswith("f-"):
-                resolved.add(fields["node_id"])
+            node_id = fields.get("node_id", "")
+            if action == "CANDIDATE_EDIT" and isinstance(node_id, str) and node_id.startswith("f-"):
+                resolved.add(node_id)
+                resolved.add(mid_to_pre.get(node_id, node_id))
             emit(action, **fields)
 
         if verifier_unavailable or planner.remaining_seconds() <= 0:
             fixed, local_edits = _apply_table_fixes(fixed, log, emit_fallback)
         else:
-            fixed, local_edits = _apply_fixes(fixed, log, emit=emit_fallback, use_model=False)
+            fixed, local_edits = _apply_fixes(
+                fixed, log, emit=emit_fallback, use_model=False, skip_ordinals=skip_ordinals
+            )
         public_edits.extend(local_edits)
         if local_edits:
             summary["deterministic_resolved"] = sorted(resolved)
@@ -998,17 +1052,32 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
     return fixed, public_edits, summary
 
 
-def _planned_problems(summary, content):
+def _planned_problems(summary, content=None):
     problems = []
     resolved = set(summary.get("deterministic_resolved", ()))
+    pre_formulas = [n for n in summary["nodes"] if n.get("kind") == "formula" and "id" in n]
+    post_line_by_id = {}
+    if isinstance(content, str):
+        parsed = analyze_math(content)
+        post_formulas = parsed["nodes"]
+        if len(pre_formulas) == len(post_formulas):
+            post_line_by_id = {pre["id"]: post["line"] for pre, post in zip(pre_formulas, post_formulas)}
     for node in summary["nodes"]:
-        if node["state"] in {"ok", "candidate"} or node["id"] in resolved:
+        node_id = node.get("id")
+        if node.get("state") in {"ok", "candidate"} or (node_id is not None and node_id in resolved):
             continue
-        if node["kind"] == "table":
-            problems.extend(_table_problems(content))
+        if node.get("kind") == "table":
+            if isinstance(content, str):
+                problems.extend(_table_problems(content))
+            else:
+                problems.append({"id": node_id or "table-document", "type": "table_total",
+                                 "line": node.get("line", 1), "status": "NEEDS_HUMAN",
+                                 "reason": node.get("human_reason", "planner_unresolved")})
         else:
-            problems.append({"id": node["id"], "type": "formula", "line": node.get("line", 1),
-                             "status": "NEEDS_HUMAN", "reason": node.get("human_reason", "planner_unresolved")})
+            problems.append({"id": node_id, "type": "formula",
+                             "line": post_line_by_id.get(node_id, node.get("line", 1)),
+                             "status": "NEEDS_HUMAN",
+                             "reason": node.get("human_reason", "planner_unresolved")})
     return problems
 
 
@@ -1187,14 +1256,27 @@ def _runtime_call(operation):
         raise HTTPException(status_code=error.status, detail=error.message) from None
 
 
+def _studio_tools():
+    return {
+        "tectonic": bool(shutil.which(_tectonic_command())),
+        "pdftoppm": bool(shutil.which("pdftoppm")),
+        "pdfinfo": bool(shutil.which("pdfinfo")),
+    }
+
+
+def _normalize_settings_body(body):
+    if not isinstance(body, dict) or set(body) != {"base_url", "model"}:
+        raise LocalRuntimeError("invalid_settings", "连接设置仅支持本机地址和模型名称。")
+    return {"base_url": validate_base_url(body["base_url"]), "model": _model_name(body["model"])}
+
+
 @app.get("/api/studio/config")
 def studio_config(token: str = Query(""), probe: bool = False):
     _guard(token)
     runtime = _local_runtime()
     config = _runtime_call(runtime.probe if probe else runtime.get_config)
     return {**config, "local_mode": os.environ.get("TEXADA_LOCAL_MODE", "1") == "1", "offline": True,
-            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm")),
-                      "pdfinfo": bool(shutil.which("pdfinfo"))},
+            "tools": _studio_tools(),
             "max_document_bytes": 2 * 1024 * 1024, "max_import_pages": 5,
             "math_scope": ["$...$", "$$...$$", "\\(...\\)", "\\[...\\]", "equation", "align"]}
 
@@ -1202,19 +1284,21 @@ def studio_config(token: str = Query(""), probe: bool = False):
 @app.post("/api/studio/settings")
 def studio_settings(token: str = Query(""), body: dict = None):
     _guard(token)
-    with managed_models.lock:
-        active = managed_models.connection()
-        if active and active == body:
-            return _local_runtime().get_config()
-        job = managed_models.job
+    models = _managed_models()
+    with models.lock:
+        active = models.connection()
+        if active:
+            normalized = _runtime_call(lambda: _normalize_settings_body(body))
+            if normalized == active:
+                return {**_local_runtime().get_config(), "local_mode": True, "offline": True, "tools": _studio_tools()}
+        job = models.job
         if job and job["action"] == "start" and job["state"] == "running":
             raise HTTPException(status_code=409, detail="请等当前模型启动结束。")
         result = _runtime_call(lambda: _local_runtime(managed=False).update_settings(body))
         if active:
-            _runtime_call(managed_models.stop)
+            _runtime_call(models.stop)
     # Settings are per-Studio; no user-global agent/model configuration is changed.
-    return {**result, "local_mode": True, "offline": True,
-            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm"))}}
+    return {**result, "local_mode": True, "offline": True, "tools": _studio_tools()}
 
 
 def _guard_local_models(token):
@@ -1226,16 +1310,17 @@ def _guard_local_models(token):
 @app.get("/api/studio/models")
 def studio_models(token: str = Query("")):
     _guard_local_models(token)
-    return managed_models.status()
+    return _managed_models().status()
 
 
 @app.post("/api/studio/models/{action}")
 def studio_model_action(action: str, token: str = Query(""), body: dict = None):
     _guard_local_models(token)
+    models = _managed_models()
     if action == "stop":
-        _runtime_call(managed_models.stop)
-        return managed_models.status()
-    return _runtime_call(lambda: managed_models.submit(action, (body or {}).get("profile")))
+        _runtime_call(models.stop)
+        return models.status()
+    return _runtime_call(lambda: models.submit(action, (body or {}).get("profile")))
 
 
 @app.post("/api/studio/tools/install")
