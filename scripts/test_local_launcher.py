@@ -30,11 +30,16 @@ class LocalLauncherTest(unittest.TestCase):
 
     def test_prepend_local_bin_puts_texada_bin_first_once(self):
         local = str(launcher.LOCAL_TOOL_BIN)
-        self.assertEqual(launcher.prepend_local_bin(""), local)
-        self.assertEqual(launcher.prepend_local_bin("/usr/bin"), os.pathsep.join([local, "/usr/bin"]))
+        expected_prefix = (
+            os.pathsep.join([local, str(launcher.LOCAL_POPPLER_BIN)])
+            if os.name == "nt"
+            else local
+        )
+        self.assertEqual(launcher.prepend_local_bin(""), expected_prefix)
+        self.assertEqual(launcher.prepend_local_bin("/usr/bin"), os.pathsep.join([expected_prefix, "/usr/bin"]))
         once = launcher.prepend_local_bin(f"/usr/bin{os.pathsep}local")
         self.assertEqual(launcher.prepend_local_bin(once), once, "重复前置不叠加")
-        self.assertTrue(once.startswith(local + os.pathsep))
+        self.assertTrue(once.startswith(expected_prefix + os.pathsep))
 
     def args(self, *extra):
         return launcher.parser().parse_args(["--state-dir", str(self.directory), "--no-browser", *extra])
