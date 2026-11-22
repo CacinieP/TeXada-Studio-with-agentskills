@@ -288,5 +288,116 @@ class MissingScriptTests(unittest.TestCase):
         self.assertEqual(repair_blocker(r"0 \le x_ \le 1", allow_parser_gaps=True), "missing_script_operand")
 
 
+class StructuralDelimiterInsertionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).resolve().parents[2] / "skills/doc-formula-verify/scripts/verify.py"
+        spec = importlib.util.spec_from_file_location("formula_checker_structural", path)
+        cls.checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.checker)
+
+    def test_authorizes_pure_interior_and_opening_brace_insertions(self):
+        cases = [
+            (r"x^{n+1 + y = 0", r"x^{n+1} + y = 0"),
+            (r"\frac{a}{b + c = d", r"\frac{a}{b + c} = d"),
+            (r"\sqrt{x+1 + y = 2", r"\sqrt{x+1} + y = 2"),
+            (r"\frac1}{2}", r"\frac{1}{2}"),
+            (r"x^n+1}", r"x^{n+1}"),
+            (r"x_{i+1} + y_j+1}", r"x_{i+1} + y_{j+1}"),
+        ]
+        for original, candidate in cases:
+            with self.subTest(original=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(verdict["method"], "structural_delimiter_insertion")
+                self.assertEqual(verdict["reason"], "structural_syntax_repair")
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_authorizes_pure_left_right_structural_insertions(self):
+        cases = [
+            (r"\left(\frac{a}{b} = c", r"\left(\frac{a}{b}\right) = c"),
+            (r"\left(a + \left[b\right]) = c", r"\left(a + \left[b\right]\right) = c"),
+            (r"(x+1\right)", r"\left(x+1\right)"),
+            (r"x+1\right)", r"\left(x+1\right)"),
+            (r"\left\lvert x \right", r"\left\lvert x \right\rvert"),
+        ]
+        for original, candidate in cases:
+            with self.subTest(original=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(verdict["method"], "structural_delimiter_insertion")
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_rejects_surplus_braces_spacing_changes_and_ambiguous_juxtaposition(self):
+        rejected = [
+            (r"x^{n+1 + y = 0", r"{x^{n+1}} + y = 0"),
+            (r"x^{n+1 + y = 0", r"x^{n + 1} + y = 0"),
+            (r"x} + {y", r"{x} + {y}"),
+            (r"x + }", r"x + {}"),
+            (r"\frac{\left(x+1}{2}", r"\frac{\left(x+1}{2}\right)"),
+            (r"\displaystyle \int_{0}^{1 x^2\,dx", r"\displaystyle \int_{0}^{1} x^2\,dx"),
+            (r"\lim_{y \to b k(y)=N", r"\lim_{y \to b} k(y)=N"),
+            ("x}+", "{x}+"),
+            ("a_+b}", "a_{1}+b}"),
+        ]
+        for original, candidate in rejected:
+            with self.subTest(original=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+    def test_rejects_delimiters_split_inside_number_literals(self):
+        for original, candidate in (
+            ("12 + 3}", "1{2 + 3}"),
+            (r"\left(12 + 3 = 0", r"\left(1\right)2 + 3 = 0"),
+            (r"12\right)", r"1\left(2\right)"),
+            ("3.14}", "3.{14}"),
+            ("3.14}", "3{.14}"),
+        ):
+            with self.subTest(original=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+    def test_opening_brace_requires_brace_accepting_slot_and_preserves_valid_slots(self):
+        for original, candidate in (
+            (r"2 \cdot 3 + 4}", r"2 \cdot {3 + 4}"),
+            (r"a b + c}", r"a {b + c}"),
+            (r"x + y} \cdot z", r"{x + y} \cdot z"),
+        ):
+            with self.subTest(rejected=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+        for original, candidate in (
+            (r"\frac1}{2}", r"\frac{1}{2}"),
+            (r"\frac{1}2}", r"\frac{1}{2}"),
+            (r"x^n+1}", r"x^{n+1}"),
+            (r"x_{i+1}+y_j+1}", r"x_{i+1}+y_{j+1}"),
+            (r"\sqrt[3]x+1}", r"\sqrt[3]{x+1}"),
+            (r"\sqrt x+1}", r"\sqrt{x+1}"),
+        ):
+            with self.subTest(allowed=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_left_right_interior_boundaries_and_symmetric_pairs(self):
+        for original, candidate in (
+            (r"\left(a b c = 1", r"\left(a\right) b c = 1"),
+            (r"a \cdot b + c\right)", r"a \cdot \left(b + c\right)"),
+            (r"\left(x + 1 = 0", r"\left(x + 1\right] = 0"),
+            (r"\left[x + 1 = 0", r"\left[x + 1\right) = 0"),
+        ):
+            with self.subTest(rejected=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+        for original, candidate in (
+            (r"\left(x + 1 = 0", r"\left(x + 1\right) = 0"),
+            (r"(x + 1\right)", r"\left(x + 1\right)"),
+            (r"y = x + 1\right)", r"y = \left(x + 1\right)"),
+            (r"\left(\frac{a}{b}^2", r"\left(\frac{a}{b}\right)^2"),
+            (r"\left[0, 1\right) + x^{n+1 = 0", r"\left[0, 1\right) + x^{n+1} = 0"),
+        ):
+            with self.subTest(allowed=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+
+
 if __name__ == "__main__":
     unittest.main()

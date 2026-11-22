@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "skill_id": "latex-cleanup",
+  "version": "0.2.3",
+  "capability": "document_tex_cleanup",
+  "node_kind": "cleanup",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "document_text"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "document_text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 262144
+      }
+    }
+  },
+  "supported_actions": [
+    "check-cleanup",
+    "propose-repair",
+    "request-human"
+  ]
+}

@@ -250,6 +250,28 @@ class ReportEvidenceTest(unittest.TestCase):
                 with self.subTest(bad_id=bad_id):
                     self.assertIsNone(terminals[bad_id]["evidence"])
 
+    def test_extra_closing_brace_and_interior_brace_allow_verified_model_repair(self):
+        for original, candidate in ((r"\frac1}{2}", r"\frac{1}{2}"), (r"x^{n+1 + y = 0", r"x^{n+1} + y = 0")):
+            provider = Mock()
+            provider.repair_formula.return_value = candidate
+            provider.last_trace = {"model_calls": 1, "model_called": True, "reason": "ok"}
+            with self.subTest(original=original), tempfile.TemporaryDirectory() as directory:
+                status = pipeline.process_formula(directory, "doc", {"id": "f-struct", "data": {"latex": original}}, provider)
+                events = state.load_events(directory)
+            self.assertEqual(status, "OK")
+            self.assertEqual(provider.repair_formula.call_count, 1)
+            self.assertFalse(any(e.get("action") == "REPAIR_SKIPPED" for e in events))
+            self.assertEqual(events[-1]["latex"], candidate)
+            self.assertTrue(events[-1]["repaired"])
+
+        provider = Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            status = pipeline.process_formula(directory, "doc", {"id": "f-unrepairable", "data": {"latex": r"x} + {y"}}, provider)
+            events = state.load_events(directory)
+        self.assertEqual(status, "NEEDS_HUMAN")
+        provider.repair_formula.assert_not_called()
+        self.assertTrue(any(e.get("action") == "REPAIR_SKIPPED" for e in events))
+
 
 if __name__ == "__main__":
     unittest.main()

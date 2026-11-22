@@ -48,6 +48,11 @@ def load_table_skill(skill_root=None):
     return _read_skill("doc-table-audit", skill_root, frozenset({"doc-table-audit"}))
 
 
+def load_cleanup_skill(skill_root=None):
+    """Read the cleanup Skill body for the fixed document-cleanup host only."""
+    return _read_skill("latex-cleanup", skill_root, frozenset({"latex-cleanup"}))
+
+
 def _read_skill(name, skill_root, allowed_skills):
     if name not in allowed_skills:
         raise ValueError("skill_not_allowed")
@@ -90,7 +95,11 @@ def _read_skill(name, skill_root, allowed_skills):
         raise ValueError("skill_name_mismatch")
     if not fields.get("description") or not "\n".join(lines[closing + 1:]).strip():
         raise ValueError("skill_empty_instructions")
-    checker_name = "audit_table.py" if name == "doc-table-audit" else "verify.py"
+    checker_name = (
+        "audit_table.py" if name == "doc-table-audit"
+        else "format_whitespace.py" if name == "latex-cleanup"
+        else "verify.py"
+    )
     checker = (root / name / "scripts" / checker_name).resolve()
     if not checker.is_relative_to(root):
         raise ValueError("skill_path_escape")

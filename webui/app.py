@@ -71,6 +71,14 @@ def _tectonic_command():
     """编译器命令;每次读取环境,使会话内安装的 Tectonic 立即生效。"""
     return os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
+
+def _subprocess_window_kwargs() -> dict:
+    """Suppress transient console flashes when running CLI tools from a windowed Windows bundle."""
+    if os.name == "nt" or sys.platform == "win32":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        return {"creationflags": flags} if flags else {}
+    return {}
+
 @asynccontextmanager
 async def lifespan(_app):
     global _DEFAULT_MANAGED_MODELS, managed_models
@@ -241,7 +249,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
             f.write(tex)
         try:
             r = subprocess.run([_tectonic_command(), "--untrusted", "--only-cached", "-o", d, texf],
-                               capture_output=True, text=True, timeout=120)
+                               capture_output=True, text=True, timeout=120, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             return None
         pdf = os.path.join(d, "f.pdf")
@@ -249,7 +257,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
             return None
         try:
             subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf, png[:-4]],
-                           check=True, capture_output=True, timeout=30)
+                           check=True, capture_output=True, timeout=30, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             return None
         return png if os.path.exists(png) else None
@@ -380,12 +388,25 @@ import uuid as _uuid
 from decimal import Decimal, localcontext
 
 _sys.path.insert(0, os.path.join(REPO, "harness"))
+from docforensics import anchor_guard  # noqa: E402
 from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
 from docforensics.planner import ConstrainedPlanner  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
 from docforensics.tex_context import analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
-from docforensics.formula_repair import assess_candidate, deterministic_candidate, repair_blocker  # noqa: E402
+from docforensics.formula_repair import (  # noqa: E402
+    assess_candidate,
+    can_attempt_structural_repair,
+    deterministic_candidate,
+    repair_blocker,
+)
+from docforensics.table_repair import assess_table_candidate  # noqa: E402
+from docforensics.tex_cleanup import (  # noqa: E402
+    assess_cleanup_candidate,
+    cleanup_edits,
+    deterministic_cleanup_candidate,
+    inspect_tex_cleanup,
+)
 from docforensics.__main__ import repair_model_default  # noqa: E402
 
 # 按任务模型契约(issue #23):修复线 REPAIR_MODEL > VLM_MODEL > 内置默认,与 harness CLI 同源。
@@ -401,6 +422,7 @@ _scoped_managed_models: dict[Path, ManagedModels] = {}
 _scoped_models_lock = threading.Lock()
 STUDIO_DOCS = os.path.join(STUDIO_STATE, "documents")
 VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.py")
+AUDIT_TABLE = os.path.join(REPO, "skills", "doc-table-audit", "scripts", "audit_table.py")
 SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 
@@ -522,7 +544,8 @@ def _studio_compile(content: str, name: str, tag: str):
         command = [_tectonic_command(), "--untrusted", "--only-cached", "--keep-logs",
                    "-o", str(directory), str(texf)]
         try:
-            run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120)
+            run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120,
+                                 **_subprocess_window_kwargs())
         except subprocess.TimeoutExpired as exc:
             log = "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"
             for stream in (exc.stdout, exc.stderr):
@@ -542,7 +565,7 @@ def _studio_compile(content: str, name: str, tag: str):
         page_count = 1
         try:
             info = subprocess.run(["pdfinfo", str(directory / "main.pdf")],
-                                  capture_output=True, timeout=10)
+                                  capture_output=True, timeout=10, **_subprocess_window_kwargs())
             match = _re.search(r"^Pages:\s+(\d+)", _subprocess_text(info.stdout), _re.MULTILINE)
             if match:
                 page_count = int(match.group(1))
@@ -566,7 +589,7 @@ def _render_preview_page(directory, page):
         try:
             subprocess.run(["pdftoppm", "-f", str(page), "-l", str(page), "-png", "-r", "100",
                             "-singlefile", str(directory / "main.pdf"), str(png.with_suffix(""))],
-                           check=True, capture_output=True, timeout=45)
+                           check=True, capture_output=True, timeout=45, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             raise HTTPException(status_code=503, detail="PDF 已生成，但本机页面预览转换失败。") from None
     if not png.is_file():
@@ -658,9 +681,10 @@ def _formula_problems(content: str, emit=None, *, deterministic_only=False, skip
                  checker="doc-formula-verify", check=vj)
         if vj.get("status") != "OK":
             blocker = repair_blocker(node["latex"]) if vj.get("status") == "RETRY" else None
-            problems.append({**node, "type": "formula", "status": "NEEDS_HUMAN" if blocker else vj["status"],
-                             "reason": ("无法确定语法修复，保留原文供人工核对：" + blocker) if blocker else vj.get("reason", ""),
-                             **({"repair_blocker": blocker} if blocker else {})})
+            hard_blocked = bool(blocker and not can_attempt_structural_repair(node["latex"]))
+            problems.append({**node, "type": "formula", "status": "NEEDS_HUMAN" if hard_blocked else vj["status"],
+                             "reason": ("无法确定语法修复，保留原文供人工核对：" + blocker) if hard_blocked else vj.get("reason", ""),
+                             **({"repair_blocker": blocker} if hard_blocked else {})})
     problems.extend(_math_boundary_problems(parsed["diagnostics"]))
     return problems
 
@@ -724,6 +748,142 @@ def _resolve_table_edit(raw_lines, vis_lines, line_offsets, problem):
     }
 
 
+def _is_repairable_incomplete_total(rows, width, shape_reason):
+    """True when header and data rows are clean rectangular scalars and only the final total row is short or blank."""
+    if shape_reason or width is None or width < 2 or len(rows) < 3:
+        return False
+    if any(len(c) != width for _, c in rows[:-1]):
+        return False
+    header_cells = rows[0][1]
+    total_cells = rows[-1][1]
+    if not header_cells or not total_cells or len(total_cells) > width:
+        return False
+    if total_cells[0].strip().lower() not in _TABLE_LABELS:
+        return False
+    if any(_table_number_match(c) for c in header_cells[1:]):
+        return False
+    if any(any(k in c[0].lower() for k in _TABLE_LABELS) for _, c in rows[:-1]):
+        return False
+    for _, data_cells in rows[1:-1]:
+        if any(_table_number_match(cell) is None for cell in data_cells[1:]):
+            return False
+    if any(cell != "" and _table_number_match(cell) is None for cell in total_cells[1:]):
+        return False
+    return len(total_cells) < width or any(cell == "" for cell in total_cells[1:])
+
+
+def _verify_table_grid(rows, expected=None, *, node_id="t-studio"):
+    rec = {"id": node_id, "rows": rows, "expected": expected or {}}
+    try:
+        proc = subprocess.run([_sys.executable, AUDIT_TABLE], input=json.dumps(rec),
+                              capture_output=True, text=True, timeout=30)
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        status = result.get("status")
+        if status not in ("OK", "RETRY", "NEEDS_HUMAN"):
+            raise ValueError("invalid table audit status")
+        allowed_codes = (0, 1) if status == "NEEDS_HUMAN" else (0,)
+        if proc.returncode not in allowed_codes:
+            raise ValueError("invalid table audit exit code")
+        return result
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError, AttributeError, TypeError):
+        return {"status": "NEEDS_HUMAN", "reason": "checker_error"}
+
+
+def _extract_repairable_tables(content: str):
+    """Extract simple ``tabular`` grids that have an unresolved repairable final total row."""
+    tables = []
+    visible_lines = mask_opaque(content).split("\n")
+    raw_lines = content.split("\n")
+    line_offsets, offset = [], 0
+    for raw_line in raw_lines:
+        line_offsets.append(offset)
+        offset += len(raw_line) + 1
+
+    in_tab, rows, width, shape_reason = False, [], None, ""
+
+    def finalize_table():
+        if not rows or shape_reason or width is None or width < 2 or len(rows) < 3:
+            return
+        if any(len(c) != width for _, c in rows[:-1]):
+            return
+        header_cells = rows[0][1]
+        total_i, total_cells = rows[-1]
+        if not total_cells or len(total_cells) > width or total_cells[0].strip().lower() not in _TABLE_LABELS:
+            return
+        if any(_table_number_match(c) for c in header_cells[1:]):
+            return
+        if any(any(k in c[0].lower() for k in _TABLE_LABELS) for _, c in rows[:-1]):
+            return
+        for _, data_cells in rows[1:-1]:
+            if any(_table_number_match(cell) is None for cell in data_cells[1:]):
+                return
+        if any(cell != "" and _table_number_match(cell) is None for cell in total_cells[1:]):
+            return
+        expected = {"n_rows": len(rows), "n_cols": width}
+        grid = [cells for _, cells in rows]
+        audit_check = _verify_table_grid(grid, expected, node_id=f"t-{total_i+1:03d}")
+        if audit_check.get("status") != "RETRY":
+            return
+        raw_line = raw_lines[total_i].removesuffix("\r")
+        vis_line = visible_lines[total_i].removesuffix("\r")
+        _spans, has_row_break, body_end = _table_row_spans(vis_line)
+        if not has_row_break or raw_line[:body_end] != vis_line[:body_end]:
+            return
+        body_prefix = raw_line[:body_end]
+        lead_len = len(body_prefix) - len(body_prefix.lstrip(" \t"))
+        if not body_prefix.strip(" \t"):
+            return
+        start = line_offsets[total_i] + lead_len
+        end = line_offsets[total_i] + body_end
+        tables.append({
+            "id": f"t-{total_i+1:03d}",
+            "line": total_i + 1,
+            "n_cols": width,
+            "rows": grid,
+            "expected": expected,
+            "start": start,
+            "end": end,
+            "before": content[start:end],
+            "trailing_space": " " if body_prefix.endswith((" ", "\t")) else "",
+            "check": audit_check,
+        })
+
+    for i, raw_full in enumerate(raw_lines):
+        vis_line = visible_lines[i].removesuffix("\r")
+        vis_stripped = vis_line.strip()
+        if not vis_stripped:
+            continue
+        if r"\begin{tabular}" in vis_line:
+            if in_tab:
+                shape_reason = "nested"
+                continue
+            in_tab, rows, shape_reason = True, [], ""
+            spec = _re.fullmatch(r"\\begin\{tabular\}\s*\{([lcr|\s]+)\}", vis_stripped)
+            width = sum(c in "lcr" for c in spec.group(1)) if spec else None
+            continue
+        if not in_tab:
+            continue
+        if r"\end{tabular}" in vis_line:
+            if vis_stripped != r"\end{tabular}":
+                shape_reason = "bad_end"
+            finalize_table()
+            rows, in_tab = [], False
+            continue
+        if vis_stripped in (r"\hline", r"\toprule", r"\midrule", r"\bottomrule"):
+            continue
+        spans, has_row_break, body_end = _table_row_spans(vis_line)
+        if not has_row_break or r"\\" in vis_line[:body_end]:
+            shape_reason = "bad_row"
+        raw_line = raw_full.removesuffix("\r")
+        cells = []
+        for c_start, c_end in spans:
+            raw_cell = raw_line[c_start:c_end]
+            vis_cell = vis_line[c_start:c_end]
+            cells.append(vis_cell.strip() if raw_cell == vis_cell else raw_cell.strip())
+        rows.append((i, cells))
+    return tables
+
+
 def _table_problems(content: str):
     """Audit only rectangular, one-row-per-line tables with a header and final total.
 
@@ -736,6 +896,50 @@ def _table_problems(content: str):
         if not rows:
             return
         total_i, total_cells = rows[-1]
+        if _is_repairable_incomplete_total(rows, width, shape_reason):
+            if len(total_cells) < width:
+                problems.append({
+                    "id": f"t-{total_i+1:03d}-shape",
+                    "type": "table_total",
+                    "line": total_i + 1,
+                    "col": len(total_cells),
+                    "status": "RETRY",
+                    "reason": "合计行缺少数值单元格，可尝试模型补全并经表格检查器核验",
+                })
+                return
+            for j in range(1, width):
+                if total_cells[j] == "":
+                    problems.append({
+                        "id": f"t-{total_i+1:03d}-{j}",
+                        "type": "table_total",
+                        "line": total_i + 1,
+                        "col": j,
+                        "wrong": "",
+                        "status": "RETRY",
+                        "reason": f"合计列 {j+1} 为空，可尝试模型补全并经表格检查器核验",
+                    })
+                    continue
+                cells = [c[j] for _, c in rows[1:]]
+                matches = [_table_number_match(c) for c in cells]
+                with localcontext() as ctx:
+                    ctx.prec = max(28, sum(len(c) for c in cells) + 4)
+                    values = [Decimal(m.group("number").replace(",", "")) for m in matches]
+                    got, want = sum(values[:-1], Decimal(0)), values[-1]
+                    if got != want:
+                        right = format(got, "f")
+                        if "." in right:
+                            right = right.rstrip("0").rstrip(".")
+                        problems.append({
+                            "id": f"t-{total_i+1:03d}-{j}",
+                            "type": "table_total",
+                            "line": total_i + 1,
+                            "col": j,
+                            "wrong": total_cells[j],
+                            "right": right,
+                            "status": "RETRY",
+                            "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}",
+                        })
+            return
         base = {"id": f"t-{total_i+1:03d}-shape", "type": "table_total",
                 "line": total_i + 1, "col": 0, "status": "NEEDS_HUMAN"}
         reason = shape_reason
@@ -816,10 +1020,15 @@ def _table_problems(content: str):
     return problems
 
 
+def _cleanup_problems(content: str):
+    return inspect_tex_cleanup(content)["problems"]
+
+
 def _analyze(content: str):
     fp = _formula_problems(content)
     tp = _table_problems(content)
-    return fp + tp
+    cp = _cleanup_problems(content)
+    return fp + tp + cp
 
 
 def _formula_repair_context(attempt, check, previous_candidate=None, rejection_reason=None):
@@ -857,13 +1066,15 @@ def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, rem
     if remaining is not None and remaining() <= 0:
         return {"accepted": False, "check": check, "reason": "planner_deadline_exhausted"}
     scope = assess_candidate(original, candidate)
-    emit("CANDIDATE_SCOPE", node_id=node_id, attempt=attempt, candidate=candidate, scope=scope)
+    anchor = anchor_guard.anchor_drift(original, candidate)
+    emit("CANDIDATE_SCOPE", node_id=node_id, attempt=attempt, candidate=candidate, scope=scope, anchor=anchor)
     if remaining is not None and remaining() <= 0:
         return {"accepted": False, "check": check, "reason": "planner_deadline_exhausted"}
-    accepted = check.get("status") == "OK" and scope.get("allowed") is True
+    accepted = check.get("status") == "OK" and scope.get("allowed") is True and not anchor["drift"]
     reason = ("checker_accepted_not_user_adopted" if accepted else
+              anchor["reason"] if anchor["drift"] else
               scope.get("reason", "mutation_scope_rejected") if scope.get("allowed") is not True else "checker_rejected")
-    return {"accepted": accepted, "check": check, "scope": scope, "reason": reason}
+    return {"accepted": accepted, "check": check, "scope": scope, "anchor": anchor, "reason": reason}
 
 
 def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True, skip_ordinals=()):
@@ -887,7 +1098,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True,
             continue
         latex = p["latex"]
         blocker = repair_blocker(latex)
-        if blocker:
+        if blocker and not can_attempt_structural_repair(latex):
             log.append(f"[doc-formula-verify] {p['id']} 无法确定缺失内容，保留原文供人工核对：{blocker}")
             emit("REPAIR_SKIPPED", node_id=p["id"], reason=blocker)
             continue
@@ -966,16 +1177,19 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True,
     for start, end, replacement in sorted(replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
 
-    content, table_edits = _apply_table_fixes(content, log, emit)
-    return content, edits + table_edits
+    content, table_edits = _apply_table_fixes(content, log, emit, provider=provider, use_model=use_model)
+    content, cl_edits = _apply_cleanup_fixes(content, log, emit, provider=provider, use_model=use_model)
+    return content, edits + table_edits + cl_edits
 
 
-def _apply_table_fixes(content, log, emit):
+def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
     edits = []
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
     raw_lines = content.split("\n")
     vis_lines = mask_opaque(content).split("\n")
+    orig_raw_lines = list(raw_lines)
+    orig_vis_lines = list(vis_lines)
     line_offsets, offset = [], 0
     for raw_line in raw_lines:
         line_offsets.append(offset)
@@ -983,7 +1197,8 @@ def _apply_table_fixes(content, log, emit):
     table_replacements = []
     for p in tp:
         if p["status"] != "RETRY" or not isinstance(p.get("right"), str):
-            log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 保留原文供人工审阅")
+            if not use_model or p["status"] != "RETRY":
+                log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 保留原文供人工审阅")
             continue
         resolved = _resolve_table_edit(raw_lines, vis_lines, line_offsets, p)
         if not resolved or resolved["before"] == resolved["after"]:
@@ -996,7 +1211,146 @@ def _apply_table_fixes(content, log, emit):
              provider="deterministic-table", model_calls=0)
     for start, end, replacement in sorted(table_replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
+
+    if use_model and provider is not None and callable(getattr(provider, "repair_table", None)):
+        model_replacements = []
+        for tbl in _extract_repairable_tables(content):
+            previous_candidate, rejection_reason = None, None
+            feedback_check = tbl["check"]
+            seen = set()
+            for attempt in (1, 2):
+                context = {"attempt": attempt,
+                           "checker": {"status": feedback_check.get("status", "RETRY"),
+                                       "reason": feedback_check.get("reason", "")},
+                           "previous_candidate": previous_candidate,
+                           "rejection_reason": rejection_reason}
+                emit("PROVIDER_START", node_id=tbl["id"], attempt=attempt,
+                     original_rows=tbl["rows"], repair_context=context)
+                cand_rows = provider.repair_table({
+                    "id": tbl["id"],
+                    "data": {"rows": tbl["rows"], "expected": tbl["expected"], "repair_context": context},
+                })
+                provider_trace = getattr(provider, "last_trace", {})
+                if not isinstance(provider_trace, dict):
+                    provider_trace = {"reason": "trace_unavailable", "model_calls": None}
+                emit("PROVIDER_RESULT", node_id=tbl["id"], attempt=attempt,
+                     candidate=cand_rows, provider_trace=provider_trace)
+                if not isinstance(cand_rows, list) or not cand_rows:
+                    previous_candidate = None
+                    rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
+                    emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
+                         candidate=cand_rows, reason=rejection_reason)
+                    continue
+                scope = assess_table_candidate(tbl["rows"], cand_rows, expected=tbl["expected"])
+                if scope.get("reason") == "unchanged_candidate":
+                    emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
+                         candidate=cand_rows, reason="model_abstained")
+                    break
+                seen_key = json.dumps(cand_rows, ensure_ascii=False, separators=(",", ":"))
+                if seen_key in seen:
+                    emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
+                         candidate=cand_rows, reason="repeated_candidate")
+                    break
+                seen.add(seen_key)
+                audit_res = _verify_table_grid(cand_rows, tbl["expected"], node_id=tbl["id"])
+                emit("CANDIDATE_CHECK", node_id=tbl["id"], attempt=attempt,
+                     candidate=cand_rows, check=audit_res)
+                emit("CANDIDATE_SCOPE", node_id=tbl["id"], attempt=attempt,
+                     candidate=cand_rows, scope=scope)
+                accepted = audit_res.get("status") == "OK" and scope.get("allowed") is True
+                reason = ("table_verified" if accepted else
+                          scope.get("reason", "table_scope_violation") if not scope.get("allowed")
+                          else audit_res.get("reason", "checker_rejected"))
+                emit("CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
+                     node_id=tbl["id"], attempt=attempt, candidate=cand_rows,
+                     reason=reason, check=audit_res)
+                if accepted:
+                    after_row = " & ".join(cand_rows[-1]) + tbl["trailing_space"]
+                    if after_row != tbl["before"] and content[tbl["start"]:tbl["end"]] == tbl["before"]:
+                        orig_line = orig_raw_lines[tbl["line"] - 1].removesuffix("\r")
+                        orig_body_end = _table_row_spans(orig_vis_lines[tbl["line"] - 1].removesuffix("\r"))[2]
+                        orig_prefix = orig_line[:orig_body_end]
+                        orig_lead = len(orig_prefix) - len(orig_prefix.lstrip(" \t"))
+                        orig_before = orig_line[orig_lead:orig_body_end]
+                        edits = [e for e in edits if e["line"] != tbl["line"]]
+                        model_replacements.append((tbl["start"], tbl["end"], after_row))
+                        edits.append({"line": tbl["line"], "before": orig_before,
+                                      "after": after_row, "skill": "doc-table-audit"})
+                        emit("CANDIDATE_EDIT", node_id=tbl["id"], line=tbl["line"],
+                             before=orig_before, after=after_row, skill="doc-table-audit")
+                        log.append(f"[doc-table-audit] {tbl['id']} 模型补全合计行 → 范围与审计回判 ✓ ：{after_row}")
+                    break
+                previous_candidate, rejection_reason, feedback_check = cand_rows, reason, audit_res
+        for start, end, replacement in sorted(model_replacements, reverse=True):
+            content = content[:start] + replacement + content[end:]
     return content, edits
+
+
+def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True):
+    report = inspect_tex_cleanup(content)
+    if not report["problems"]:
+        return content, []
+    emit("CLEANUP_CHECK", problems=report["problems"], model_calls=0)
+    det = deterministic_cleanup_candidate(content)
+    if det is not None:
+        scope = assess_cleanup_candidate(content, det)
+        if scope["allowed"]:
+            c_edits = cleanup_edits(content, det)
+            emit("DETERMINISTIC_REPAIR", node_id="cleanup-document",
+                 candidate_edits=len(c_edits), model_calls=0)
+            emit("CANDIDATE_ACCEPTED", node_id="cleanup-document", attempt=0,
+                 reason=scope["reason"], check={"status": "OK"},
+                 provider="deterministic-cleanup", model_calls=0)
+            public_edits = [{k: e[k] for k in ("line", "before", "after", "skill")} for e in c_edits]
+            for e in public_edits:
+                emit("CANDIDATE_EDIT", node_id="cleanup-document", **e,
+                     provider="deterministic-cleanup", model_calls=0)
+            log.append(f"[latex-cleanup] 确定性清理 {len(public_edits)} 处零宽格式噪声")
+            return det, public_edits
+    if not use_model or provider is None or not callable(getattr(provider, "repair_cleanup", None)):
+        return content, []
+    previous_candidate, rejection_reason = None, None
+    seen = set()
+    for attempt in (1, 2):
+        context = _formula_repair_context(attempt, {"status": "RETRY", "reason": report["problems"][0]["kind"]},
+                                          previous_candidate, rejection_reason)
+        emit("PROVIDER_START", node_id="cleanup-document", attempt=attempt, repair_context=context)
+        cand = provider.repair_cleanup({"id": "cleanup-document",
+                                        "data": {"content": content, "repair_context": context}})
+        provider_trace = getattr(provider, "last_trace", {})
+        if not isinstance(provider_trace, dict):
+            provider_trace = {"reason": "trace_unavailable", "model_calls": None}
+        emit("PROVIDER_RESULT", node_id="cleanup-document", attempt=attempt,
+             candidate=cand, provider_trace=provider_trace)
+        if not isinstance(cand, str) or not cand.strip():
+            previous_candidate = None
+            rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
+            emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
+                 candidate=cand, reason=rejection_reason)
+            continue
+        if cand == content:
+            emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
+                 candidate=cand, reason="model_abstained")
+            break
+        if cand in seen:
+            emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
+                 candidate=cand, reason="repeated_candidate")
+            break
+        seen.add(cand)
+        scope = assess_cleanup_candidate(content, cand)
+        emit("CANDIDATE_SCOPE", node_id="cleanup-document", attempt=attempt, scope=scope)
+        emit("CANDIDATE_ACCEPTED" if scope["allowed"] else "CANDIDATE_REJECTED",
+             node_id="cleanup-document", attempt=attempt, reason=scope["reason"],
+             check={"status": "OK" if scope["allowed"] else "RETRY"})
+        if scope["allowed"]:
+            c_edits = cleanup_edits(content, cand)
+            public_edits = [{k: e[k] for k in ("line", "before", "after", "skill")} for e in c_edits]
+            for e in public_edits:
+                emit("CANDIDATE_EDIT", node_id="cleanup-document", **e)
+            log.append(f"[latex-cleanup] 模型结构清洗修复 ✓（共 {len(public_edits)} 处）")
+            return cand, public_edits
+        previous_candidate, rejection_reason = cand, scope["reason"]
+    return content, []
 
 
 def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False, use_model_planner=True):
@@ -1006,9 +1360,13 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
               "start": node["body_start"], "end": node["body_end"]} for node in parsed_math["nodes"]]
     if r"\begin{tabular}" in mask_opaque(content):
         nodes.append({"id": "table-document", "kind": "table", "line": 1, "document_text": content})
+    if inspect_tex_cleanup(content)["problems"]:
+        nodes.append({"id": "cleanup-document", "kind": "cleanup", "line": 1, "document_text": content})
 
     verifier_unavailable = False
     formula_feedback = {}
+    table_feedback = {}
+    cleanup_feedback = {"previous_candidate": None, "rejection_reason": None, "seen": set()}
 
     def check(node):
         nonlocal verifier_unavailable
@@ -1025,6 +1383,10 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
                  checker="doc-formula-verify", check=result)
             return result
+        if node["kind"] == "cleanup":
+            c_problems = _cleanup_problems(content)
+            emit("CLEANUP_CHECK", node_id=node["id"], problems=c_problems, model_calls=0)
+            return {"status": "RETRY" if c_problems else "OK", "problems": c_problems}
         problems = _table_problems(content)
         emit("TABLE_CHECK", node_id=node["id"], problems=problems, model_calls=0)
         status = "NEEDS_HUMAN" if any(p["status"] != "RETRY" for p in problems) else ("RETRY" if problems else "OK")
@@ -1060,7 +1422,7 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                 return {"accepted": False, "check": {"status": "NEEDS_ENV", "reason": "checker_unavailable"},
                         "model_calls": 0, "stop": True}
             blocker = repair_blocker(original)
-            if blocker:
+            if blocker and not can_attempt_structural_repair(original):
                 emit("REPAIR_SKIPPED", node_id=node["id"], reason=blocker, model_calls=0)
                 return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": blocker},
                         "model_calls": 0, "stop": True}
@@ -1111,6 +1473,70 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             outcome = _check_formula_candidate(original, candidate, node_id=node["id"],
                                                attempt=attempt, emit=emit, remaining=planner.remaining_seconds)
             return finish(candidate, outcome)
+        if node["kind"] == "cleanup":
+            attempt = node["attempts"]
+            det = deterministic_cleanup_candidate(content) if attempt == 1 else None
+            if det is not None:
+                scope = assess_cleanup_candidate(content, det)
+                if scope["allowed"]:
+                    c_edits = cleanup_edits(content, det)
+                    emit("DETERMINISTIC_REPAIR", node_id=node["id"], candidate_edits=len(c_edits), model_calls=0)
+                    emit("CANDIDATE_ACCEPTED", node_id=node["id"], attempt=attempt,
+                         reason=scope["reason"], check={"status": "OK"},
+                         provider="deterministic-cleanup", model_calls=0)
+                    return {"accepted": True, "check": {"status": "OK"}, "edits": c_edits, "model_calls": 0}
+            if planner.remaining_seconds() <= 0:
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"},
+                        "model_calls": 0, "stop": True}
+            if (planner.model_calls >= planner.budget.max_model_calls
+                    or not callable(getattr(provider, "repair_cleanup", None))):
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_budget_or_unavailable"},
+                        "model_calls": 0, "stop": True}
+            first_kind = (node.get("check", {}).get("problems") or [{"kind": "cleanup"}])[0].get("kind", "cleanup")
+            context = _formula_repair_context(attempt, {"status": "RETRY", "reason": first_kind},
+                                              cleanup_feedback["previous_candidate"],
+                                              cleanup_feedback["rejection_reason"])
+            emit("PROVIDER_START", node_id=node["id"], attempt=attempt, repair_context=context)
+            repair_options = {"timeout": min(timeout, planner.remaining_seconds())}
+            if skill_selection:
+                repair_options["loaded_skill"] = node["loaded_skill"]
+            cand = provider.repair_cleanup(
+                {"id": node["id"], "data": {"content": content, "repair_context": context}},
+                **repair_options,
+            )
+            provider_trace = getattr(provider, "last_trace", {})
+            if not isinstance(provider_trace, dict):
+                provider_trace = {"reason": "trace_unavailable", "model_calls": None}
+            emit("PROVIDER_RESULT", node_id=node["id"], attempt=attempt,
+                 candidate=cand, provider_trace=provider_trace)
+            if planner.remaining_seconds() <= 0:
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"},
+                        "model_calls": 1, "stop": True}
+            if not isinstance(cand, str) or not cand.strip():
+                reason = provider_trace.get("reason") or "no_valid_candidate"
+                emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt, candidate=cand, reason=reason)
+                cleanup_feedback.update(previous_candidate=None, rejection_reason=reason)
+                return {"accepted": False, "check": {"status": "RETRY", "reason": reason}, "model_calls": 1}
+            if cand == content:
+                emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt, candidate=cand, reason="model_abstained")
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_abstained"},
+                        "model_calls": 1, "stop": True}
+            if cand in cleanup_feedback["seen"]:
+                emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt, candidate=cand, reason="repeated_candidate")
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "repeated_candidate"},
+                        "model_calls": 1, "stop": True}
+            cleanup_feedback["seen"].add(cand)
+            scope = assess_cleanup_candidate(content, cand)
+            emit("CANDIDATE_SCOPE", node_id=node["id"], attempt=attempt, scope=scope)
+            emit("CANDIDATE_ACCEPTED" if scope["allowed"] else "CANDIDATE_REJECTED",
+                 node_id=node["id"], attempt=attempt, reason=scope["reason"],
+                 check={"status": "OK" if scope["allowed"] else "RETRY"})
+            if scope["allowed"]:
+                return {"accepted": True, "check": {"status": "OK"},
+                        "edits": cleanup_edits(content, cand), "model_calls": 1}
+            cleanup_feedback.update(previous_candidate=cand, rejection_reason=scope["reason"])
+            return {"accepted": False, "check": {"status": "RETRY", "reason": scope["reason"]}, "model_calls": 1}
+
         edits, line_offsets, offset = [], [], 0
         raw_lines = content.split("\n")
         vis_lines = mask_opaque(content).split("\n")
@@ -1122,10 +1548,110 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                 continue
             resolved = _resolve_table_edit(raw_lines, vis_lines, line_offsets, problem)
             if not resolved:
-                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}}
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}, "model_calls": 0}
             if resolved["before"] != resolved["after"]:
                 edits.append(resolved)
-        return {"accepted": True, "check": {"status": "OK"}, "edits": edits}
+        working_content = content
+        for edit in sorted(edits, key=lambda item: item["start"], reverse=True):
+            working_content = working_content[:edit["start"]] + edit["after"] + working_content[edit["end"]:]
+        if not _table_problems(working_content):
+            return {"accepted": True, "check": {"status": "OK"}, "edits": edits, "model_calls": 0}
+
+        repairable = _extract_repairable_tables(working_content)
+        if not repairable or not callable(getattr(provider, "repair_table", None)):
+            return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}, "model_calls": 0, "stop": True}
+        if planner.remaining_seconds() <= 0 or planner.model_calls >= planner.budget.max_model_calls:
+            return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}, "model_calls": 0, "stop": True}
+
+        calls = 0
+        attempt = node["attempts"]
+        last_reason = "table_repair_rejected"
+        model_table_edits = []
+        for tbl in repairable:
+            if planner.remaining_seconds() <= 0 or planner.model_calls + calls >= planner.budget.max_model_calls:
+                break
+            fb = table_feedback.setdefault(tbl["id"], {
+                "previous_candidate": None, "rejection_reason": None,
+                "check": tbl["check"], "seen": set(),
+            })
+            context = {"attempt": attempt,
+                       "checker": {"status": fb["check"].get("status", "RETRY"),
+                                   "reason": fb["check"].get("reason", "")},
+                       "previous_candidate": fb["previous_candidate"],
+                       "rejection_reason": fb["rejection_reason"]}
+            emit("PROVIDER_START", node_id=tbl["id"], attempt=attempt,
+                 original_rows=tbl["rows"], repair_context=context)
+            repair_options = {"timeout": min(timeout, planner.remaining_seconds())}
+            if skill_selection:
+                repair_options["loaded_skill"] = node["loaded_skill"]
+            calls += 1
+            cand_rows = provider.repair_table(
+                {"id": tbl["id"], "data": {"rows": tbl["rows"], "expected": tbl["expected"], "repair_context": context}},
+                **repair_options,
+            )
+            provider_trace = getattr(provider, "last_trace", {})
+            if not isinstance(provider_trace, dict):
+                provider_trace = {"reason": "trace_unavailable", "model_calls": None}
+            emit("PROVIDER_RESULT", node_id=tbl["id"], attempt=attempt,
+                 candidate=cand_rows, provider_trace=provider_trace)
+            if planner.remaining_seconds() <= 0:
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}, "model_calls": calls, "stop": True}
+            if not isinstance(cand_rows, list) or not cand_rows:
+                last_reason = provider_trace.get("reason") or "no_valid_candidate"
+                emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt, candidate=cand_rows, reason=last_reason)
+                fb.update(previous_candidate=None, rejection_reason=last_reason)
+                continue
+            scope = assess_table_candidate(tbl["rows"], cand_rows, expected=tbl["expected"])
+            if scope.get("reason") == "unchanged_candidate":
+                emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
+                     candidate=cand_rows, reason="model_abstained")
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_abstained"},
+                        "model_calls": calls, "stop": True}
+            seen_key = json.dumps(cand_rows, ensure_ascii=False, separators=(",", ":"))
+            if seen_key in fb["seen"]:
+                emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
+                     candidate=cand_rows, reason="repeated_candidate")
+                return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "repeated_candidate"},
+                        "model_calls": calls, "stop": True}
+            fb["seen"].add(seen_key)
+            audit_res = _verify_table_grid(cand_rows, tbl["expected"], node_id=tbl["id"])
+            emit("CANDIDATE_CHECK", node_id=tbl["id"], attempt=attempt, candidate=cand_rows, check=audit_res)
+            emit("CANDIDATE_SCOPE", node_id=tbl["id"], attempt=attempt, candidate=cand_rows, scope=scope)
+            accepted = audit_res.get("status") == "OK" and scope.get("allowed") is True
+            reason = ("table_verified" if accepted else
+                      scope.get("reason", "table_scope_violation") if not scope.get("allowed")
+                      else audit_res.get("reason", "checker_rejected"))
+            emit("CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
+                 node_id=tbl["id"], attempt=attempt, candidate=cand_rows,
+                 reason=reason, check=audit_res)
+            if accepted:
+                orig_line = raw_lines[tbl["line"] - 1].removesuffix("\r")
+                orig_body_end = _table_row_spans(vis_lines[tbl["line"] - 1].removesuffix("\r"))[2]
+                body_prefix = orig_line[:orig_body_end]
+                lead_len = len(body_prefix) - len(body_prefix.lstrip(" \t"))
+                orig_start = line_offsets[tbl["line"] - 1] + lead_len
+                orig_end = line_offsets[tbl["line"] - 1] + orig_body_end
+                after_row = " & ".join(cand_rows[-1]) + (" " if body_prefix.endswith((" ", "\t")) else "")
+                model_table_edits.append({
+                    "line": tbl["line"],
+                    "before": content[orig_start:orig_end],
+                    "after": after_row,
+                    "skill": "doc-table-audit",
+                    "start": orig_start,
+                    "end": orig_end,
+                })
+            else:
+                last_reason = reason
+                fb.update(previous_candidate=cand_rows, rejection_reason=reason, check=audit_res)
+
+        replaced_lines = {item["line"] for item in model_table_edits}
+        combined_edits = [e for e in edits if e["line"] not in replaced_lines] + model_table_edits
+        after_working = content
+        for edit in sorted(combined_edits, key=lambda item: item["start"], reverse=True):
+            after_working = after_working[:edit["start"]] + edit["after"] + after_working[edit["end"]:]
+        if combined_edits and not _table_problems(after_working):
+            return {"accepted": True, "check": {"status": "OK"}, "edits": combined_edits, "model_calls": calls}
+        return {"accepted": False, "check": {"status": "RETRY", "reason": last_reason}, "model_calls": calls}
 
     catalog = None
     if skill_selection:
@@ -1137,7 +1663,7 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                                  catalog=catalog, use_model_planner=use_model_planner)
     edits, summary = planner.run()
     fixed = content
-    for edit in sorted(edits, key=lambda edit: edit["start"], reverse=True):
+    for edit in sorted(edits, key=lambda edit: (edit["start"], edit["end"]), reverse=True):
         if fixed[edit["start"]:edit["end"]] != edit["before"]:
             raise ValueError("candidate_source_mismatch")
         fixed = fixed[:edit["start"]] + edit["after"] + fixed[edit["end"]:]
@@ -1204,6 +1730,13 @@ def _planned_problems(summary, content=None):
                 problems.extend(_table_problems(content))
             else:
                 problems.append({"id": node_id or "table-document", "type": "table_total",
+                                 "line": node.get("line", 1), "status": "NEEDS_HUMAN",
+                                 "reason": node.get("human_reason", "planner_unresolved")})
+        elif node.get("kind") == "cleanup":
+            if isinstance(content, str):
+                problems.extend(_cleanup_problems(content))
+            else:
+                problems.append({"id": node_id or "cleanup-document", "type": "cleanup",
                                  "line": node.get("line", 1), "status": "NEEDS_HUMAN",
                                  "reason": node.get("human_reason", "planner_unresolved")})
         else:
@@ -1578,7 +2111,8 @@ def studio_analyze(token: str = Query(""), name: str = Query(""), body: dict = N
     problems = _analyze(content)
     return {"problems": problems,
             "summary": {"formula": sum(1 for p in problems if p["type"] == "formula"),
-                        "table": sum(1 for p in problems if p["type"] == "table_total")}}
+                        "table": sum(1 for p in problems if p["type"] == "table_total"),
+                        "cleanup": sum(1 for p in problems if p["type"] == "cleanup")}}
 
 
 @app.post("/api/studio/fix")

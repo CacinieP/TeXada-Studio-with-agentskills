@@ -8,12 +8,12 @@ Studio 的编辑器是本地 Web UI：Python/FastAPI 提供服务，浏览器中
 | 工作 | 入口 | 实际范围 |
 | --- | --- | --- |
 | 操作 Studio 编辑器 | [texada-studio](../skills/texada-studio/SKILL.md) | 打开与保存、检查、候选审阅、OCR 导入、版本冲突和 PDF 导出 |
-| 检查或修复公式语法 | [doc-formula-verify](../skills/doc-formula-verify/SKILL.md) | 公式文本、严格解析、有限候选与人工语义核对 |
-| 检查或修复简单表格合计 | [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI 网格约束与受限末行合计修复候选；Studio 对受支持 `tabular` 的确定性重算 |
+| 检查或修复公式语法 | [doc-formula-verify](../skills/doc-formula-verify/SKILL.md) | 公式文本、严格解析、保序结构定界补全与人工语义核对 |
+| 检查或修复简单表格合计 | [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI 网格约束与受限末行合计修复候选；Studio 优先确定性重算并对短/空合计行触发受检模型补全 |
 | 单页图片逐行 OCR 与转树 | [doc-ocr-extract](../skills/doc-ocr-extract/SKILL.md) | 本机视觉模型候选文本行、显式逐行审阅及 `ocr_to_layout.py` 哈希绑定转换 |
 | 选择文档输入路线 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | Studio 图片/PDF 转写候选、`doc-ocr-extract` 审阅转 `layout.json` 或已有 `layout.json` |
 | 交付检查证据 | [doc-report](../skills/doc-report/SKILL.md) | 本轮事件、候选与拒绝原因、复用来源及未验证项 |
-| 直接清洗磁盘源码 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 保留内容含义的 TeX/Markdown 清洗、编译与有来源的 OCR 校订 |
+| 文档格式与结构保守清洗 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | Studio 零宽噪声与非数学未闭合结构保守补全，以及直接清洗磁盘 TeX/Markdown 源码 |
 
 外部 coding agent 可以直接读取目标 Skill，例如：
 
@@ -26,20 +26,21 @@ Studio 的编辑器是本地 Web UI：Python/FastAPI 提供服务，浏览器中
 ## Studio 与 CLI 运行时怎样使用 Skill
 
 固定公式修复宿主在 `skill_mode=on` 时加载 `doc-formula-verify/SKILL.md`，
-CLI 表格修复（`vlm.repair_table`）在 `skill_mode=on` 时加载 `doc-table-audit/SKILL.md`，
+表格修复（`vlm.repair_table`）在 `skill_mode=on` 或显式传入已选 Skill 时加载 `doc-table-audit/SKILL.md`，
+文档级保守清洗（`vlm.repair_cleanup`）加载 `latex-cleanup/SKILL.md`，
 各自校验白名单和路径，记录正文与请求哈希；`off` 用于保持其他参数相同的对照。
-CLI 模型表格候选须同时通过 `assess_table_candidate` 来源范围守卫与 `audit_table.py` 回判；Studio 表格候选仍由确定性规则生成（无模型请求）。
+Studio 表格修复优先执行 0 模型调用的确定性单格重算；若简单 `tabular` 仍存在短合计行或空白合计格且允许模型调用，则提取结构化网格调用 `vlm.repair_table`，并经 `assess_table_candidate` 来源范围守卫与 `audit_table.py` 双重回判后仅替换末行合计。
 
-公式修复也优先使用本地确定性语法规则。模型候选须同时通过语法与来源修改范围检查；
-重试反馈保留原公式、上一候选和拒绝类别。当前保真范围及对照结果见[公式修复质量记录](formula-repair-quality.md)。
+公式修复同样优先使用本地确定性语法规则；当存在花括号或 `\left`/`\right` 结构定界缺口（含缺左花括号 `extra_closing_brace`）时，模型候选可在不删改任何原文字符与空白的前提下做纯定界符插入（`structural_delimiter_insertion`），并须同时通过 `assess_candidate`、`anchor_guard` 锚点零漂移与 `verify.py` 严格解析回判。当前保真范围及对照结果见[公式修复质量记录](formula-repair-quality.md)。
 
-独立的“自动选择检查 Skill”实验默认关闭。开启后，宿主先提供公式/表格两种 capability 元数据，
-验证适用性、版本和当前 revision，再加载正文；模型选择不赋予任意脚本执行能力。
+独立的“自动选择检查 Skill”实验默认关闭。开启后，宿主先提供公式、表格与文档清洗三种 capability 元数据，
+验证适用性、版本和当前 revision，再按需加载正文；模型选择不赋予任意脚本执行能力。
+仅当 `inspect_tex_cleanup` 检出零宽格式噪声或未闭合非数学命令/正文环境时，Studio 才会生成文档清洗节点，纯公式与纯表格文档的节点数和预算保持不变。
 `texada-studio` 与 `doc-ocr-extract` 分别是外部 Agent 操作说明和独立命令行提取工作流，未加入此运行时工具白名单。
 `doc-layout-parse` 和 `doc-report` 也分别是输入准备与证据交付约定，不会因此被自动注入 OCR 或报告请求。
 
-两份运行时 Skill 保留与各自 `capability.json` 一致的顶层 `version`（`doc-formula-verify` 为 `1.3.0`，`doc-table-audit` 为 `1.0.0`）。
-本次修订更正流程说明，没有改变 capability schema；正文 SHA256 会随修改变化，旧执行上下文不能据此冒充新运行。
+三份运行时 Skill 保留与各自 `capability.json` 一致的顶层 `version`（`doc-formula-verify` 为 `1.4.0`，`doc-table-audit` 为 `1.0.0`，`latex-cleanup` 为 `0.2.3`）。
+正文 SHA256 会随修改变化，旧执行上下文不能据此冒充新运行。
 研究比较须保存实际正文、模型、输入和请求记录，不能从文字修订直接推断准确率提升。
 
 ## 验证与维护

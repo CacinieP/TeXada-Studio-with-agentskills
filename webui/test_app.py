@@ -1012,5 +1012,378 @@ class RealVerifierTest(unittest.TestCase):
             self.assertEqual(verifier.check('x')[0], 'NEEDS_ENV')
 
 
+class StudioTrackARepairPipelineTest(unittest.TestCase):
+    def test_extra_closing_brace_and_interior_brace_repair_in_ordinary_and_planned_modes(self):
+        for source, repaired_latex in (
+            (r"Value $\frac1}{2}$ here.", r"\frac{1}{2}"),
+            (r"Eq $x^{n+1 + y = 0$ end.", r"x^{n+1} + y = 0"),
+        ):
+            for planned in (False, True):
+                calls = []
+
+                class FormulaProvider:
+                    name = "track-a-formula"
+                    model = "track-a-model"
+                    last_trace = {"model_calls": 1, "reason": "ok"}
+
+                    def fingerprint(self):
+                        return {"provider": self.name}
+
+                    def repair_formula(self, node, **kwargs):
+                        calls.append((node["data"]["latex"], kwargs.get("loaded_skill")))
+                        return repaired_latex
+
+                with self.subTest(source=source, planned=planned):
+                    if planned:
+                        fixed, edits, report = studio._apply_planned_fixes(
+                            source, [], provider=FormulaProvider(),
+                            emit=lambda *a, **k: None, use_model_planner=False,
+                        )
+                        self.assertEqual(report["nodes"][0]["state"], "candidate")
+                        self.assertEqual(len(report["nodes"]), 1)
+                    else:
+                        fixed, edits = studio._apply_fixes(source, [], provider=FormulaProvider())
+                    self.assertIn(f"${repaired_latex}$", fixed)
+                    self.assertEqual(len(edits), 1)
+                    self.assertEqual(edits[0]["skill"], "doc-formula-verify")
+                    self.assertEqual(len(calls), 1)
+
+        # Equal-brace-count wrong order (x} + {y) must skip model calls in both modes.
+        unrepairable = r"Bad $x} + {y$ math."
+        for planned in (False, True):
+            provider = SimpleNamespace(
+                name="forbid", last_trace={}, fingerprint=lambda: {},
+                repair_formula=lambda *a, **k: self.fail("unrepairable extra_closing_brace must not call model"),
+            )
+            if planned:
+                fixed, edits, _ = studio._apply_planned_fixes(
+                    unrepairable, [], provider=provider, emit=lambda *a, **k: None, use_model_planner=False)
+            else:
+                fixed, edits = studio._apply_fixes(unrepairable, [], provider=provider)
+            self.assertEqual(fixed, unrepairable)
+            self.assertEqual(edits, [])
+
+    def test_studio_table_model_repairs_short_and_blank_totals_and_rejects_data_edits(self):
+        short_table = "\n".join([
+            r"\begin{tabular}{lrr}",
+            r"项目 & 单价 & 数量 \\",
+            r"\hline",
+            r"A & 12.5 & 2 \\",
+            r"B & 7.5 & 3 \\",
+            r"合计 \\ % 待补全",
+            r"\end{tabular}",
+        ]) + "\n"
+        blank_table = short_table.replace(r"合计 \\ % 待补全", r"合计 &  &  \\ % 待补全")
+
+        for content in (short_table, blank_table):
+            for mode in ("ordinary", "planned", "selected"):
+                seen_skills = []
+
+                class TableProvider:
+                    name = "track-a-table"
+                    model = "track-a-model"
+                    last_trace = {"model_calls": 1, "reason": "ok"}
+
+                    def fingerprint(self):
+                        return {"provider": self.name}
+
+                    def select_skill(self, snapshot, **kwargs):
+                        self.last_trace = {"model_calls": 1, "reason": "ok"}
+                        return {"skill_id": "doc-table-audit", "state_rev": snapshot["state_rev"], "reason": "table"}
+
+                    def repair_table(self, node, *, timeout=120, loaded_skill=None):
+                        seen_skills.append(loaded_skill)
+                        self.last_trace = {"model_calls": 1, "reason": "ok"}
+                        return [
+                            ["项目", "单价", "数量"],
+                            ["A", "12.5", "2"],
+                            ["B", "7.5", "3"],
+                            ["合计", "20.0", "5"],
+                        ]
+
+                events = []
+                emit = lambda action, **fields: events.append({"action": action, **fields})
+                with self.subTest(content_kind="short" if "合计 \\\\" in content else "blank", mode=mode):
+                    if mode == "ordinary":
+                        fixed, edits = studio._apply_fixes(content, [], provider=TableProvider(), emit=emit)
+                    else:
+                        fixed, edits, report = studio._apply_planned_fixes(
+                            content, [], provider=TableProvider(), emit=emit,
+                            skill_selection=(mode == "selected"), use_model_planner=False,
+                        )
+                        self.assertEqual(report["nodes"], [{
+                            "id": "table-document", "kind": "table", "line": 1,
+                            "state": "candidate", "attempts": 1,
+                        }])
+                        self.assertEqual(report["reserved_model_calls"], 2 if mode == "selected" else 1)
+                    self.assertIn(r"合计 & 20.0 & 5 \\ % 待补全", fixed)
+                    self.assertIn(r"A & 12.5 & 2 \\", fixed)
+                    self.assertEqual(len(edits), 1)
+                    self.assertEqual(edits[0]["skill"], "doc-table-audit")
+                    self.assertEqual(studio._table_problems(fixed), [])
+                    self.assertTrue(any(e["action"] == "CANDIDATE_ACCEPTED" for e in events))
+                    if mode == "selected":
+                        self.assertEqual(seen_skills[0].name, "doc-table-audit")
+
+        # Reject tampered data cells even if the altered sum matches!
+        class TamperingTableProvider:
+            name = "tamper"
+            last_trace = {"model_calls": 1, "reason": "ok"}
+            fingerprint = lambda self: {}
+
+            def repair_table(self, node, **kwargs):
+                return [
+                    ["项目", "单价", "数量"],
+                    ["A", "10.0", "2"],  # tampered from 12.5!
+                    ["B", "7.5", "3"],
+                    ["合计", "17.5", "5"],
+                ]
+
+        fixed, edits = studio._apply_fixes(short_table, [], provider=TamperingTableProvider())
+        self.assertEqual(fixed, short_table)
+        self.assertEqual(edits, [])
+
+    def test_studio_cleanup_repairs_zero_width_and_unclosed_structures_without_affecting_clean_docs(self):
+        # 1) Deterministic zero-width cleanup uses 0 model calls.
+        zw_doc = "\ufeff\\section{标题}\n正文\u200b内容 $x+1$。\n"
+        forbid_provider = SimpleNamespace(
+            name="forbid", last_trace={}, fingerprint=lambda: {},
+            repair_cleanup=lambda *a, **k: self.fail("zero-width cleanup must be deterministic"),
+        )
+        fixed_zw, edits_zw, report_zw = studio._apply_planned_fixes(
+            zw_doc, [], provider=forbid_provider, emit=lambda *a, **k: None, use_model_planner=False,
+        )
+        self.assertEqual(fixed_zw, "\\section{标题}\n正文内容 $x+1$。\n")
+        self.assertEqual(len(edits_zw), 2)
+        self.assertTrue(all(e["skill"] == "latex-cleanup" for e in edits_zw))
+        self.assertEqual(report_zw["reserved_model_calls"], 0)
+
+        # 2) Model cleanup closes unclosed command/environment while preserving prose and math.
+        unclosed_doc = "\\documentclass{article}\n\\begin{document}\n\\section{引言\n\\begin{itemize}\n\\item 条目一 $a+b$\n\n总结段落。\n\\end{document}\n"
+        repaired_doc = "\\documentclass{article}\n\\begin{document}\n\\section{引言}\n\\begin{itemize}\n\\item 条目一 $a+b$\n\\end{itemize}\n\n总结段落。\n\\end{document}\n"
+
+        for mode in ("ordinary", "selected"):
+            seen_skills = []
+
+            class CleanupProvider:
+                name = "track-a-cleanup"
+                model = "track-a-model"
+                last_trace = {"model_calls": 1, "reason": "ok"}
+
+                def fingerprint(self):
+                    return {"provider": self.name}
+
+                def select_skill(self, snapshot, **kwargs):
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    kind = snapshot["node"]["kind"]
+                    skill_map = {"formula": "doc-formula-verify", "table": "doc-table-audit", "cleanup": "latex-cleanup"}
+                    return {"skill_id": skill_map[kind], "state_rev": snapshot["state_rev"], "reason": "route"}
+
+                def repair_cleanup(self, node, *, timeout=120, loaded_skill=None):
+                    seen_skills.append(loaded_skill)
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    return repaired_doc
+
+            with self.subTest(mode=mode):
+                if mode == "ordinary":
+                    fixed, edits = studio._apply_fixes(unclosed_doc, [], provider=CleanupProvider())
+                else:
+                    fixed, edits, report = studio._apply_planned_fixes(
+                        unclosed_doc, [], provider=CleanupProvider(),
+                        emit=lambda *a, **k: None, skill_selection=True, use_model_planner=False,
+                    )
+                    self.assertEqual(seen_skills[0].name, "latex-cleanup")
+                    self.assertTrue(any(s["skill_id"] == "latex-cleanup" for s in report["loaded_skills"]))
+                self.assertEqual(fixed, repaired_doc)
+                self.assertTrue(any(e["skill"] == "latex-cleanup" for e in edits))
+                self.assertEqual(studio._analyze(fixed), [])
+
+    def test_studio_job_combines_formula_table_and_cleanup_skills_with_exact_model_accounting(self):
+        combined_source = "\n".join([
+            r"\documentclass{article}",
+            r"\begin{document}",
+            r"\section{综合测试",
+            r"公式 $x^{n+1 + y = 0$ 与表格：",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 15 \\",
+            r"B & 25 \\",
+            r"合计 \\",
+            r"\end{tabular}",
+            r"\end{document}",
+        ]) + "\n"
+
+        for skill_selection in (False, True):
+            job_id = ("c" if skill_selection else "b") * 32
+
+            class AllThreeProvider:
+                name = "all-three-provider"
+                model = "all-three-model"
+                last_trace = {"model_calls": 1, "reason": "ok"}
+
+                def fingerprint(self):
+                    return {"provider": self.name}
+
+                def select_skill(self, snapshot, **kwargs):
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    mapping = {
+                        "formula": "doc-formula-verify",
+                        "table": "doc-table-audit",
+                        "cleanup": "latex-cleanup",
+                    }
+                    return {
+                        "skill_id": mapping[snapshot["node"]["kind"]],
+                        "state_rev": snapshot["state_rev"],
+                        "reason": "route",
+                    }
+
+                def repair_formula(self, node, **kwargs):
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    return "x^{n+1} + y = 0"
+
+                def repair_table(self, node, **kwargs):
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    return [["项目", "金额"], ["A", "15"], ["B", "25"], ["合计", "40"]]
+
+                def repair_cleanup(self, node, **kwargs):
+                    self.last_trace = {"model_calls": 1, "reason": "ok"}
+                    return node["data"]["content"].replace(r"\section{综合测试", r"\section{综合测试}")
+
+            with self.subTest(skill_selection=skill_selection), \
+                    tempfile.TemporaryDirectory() as temp_state, \
+                    patch.object(studio, "STUDIO_STATE", temp_state), \
+                    patch.dict(studio._jobs, {job_id: {
+                        "done": False, "log": [], "result": None, "name": "combined.tex",
+                        "created_at": 1, "planner_mode": False, "skill_selection": skill_selection,
+                    }}, clear=True), \
+                    patch.object(studio, "_new_provider", return_value=AllThreeProvider()), \
+                    patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}):
+                studio._studio_job("combined.tex", combined_source, job_id)
+                result = studio._read_job(job_id)["result"]
+
+            self.assertIn(r"\section{综合测试}", result["fixed_content"])
+            self.assertIn(r"$x^{n+1} + y = 0$", result["fixed_content"])
+            self.assertIn(r"合计 & 40 \\", result["fixed_content"])
+            self.assertEqual(result["problems_after"], [])
+            self.assertEqual(
+                {edit["skill"] for edit in result["edits"]},
+                {"doc-formula-verify", "doc-table-audit", "latex-cleanup"},
+            )
+            # Ordinary: 3 repair calls (note formula tries deterministic first -> 0 calls, then 1 model call).
+            # Skill selection: 3 selection calls + 3 repair calls = 6 model calls.
+            self.assertEqual(result["model_calls"], 6 if skill_selection else 3)
+            self.assertEqual(result["provider"], "all-three-provider")
+
+    def test_planned_cleanup_and_table_with_commented_end_tabular_do_not_collide(self):
+        source = "\n".join([
+            r"\section{标题",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+        ]) + "\n"
+        bad_candidate = "\n".join([
+            r"\section{标题}",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"\end{center}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+        ]) + "\n"
+        good_candidate = "\n".join([
+            r"\section{标题}",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+            r"\end{center}",
+        ]) + "\n"
+
+        class Provider:
+            name = "combo"
+            last_trace = {"model_calls": 1, "reason": "ok"}
+            fingerprint = lambda self: {}
+
+            def __init__(self):
+                self.replies = iter([bad_candidate, good_candidate])
+
+            def repair_cleanup(self, node, **kwargs):
+                self.last_trace = {"model_calls": 1, "reason": "ok"}
+                return next(self.replies)
+
+        fixed, edits, report = studio._apply_planned_fixes(
+            source, [], provider=Provider(), emit=lambda *a, **k: None, use_model_planner=False,
+        )
+        self.assertIn(r"\section{标题}", fixed)
+        self.assertIn(r"合计 & 1 \\", fixed)
+        self.assertTrue(fixed.endswith("\\end{tabular}\n\\end{center}\n"))
+        self.assertEqual({e["skill"] for e in edits}, {"latex-cleanup", "doc-table-audit"})
+        self.assertEqual(report["reserved_model_calls"], 2)
+
+    def test_mixed_wrong_and_blank_total_row_emits_single_deduplicated_line_edit(self):
+        source = "\n".join([
+            r"\begin{tabular}{lrr}",
+            r"项目 & 单价 & 数量 \\",
+            r"A & 10 & 2 \\",
+            r"B & 20 & 3 \\",
+            r"合计 & 99 &  \\",
+            r"\end{tabular}",
+        ]) + "\n"
+
+        class TableProvider:
+            name = "table-mix"
+            last_trace = {"model_calls": 1, "reason": "ok"}
+            fingerprint = lambda self: {}
+
+            def repair_table(self, node, **kwargs):
+                self.last_trace = {"model_calls": 1, "reason": "ok"}
+                return [["项目", "单价", "数量"], ["A", "10", "2"], ["B", "20", "3"], ["合计", "30", "5"]]
+
+        fixed, edits = studio._apply_fixes(source, [], provider=TableProvider())
+        self.assertIn(r"合计 & 30 & 5 \\", fixed)
+        self.assertEqual(len(edits), 1, edits)
+        self.assertEqual(edits[0], {
+            "line": 5,
+            "before": "合计 & 99 &  ",
+            "after": "合计 & 30 & 5 ",
+            "skill": "doc-table-audit",
+        })
+
+    def test_windows_subprocess_calls_pass_create_no_window_flag(self):
+        seen_kwargs = []
+
+        def fake_run(cmd, **kwargs):
+            seen_kwargs.append((cmd[0], kwargs))
+            if cmd[0] == studio._tectonic_command():
+                out_dir = Path(cmd[cmd.index("-o") + 1])
+                (out_dir / "main.pdf").write_bytes(b"%PDF-1.4\n")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+            if cmd[0] == "pdfinfo":
+                return SimpleNamespace(returncode=0, stdout=b"Pages: 1\n", stderr=b"")
+            if cmd[0] == "pdftoppm":
+                prefix = Path(cmd[-1])
+                prefix.with_suffix(".png").write_bytes(b"\x89PNG\r\n\x1a\n")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+            raise AssertionError(f"unexpected cmd: {cmd}")
+
+        with tempfile.TemporaryDirectory() as temp_state, \
+                patch.object(studio, "STUDIO_STATE", temp_state), \
+                patch.object(studio._sys, "platform", "win32"), \
+                patch.object(studio.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            res = studio._studio_compile("synthetic", "example.tex", "win-check")
+        self.assertTrue(res["ok"])
+        self.assertEqual([name for name, _ in seen_kwargs], [studio._tectonic_command(), "pdfinfo", "pdftoppm"])
+        for name, kwargs in seen_kwargs:
+            with self.subTest(binary=name):
+                self.assertEqual(kwargs.get("creationflags"), 0x08000000)
+
+
 if __name__ == '__main__':
     unittest.main()
