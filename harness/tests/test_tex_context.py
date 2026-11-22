@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from docforensics.tex_context import analyze_math, extract_math  # noqa: E402
+from docforensics.tex_context import _command, analyze_math, extract_math, mask_opaque  # noqa: E402
 
 
 class MathContextTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class MathContextTests(unittest.TestCase):
             last_end = node["end"]
 
     def test_all_delimiters_and_adjacent_inline_math(self):
-        text = r"$a$$b$ \(c\) $$d$$ \[e\]"
+        text = r"$a$ $b$ \(c\) $$d$$ \[e\]"
         nodes = extract_math(text)
         self.assertEqual([node["latex"] for node in nodes], list("abcde"))
         self.assertEqual([node["kind"] for node in nodes], ["inline", "inline", "inline", "display", "display"])
@@ -180,6 +180,45 @@ class MathContextTests(unittest.TestCase):
         self.assertEqual(analyze_math("") , {"nodes": [], "diagnostics": []})
         with self.assertRaises(TypeError):
             extract_math(None)
+
+    def test_text_box_inner_math_stays_one_node_while_unclosed_math_brace_still_closes(self):
+        text = r"$\text{$x$ {a + b $y$}}$ and $\frac{1}{2$ and \(\mbox{see \(z\) and $w$}\)"
+        nodes = extract_math(text)
+        self.assertEqual([node["latex"] for node in nodes],
+                         [r"\text{$x$ {a + b $y$}}", r"\frac{1}{2", r"\mbox{see \(z\) and $w$}"])
+        self.assertEqual([node["checkable"] for node in nodes], [False, True, False])
+        self.assert_slices(text, nodes)
+
+    def test_outer_end_environment_terminates_unclosed_inline_or_display_math(self):
+        text = "\\begin{itemize}\n\\item $unclosed\n\\end{itemize}\nNext $x+1$."
+        result = analyze_math(text)
+        self.assertEqual([d["code"] for d in result["diagnostics"]], ["unclosed_math"])
+        self.assertEqual([node["latex"] for node in result["nodes"]], ["x+1"])
+
+    def test_unclosed_single_dollar_does_not_consume_display_double_dollar(self):
+        result = analyze_math("$unclosed $$d+1$$ $ok$")
+        self.assertEqual([d["code"] for d in result["diagnostics"]], ["unclosed_math"])
+        self.assertEqual([(n["kind"], n["latex"]) for n in result["nodes"]],
+                         [("display", "d+1"), ("inline", "ok")])
+        adjacent_bad = analyze_math("$a$$b$")
+        self.assertTrue(any(d["code"] == "unclosed_math" for d in adjacent_bad["diagnostics"]))
+
+    def test_non_signature_definition_tokens_do_not_blind_scanner_or_mask_opaque(self):
+        for prefix in (r"\let\myenv\newenvironment" + "\n\\section{Intro}\n",
+                       r"\expandafter\newcommand\csname foo\endcsname{bar}" + "\n"):
+            doc = prefix + "$x+1$\n\\begin{tabular}{ll}\nA & 1\\\\\n\\end{tabular}\n"
+            with self.subTest(prefix=prefix):
+                result = analyze_math(doc)
+                self.assertEqual(result["diagnostics"][0]["code"], "unclosed_definition")
+                self.assertEqual([n["latex"] for n in result["nodes"]], ["x+1"])
+                self.assertIn(r"\begin{tabular}", mask_opaque(doc))
+
+    def test_ascii_only_command_scanning_splits_cjk_suffix(self):
+        self.assertEqual(_command(r"\quad中文", 0), ("quad", 5))
+        nodes = extract_math(r"$a\quad中文$")
+        self.assertEqual(len(nodes), 1)
+        self.assertTrue(nodes[0]["checkable"])
+        self.assertEqual(nodes[0]["reason"], "")
 
 
 if __name__ == "__main__":
