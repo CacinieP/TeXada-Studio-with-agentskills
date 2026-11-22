@@ -114,13 +114,16 @@ for(const tag of markup.matchAll(/<\/?([A-Za-z][\w:-]*)\b[^>]*>/g)) {
   const node={id:attrs.id||'',tagName:name.toUpperCase(),attrs,children:[],parentElement:nodeStack.at(-1)||null,
     classList:classes(attrs.class),style,listeners:events.listeners,dataset:Object.fromEntries(Object.entries(attrs).filter(([key])=>key.startsWith('data-')).map(([key,value])=>[key.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()),value])),
     disabled:Object.hasOwn(attrs,'disabled'),hidden:Object.hasOwn(attrs,'hidden'),open:Object.hasOwn(attrs,'open'),checked:Object.hasOwn(attrs,'checked'),
-    textContent:'',innerHTML:'',value:attrs.value||'',offsetWidth:1000,isConnected:true,
+    textContent:'',_innerHTML:'',value:attrs.value||'',offsetWidth:1000,isConnected:true,
+    get innerHTML(){return this._innerHTML;},
+    set innerHTML(val){this._innerHTML=String(val);for(const m of this._innerHTML.matchAll(/\bid="([\w-]+)"/g))if(!elements.has(m[1]))elements.set(m[1],{id:m[1],tagName:'DIV',attrs:{id:m[1]},children:[],parentElement:this,classList:classes(''),style:{},textContent:'',innerHTML:''});},
     setAttribute(key,value){attrs[key]=String(value);if(['disabled','hidden','open','checked'].includes(key))this[key]=true;},
     getAttribute(key){if(key.startsWith('data-')){const field=key.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase());if(Object.hasOwn(this.dataset,field))return this.dataset[field];}return Object.hasOwn(attrs,key)?attrs[key]:null;},
     hasAttribute(key){return ['disabled','hidden','open','checked'].includes(key)?this[key]:this.getAttribute(key)!==null;},
     removeAttribute(key){delete attrs[key];if(['disabled','hidden','open','checked'].includes(key))this[key]=false;},
     addEventListener:events.addEventListener,removeEventListener:events.removeEventListener,
     contains(child){for(let current=child;current;current=current.parentElement)if(current===this)return true;return false;},
+    replaceChildren(...items){this.children=items.map(item=>typeof item==='string'?{tagName:'#TEXT',textContent:item,innerHTML:item,parentElement:this}:(item.parentElement=this,item));this.innerHTML=this.children.map(c=>c.outerHTML||c.innerHTML||c.textContent||'').join('');this.textContent=this.children.map(c=>c.textContent||'').join('');},
     matches(selector){return matchesSelector(this,selector);},
     closest(selector){for(let current=this;current;current=current.parentElement)if(matchesSelector(current,selector))return current;return null;},
     querySelectorAll(selector){return domNodes.filter(child=>child!==this&&this.contains(child)&&matchesSelector(child,selector));},
@@ -176,6 +179,13 @@ const context = vm.createContext({
     matchMedia(query){const max=Number(query.match(/max-width:\s*(\d+)px/)?.[1]||Infinity);return {matches:this.innerWidth<=max,media:query,addEventListener(){},removeEventListener(){}};} },
   document: {
     getElementById: get,
+    createElement(tag){
+      const el={id:'',tagName:String(tag).toUpperCase(),attrs:{},children:[],parentElement:null,classList:classes(''),style:{},textContent:'',innerHTML:'',alt:'',src:'',href:'',download:'',
+        setAttribute(k,v){this.attrs[k]=String(v);this[k]=String(v);},getAttribute(k){return Object.hasOwn(this.attrs,k)?this.attrs[k]:null;},
+        click(){},
+        get outerHTML(){const a={...this.attrs};if(this.src)a.src=this.src;if(this.alt)a.alt=this.alt;const pairs=Object.entries(a).map(([k,v])=>`${k}="${String(v).replace(/"/g,'&quot;')}"`).join(' ');return `<${this.tagName.toLowerCase()}${pairs?' '+pairs:''}>`;}};
+      return el;
+    },
     documentElement:domNodes.find(node=>node.tagName==='HTML'),body:domNodes.find(node=>node.tagName==='BODY'),
     querySelectorAll:selector=>domNodes.filter(node=>matchesSelector(node,selector)),
     querySelector:selector=>domNodes.find(node=>matchesSelector(node,selector))||null,
@@ -986,5 +996,75 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.match(html, /<link rel="stylesheet" href="\/static\/editor\/studio\.css">/);
   assert.match(stylesheet, /\.hide\s*\{\s*display:\s*none\s*!important;/);
   assert.match(stylesheet, /#previewPane\.collapsed\s*\{[^}]*padding:\s*0\s*!important;/);
+
+  // Issue #65: token URL-encoding, safe candidate preview DOM, formulaAtSelection, and index.html escaping.
+  assert.doesNotMatch(script, /[?&]token=\$\{T\}/, 'studio.html must never interpolate unencoded ${T} in query strings');
+  assert.doesNotMatch(script, /\$\("preview"\)\.innerHTML\s*=\s*`<img/, 'candidate preview must not assign raw <img> HTML');
+  context.window.innerWidth=1440;
+  context.testEditor.setValue('preview token check');
+  run("curName='tok.tex';showCenter('edit');");
+  const candidateWithPng = {
+    requires_review: true,
+    fixed_content: 'preview token candidate',
+    original_sha256: hash('preview token check'),
+    candidate_sha256: hash('preview token candidate'),
+    problems_after: [],
+    compile_before: { ok: true },
+    compile_after: { ok: true, png: '/api/studio/preview/tok.tex/after-1?page=1', pages: ['/api/studio/preview/tok.tex/after-1?page=1'] },
+  };
+  context.candidateWithPng = candidateWithPng;
+  await run('applyResult(candidateWithPng)');
+  assert.equal(get('preview').children.length, 1, 'candidate preview mounts one IMG child via replaceChildren');
+  assert.equal(get('preview').children[0].tagName, 'IMG');
+  assert.equal(get('preview').children[0].alt, '修复候选 PDF 预览');
+  assert.match(get('preview').children[0].src, /^\/api\/studio\/preview\/tok\.tex\/after-1\?page=1&token=/);
+
+  // formulaAtSelection skips $$...$$ display math, comments/\verb, and handles TeX \\ before $.
+  for (const [doc, target, shouldRejectAt] of [
+    ['$$a=1$$ and $x+y$', 'x+y', 'a=1'],
+    ['row \\\\$x+y$', 'x+y', null],
+    ['% $ignored$\n\\verb|$also_ignored$| and $x+y$', 'x+y', 'also_ignored'],
+  ]) {
+    context.testEditor.setValue(doc);
+    if (shouldRejectAt) {
+      context.testEditor.cursor = doc.indexOf(shouldRejectAt);
+      context.testEditor.position = null;
+      context.testEditor.selection = null;
+      assert.throws(() => run('formulaAtSelection({content: editor.getValue()})'), /行内公式/);
+    }
+    context.testEditor.cursor = doc.indexOf(target);
+    context.testEditor.position = null;
+    context.testEditor.selection = null;
+    const picked = run('formulaAtSelection({content: editor.getValue()})');
+    assert.equal(picked.original, target, `formulaAtSelection on ${JSON.stringify(doc)}`);
+    const points = Array.from(doc);
+    assert.equal(points.slice(picked.range.start, picked.range.end).join(''), target);
+  }
+
+  // index.html esc() escapes quotes and render() sanitizes chip status class.
+  const indexHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const indexScript = indexHtml.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
+  const indexEl = () => ({ classList: classes(''), style: {}, textContent: '', innerHTML: '', scrollIntoView() {} });
+  const indexNodes = new Map([
+    ['studioLink', indexEl()], ['environment', indexEl()], ['models', indexEl()],
+    ['reportCard', indexEl()], ['repairCard', indexEl()], ['log', indexEl()],
+    ['status', indexEl()], ['bar', indexEl()], ['docs', indexEl()],
+    ['repairs', indexEl()], ['report', indexEl()],
+  ]);
+  const indexCtx = vm.createContext({
+    URLSearchParams, location: { search: '?token=a%26b' },
+    document: { getElementById: id => indexNodes.get(id) || indexEl(), createElement: () => indexEl() },
+    window: {}, fetch: async () => ({ ok: true, json: async () => ({ running: false, docs: {} }), text: async () => '' }),
+    setInterval() {},
+    ...Object.fromEntries(indexNodes),
+  });
+  vm.runInContext(indexScript, indexCtx);
+  assert.equal(vm.runInContext(`esc('a"b\\'c<>&')`, indexCtx), 'a&quot;b&#39;c&lt;&gt;&amp;');
+  indexCtx.maliciousStatus = {
+    running: false, report_ready: false, log_tail: [],
+    docs: { 'doc.tex': { nodes: { 'n1': { status: 'OK" onmouseover="alert(1)' } } } },
+  };
+  vm.runInContext('render(maliciousStatus)', indexCtx);
+  assert.match(indexNodes.get('docs').innerHTML, /<span class="chip">n1 OK&quot; onmouseover=&quot;alert\(1\)<\/span>/);
   console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

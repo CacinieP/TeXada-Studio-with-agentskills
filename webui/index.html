@@ -103,7 +103,7 @@ let doneShown = false;
 async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); }
 
 async function nodeinfo() {
-  try { const d = await j(`/api/nodeinfo?token=${T}`);
+  try { const d = await j(`/api/nodeinfo?token=${encodeURIComponent(T)}`);
     document.getElementById("environment").textContent = [d.host, d.platform].filter(Boolean).join("\n") || "—";
     document.getElementById("models").textContent = d.configured_model || d.model || "—";
   } catch (e) { document.getElementById("environment").textContent = "运行环境加载失败"; }
@@ -113,11 +113,11 @@ async function run(fresh) {
   doneShown = false;
   reportCard.classList.add("hide"); repairCard.classList.add("hide");
   log.classList.remove("hide");
-  try { await j(`/api/run?token=${T}&resume=${!fresh}`, { method: "POST" }); }
+  try { await j(`/api/run?token=${encodeURIComponent(T)}&resume=${!fresh}`, { method: "POST" }); }
   catch (e) { status.textContent = "启动失败: " + e.message; }
 }
 
-function esc(s){ const d=document.createElement("div"); d.textContent=s??""; return d.innerHTML; }
+function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 
 // 字符级 diff：取公共前后缀，高亮中间被修改的部分
 function diffSpans(a, b, cls) {
@@ -143,7 +143,8 @@ function render(d) {
       if (e.status === "OK" && e.repaired) { label = "REPAIRED"; cls = "REPAIRED"; }
       if (e.status === "OK" && e.repaired === false && e.action === undefined) { cls = "OK"; }
       if (e.action === "RETRY") { cls = "RETRY"; label = "RETRY"; }
-      html += `<span class="chip ${cls}">${esc(nid)} ${esc(label)}</span>`;
+      const safeCls = ["OK", "RETRY", "NEEDS_HUMAN", "REPAIRED"].includes(cls) ? cls : "";
+      html += `<span class="chip${safeCls ? " " + safeCls : ""}">${esc(nid)} ${esc(label)}</span>`;
     }
     html += `</div>`;
   }
@@ -172,7 +173,7 @@ function render(d) {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
-        ${e.evidence ? `<img class="crop" src="/api/crops/${esc(e.evidence.replace("crops/",""))}?token=${T}" title="原始截图证据">` : "⚠️ 缺证据"}
+        ${e.evidence ? `<img class="crop" src="/api/crops/${esc(encodeURIComponent(e.evidence.replace("crops/","")))}?token=${encodeURIComponent(T)}" title="原始截图证据">` : "⚠️ 缺证据"}
         <span style="color:var(--dim);font-size:13px">SymPy 回判通过 · ${esc(e.provider ?? "")} · ${esc(String(e.attempts ?? ""))} 次</span>
         <div id="renderwrap-${esc(e.node_id)}" class="renderwrap hide"></div>
         <div id="render-${esc(e.node_id)}" style="color:var(--dim);font-size:13px">LaTeX 编译检查中…</div>
@@ -190,7 +191,7 @@ function render(d) {
   }
   if (d.report_ready && !d.running && !doneShown) {
     doneShown = true;
-    fetch(`/api/report?token=${T}`).then(r => r.text()).then(md => {
+    fetch(`/api/report?token=${encodeURIComponent(T)}`).then(r => r.text()).then(md => {
       document.getElementById("report").textContent = md;
       reportCard.classList.remove("hide");
       reportCard.scrollIntoView({ behavior: "smooth" });
@@ -204,7 +205,7 @@ async function fetchRender(nid) {
   const box = document.getElementById("render-" + nid);
   if (!box || renderCache[nid]) return;
   try {
-    const d = await j(`/api/render/${nid}?token=${T}`);
+    const d = await j(`/api/render/${encodeURIComponent(nid)}?token=${encodeURIComponent(T)}`);
     renderCache[nid] = d;
     const po = document.getElementById("po-" + nid), pr = document.getElementById("pr-" + nid);
     po.textContent = "编译 " + (d.orig_ok ? "✓" : "✗"); po.className = "pill " + (d.orig_ok ? "pass" : "fail");
@@ -212,7 +213,7 @@ async function fetchRender(nid) {
     if (d.img) {
       const wrap = document.getElementById("renderwrap-" + nid);
       wrap.classList.remove("hide");
-      wrap.innerHTML = `<img src="${esc(d.img)}?token=${T}">`;
+      wrap.innerHTML = `<img src="${esc(d.img)}?token=${encodeURIComponent(T)}">`;
     }
     box.textContent = "";
   } catch (e) {
@@ -220,7 +221,7 @@ async function fetchRender(nid) {
   }
 }
 
-async function loop(){ try { render(await j(`/api/status?token=${T}`)); } catch(e){} }
+async function loop(){ try { render(await j(`/api/status?token=${encodeURIComponent(T)}`)); } catch(e){} }
 nodeinfo(); loop(); setInterval(loop, 1000);
 </script>
 <footer><a href="https://github.com/CacinieP/TeXada-Studio-with-agentskills" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">源码 · AGPL-3.0</a></footer>
