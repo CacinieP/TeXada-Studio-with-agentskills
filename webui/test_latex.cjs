@@ -120,6 +120,77 @@ for (const snippet of latex.snippets) {
 assert.match(latex.snippets.find(snippet => snippet.name === "align").body,/\\\\\n/);
 assert.match(latex.snippets.find(snippet => snippet.name === "table").body,/\\end\{tabular\}[\s\S]*\\end\{table\}/);
 
+// Verify actual Monaco SnippetParser unescaping across all 82 snippets and multi-row environments.
+const vm = require("node:vm");
+const monacoEditorSource = require("node:fs").readFileSync(
+  __dirname + "/static/monaco/0.52.2/min/vs/editor/editor.main.js", "utf8"
+);
+const snippetModuleMatch = monacoEditorSource.match(
+  /define\([^,]+,se\(\[1,0\]\),(function\([^)]*\)\{"use strict";Object\.defineProperty\([^,]+,"__esModule",\{value:!0\}\),[^.]+\.SnippetParser=[\s\S]*?\.SnippetParser=t\})\)/
+);
+assert.ok(snippetModuleMatch, "vendored Monaco bundle exposes SnippetParser");
+const snippetExports = {};
+vm.runInNewContext("(" + snippetModuleMatch[1] + ")")(null, snippetExports);
+const monacoSnippetParser = new snippetExports.SnippetParser();
+
+function expandTextMateSnippet(text) {
+  let i = 0;
+  function parseUntil(stopAtBrace) {
+    let out = "";
+    while (i < text.length) {
+      const ch = text[i];
+      if (stopAtBrace && ch === "}") { i++; return out; }
+      if (ch === "\\") {
+        const next = text[i + 1];
+        if (next === "$" || next === "}" || next === "\\") { out += next; i += 2; }
+        else { out += ch; i++; }
+        continue;
+      }
+      if (ch === "$") {
+        if (text[i + 1] === "{") {
+          const colon = text.indexOf(":", i + 2);
+          const close = text.indexOf("}", i + 2);
+          if (colon > 0 && (close < 0 || colon < close) && /^\d+$/.test(text.slice(i + 2, colon))) {
+            i = colon + 1;
+            out += parseUntil(true);
+            continue;
+          }
+          if (close > 0 && /^\d+$/.test(text.slice(i + 2, close))) {
+            i = close + 1;
+            continue;
+          }
+        }
+        const simple = text.slice(i + 1).match(/^\d+/);
+        if (simple) { i += 1 + simple[0].length; continue; }
+      }
+      out += ch;
+      i++;
+    }
+    return out;
+  }
+  return parseUntil(false);
+}
+
+for (const snippet of latex.snippets) {
+  const viaMonaco = monacoSnippetParser.parse(snippet.body).toString();
+  const viaHelper = expandTextMateSnippet(snippet.body);
+  assert.equal(viaHelper, viaMonaco, snippet.name + " helper matches Monaco SnippetParser");
+}
+assert.equal(
+  monacoSnippetParser.parse(latex.snippets.find(s => s.name === "left-brace").body).toString(),
+  "\\left\\{内容 \\right\\}",
+  "left-brace preserves TeX \\{ and \\} after SnippetParser unescaping"
+);
+for (const [name, expectedRowBreaks] of [
+  ["align", 1], ["align-star", 1], ["matrix", 1], ["cases", 1],
+  ["table", 2], ["bmatrix", 1], ["vmatrix", 1]
+]) {
+  const snippet = latex.snippets.find(s => s.name === name);
+  const expanded = monacoSnippetParser.parse(snippet.body).toString();
+  const rowBreaks = [...expanded.matchAll(/\\\\\n/g)].length;
+  assert.equal(rowBreaks, expectedRowBreaks, `${name} expands to ${expectedRowBreaks} literal TeX \\\\ row break(s), got: ${JSON.stringify(expanded)}`);
+}
+
 // Exercise the shipped Monarch rules with a small generic line driver. It is
 // intentionally not a second LaTeX grammar: all matching rules come from the
 // exact object handed to Monaco above.
