@@ -22,12 +22,16 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic"
 TEX_CACHE = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
+POPPLER_DATA_VERSION = "0.4.12"
+POPPLER_DATA_SHA256 = "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
 BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 
 PY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "test_*.py", "tests", "*.bak*")
@@ -218,6 +222,50 @@ def tex_cache_manifest(cache: Path) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def install_poppler_data(staging: Path) -> None:
+    archive_name = f"poppler-data-{POPPLER_DATA_VERSION}"
+    url = f"https://poppler.freedesktop.org/{archive_name}.tar.gz"
+    with tempfile.TemporaryDirectory(prefix="texada-poppler-") as tmp:
+        work = Path(tmp)
+        archive = work / "poppler-data.tar.gz"
+        with urllib.request.urlopen(url, timeout=60) as response, archive.open("wb") as target:
+            shutil.copyfileobj(response, target)
+        require(hashlib.sha256(archive.read_bytes()).hexdigest() == POPPLER_DATA_SHA256,
+                "Poppler 字符映射包的 SHA-256 不匹配")
+        run(["tar", "-xzf", str(archive), "-C", str(work)])
+        source = work / archive_name
+        for directory in ("cMap", "cidToUnicode", "nameToUnicode", "unicodeMap"):
+            copy_tree(source / directory, staging / "poppler-data" / directory)
+        notices = staging / "licenses" / "poppler-data"
+        notices.mkdir()
+        for license_file in source.glob("COPYING*"):
+            shutil.copy2(license_file, notices)
+
+
+def bundle_poppler(staging: Path) -> int:
+    pdfinfo = shutil.which("pdfinfo")
+    require(pdfinfo is not None, "未找到 pdfinfo;先 brew install poppler")
+    prefix = Path(run(["brew", "--prefix", "poppler"], capture_output=True, text=True).stdout.strip())
+    target = staging / "bin" / "pdfinfo"
+    shutil.copy2(pdfinfo, target)
+    target.chmod(0o755)
+    renderer = staging / "bin" / "pdftoppm"
+    poppler_cpp_lib = prefix / "lib" / "libpoppler-cpp.dylib"
+    run(["xcrun", "clang++", "-std=c++17", "-O2", "-mmacosx-version-min=15.0",
+         "-I", str(prefix / "include" / "poppler" / "cpp"),
+         str(DESKTOP / "poppler_render.cpp"), str(poppler_cpp_lib),
+         "-o", str(renderer)])
+    install_poppler_data(staging)
+    return bundle_dylibs(
+        staging / "bin",
+        staging / "tools-lib",
+        {
+            str(target): str(Path(pdfinfo).resolve()),
+            str(renderer): str(poppler_cpp_lib.resolve()),
+        },
+    )
+
+
 def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     """把运行所需源码与数据放进 staging(其后整体合并进 .app/Contents/Resources)。"""
     sizes = {}
@@ -242,14 +290,7 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     os.chmod(staging / "bin" / "tectonic", 0o755)
 
     if not skip_poppler:
-        originals = {}
-        for name in ("pdfinfo", "pdftoppm"):
-            tool = shutil.which(name)
-            require(tool is not None, f"未找到 {name};先 brew install poppler")
-            shutil.copy2(tool, staging / "bin" / name)
-            os.chmod(staging / "bin" / name, 0o755)
-            originals[str(staging / "bin" / name)] = str(Path(tool).resolve())
-        count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
+        count = bundle_poppler(staging)
         print(f"   已捆绑 {count} 个非系统动态库")
         for name, flag in (("tectonic", "--version"), ("pdfinfo", "-v"), ("pdftoppm", "-v")):
             run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
@@ -260,7 +301,7 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
     (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
         tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")
-    for area in ("webui", "tex-cache", "bin", "tools-lib"):
+    for area in ("webui", "tex-cache", "bin", "tools-lib", "poppler-data"):
         path = staging / area
         if path.exists():
             sizes[area] = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())

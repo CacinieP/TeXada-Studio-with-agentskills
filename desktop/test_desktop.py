@@ -1031,6 +1031,61 @@ class BundleAndIconHygieneTests(unittest.TestCase):
             self.assertEqual(bdist_val, expected_bdist)
             self.assertFalse((build_bundle.DESKTOP / "build").exists())
 
+    def test_bundle_poppler_forwards_resolved_pdfinfo_and_renderer_origins(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brew_bin = root / "opt" / "homebrew" / "bin"
+            opt_poppler = root / "opt" / "homebrew" / "opt" / "poppler"
+            cellar_poppler = root / "opt" / "homebrew" / "Cellar" / "poppler" / "25.0"
+            (cellar_poppler / "bin").mkdir(parents=True)
+            (cellar_poppler / "lib").mkdir(parents=True)
+            brew_bin.mkdir(parents=True)
+            opt_poppler.parent.mkdir(parents=True, exist_ok=True)
+            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+
+            real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
+            real_pdfinfo.write_bytes(b"pdfinfo")
+            symlink_pdfinfo = brew_bin / "pdfinfo"
+            symlink_pdfinfo.symlink_to(os.path.relpath(real_pdfinfo, brew_bin))
+
+            real_cpp_lib = cellar_poppler / "lib" / "libpoppler-cpp.0.dylib"
+            real_cpp_lib.write_bytes(b"dylib")
+            (cellar_poppler / "lib" / "libpoppler-cpp.dylib").symlink_to("libpoppler-cpp.0.dylib")
+
+            staging = root / "staging"
+            (staging / "bin").mkdir(parents=True)
+            captured_originals = {}
+
+            def fake_run(argv, **kwargs):
+                if argv[:3] == ["brew", "--prefix", "poppler"]:
+                    return subprocess.CompletedProcess(argv, 0, str(opt_poppler) + "\n", "")
+                if argv[0] == "xcrun":
+                    out_idx = argv.index("-o") + 1
+                    Path(argv[out_idx]).write_bytes(b"renderer")
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            def fake_bundle_dylibs(bin_dir, lib_dir, originals=None):
+                captured_originals.update(originals or {})
+                return 2
+
+            with unittest.mock.patch.object(build_bundle.shutil, "which", return_value=str(symlink_pdfinfo)), \
+                 unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run), \
+                 unittest.mock.patch.object(build_bundle, "install_poppler_data"), \
+                 unittest.mock.patch.object(build_bundle, "bundle_dylibs", side_effect=fake_bundle_dylibs):
+                count = build_bundle.bundle_poppler(staging)
+
+            self.assertEqual(count, 2)
+            self.assertEqual(
+                captured_originals,
+                {
+                    str(staging / "bin" / "pdfinfo"): str(real_pdfinfo.resolve()),
+                    str(staging / "bin" / "pdftoppm"): str(real_cpp_lib.resolve()),
+                },
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
