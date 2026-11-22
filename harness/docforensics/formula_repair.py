@@ -77,10 +77,56 @@ _INTERIOR_CLOSE_FOLLOWERS = frozenset(
     _TRAILING_OPERATORS
     | _RELATIONS
     | {
-        "{", "}", ")", "]", ",", ";", "|",
-        r"\}", r"\rangle", r"\rvert", r"\rVert", r"\vert", r"\Vert", r"\right",
+        "^", "_", "{", "}", ")", "]", ",", ";", "|",
+        r"\}", r"\rangle", r"\rvert", r"\rVert", r"\rfloor", r"\rceil",
+        r"\vert", r"\Vert", r"\right",
+        r"\to", r"\rightarrow", r"\leftarrow", r"\leftrightarrow", r"\mapsto",
+        r"\implies", r"\iff", r"\Rightarrow", r"\Leftarrow", r"\Leftrightarrow",
+        r"\in", r"\notin", r"\ni", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
     }
 )
+_BRACE_ARG_COMMANDS = (
+    _TWO_ARGUMENT_COMMANDS
+    | _UNARY_SCRIPT_COMMANDS
+    | frozenset({
+        r"\text", r"\textbf", r"\textit", r"\textrm", r"\textsf",
+        r"\texttt", r"\emph", r"\operatorname",
+    })
+)
+_FULL_LEFT_PREDECESSORS = frozenset(
+    {
+        "{", "(", "[", ",", ";", "+", "-", r"\pm", r"\mp",
+        r"\{", r"\langle", r"\lvert", r"\lVert", r"\lfloor", r"\lceil",
+    }
+    | _RELATIONS
+    | {
+        r"\to", r"\rightarrow", r"\leftarrow", r"\leftrightarrow", r"\mapsto",
+        r"\implies", r"\iff", r"\Rightarrow", r"\Leftarrow", r"\Leftrightarrow",
+        r"\in", r"\notin", r"\ni", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
+    }
+)
+_SYMMETRIC_LR_PAIRS = {
+    "(": ")",
+    "[": "]",
+    r"\{": r"\}",
+    r"\langle": r"\rangle",
+    r"\lvert": r"\rvert",
+    r"\lVert": r"\rVert",
+    r"\lfloor": r"\rfloor",
+    r"\lceil": r"\rceil",
+    "|": "|",
+    r"\|": r"\|",
+    r"\vert": r"\vert",
+    r"\Vert": r"\Vert",
+    "/": "/",
+    r"\backslash": r"\backslash",
+    r"\uparrow": r"\uparrow",
+    r"\downarrow": r"\downarrow",
+    r"\updownarrow": r"\updownarrow",
+    r"\Uparrow": r"\Uparrow",
+    r"\Downarrow": r"\Downarrow",
+    r"\Updownarrow": r"\Updownarrow",
+}
 
 
 @dataclass(frozen=True)
@@ -419,6 +465,19 @@ def _inside_control_word(text, pos):
     return start > 0 and text[start - 1] == "\\" and _is_unescaped_at(text, start - 1)
 
 
+def _inside_number_literal(text, pos):
+    if pos <= 0 or pos >= len(text):
+        return False
+    left, right = text[pos - 1], text[pos]
+    if left.isdigit() and right.isdigit():
+        return True
+    if left.isdigit() and right == "." and pos + 1 < len(text) and text[pos + 1].isdigit():
+        return True
+    if left == "." and right.isdigit() and not text[:pos].endswith((r"\left.", r"\right.", r"\middle.")):
+        return True
+    return False
+
+
 def _delim_insert_ends(target, offset, delimiters):
     for delim in delimiters:
         if not target.startswith(delim, offset):
@@ -445,6 +504,15 @@ def _lr_command_insert_ends(target, offset, command, delimiters):
     yield after_cmd
 
 
+def _ends_with_brace_command(text, pos):
+    return any(
+        cmd[-1].isalpha()
+        and text.endswith(cmd, 0, pos)
+        and _is_unescaped_at(text, pos - len(cmd))
+        for cmd in _BRACE_ARG_COMMANDS
+    )
+
+
 def _pure_delimiter_insertions(src, tgt, *, need_open, need_close, need_left, need_right,
                                bare_right_ends, forbid_end_insert):
     @lru_cache(maxsize=16384)
@@ -452,17 +520,24 @@ def _pure_delimiter_insertions(src, tgt, *, need_open, need_close, need_left, ne
         remaining_deficits = ro + rc + rl + rr + rb
         if remaining_deficits == 0:
             return () if src[i:] == tgt[j:] else None
-        min_extra = ro + rc + 5 * rl + 6 * rr + rb
+        min_extra = rc + 5 * rl + 6 * rr + rb
         if len(tgt) - j < (len(src) - i) + min_extra:
             return None
         allow_here = (not (forbid_end_insert and i == len(src))
                       and _is_unescaped_at(src, i)
-                      and not _inside_control_word(src, i))
+                      and not _inside_control_word(src, i)
+                      and not _inside_number_literal(src, i))
         if allow_here and j < len(tgt):
             if ro > 0 and tgt[j] == "{" and _is_unescaped_at(tgt, j):
                 tail = dfs(i, j + 1, ro - 1, rc, rl, rr, rb)
                 if tail is not None:
                     return ((j, j + 1, "open", i),) + tail
+                if (i + 1 < len(src) and src[i] == " "
+                        and (src[i + 1].isalnum() or src[i + 1] == "@")
+                        and _ends_with_brace_command(src, i)):
+                    tail = dfs(i + 1, j + 1, ro - 1, rc, rl, rr, rb)
+                    if tail is not None:
+                        return ((j, j + 1, "open", i),) + tail
             if rc > 0 and tgt[j] == "}" and _is_unescaped_at(tgt, j):
                 tail = dfs(i, j + 1, ro, rc - 1, rl, rr, rb)
                 if tail is not None:
@@ -489,17 +564,63 @@ def _pure_delimiter_insertions(src, tgt, *, need_open, need_close, need_left, ne
     return dfs(0, 0, need_open, need_close, need_left, need_right, len(bare_right_ends))
 
 
-def _valid_left_right_groups(tokens):
-    frames = [0]
+def _valid_open_brace_slot(tokens, idx):
+    """True when ``tokens[idx] == '{'`` sits in a legal TeX brace-argument slot."""
+    if idx <= 0:
+        return False
+    prev = tokens[idx - 1].text
+    if prev in {"^", "_"} or prev in _BRACE_ARG_COMMANDS:
+        return True
+    if prev == "]":
+        depth_b = 0
+        depth_g = 0
+        cursor = idx - 1
+        while cursor >= 0:
+            piece = tokens[cursor].text
+            if piece == "}":
+                depth_g += 1
+            elif piece == "{":
+                depth_g -= 1
+                if depth_g < 0:
+                    return False
+            elif depth_g == 0 and piece == "]":
+                depth_b += 1
+            elif depth_g == 0 and piece == "[":
+                depth_b -= 1
+                if depth_b == 0:
+                    return cursor > 0 and tokens[cursor - 1].text == r"\sqrt"
+            cursor -= 1
+        return False
+    if prev == "}":
+        depth_g = 0
+        cursor = idx - 1
+        while cursor >= 0:
+            piece = tokens[cursor].text
+            if piece == "}":
+                depth_g += 1
+            elif piece == "{":
+                depth_g -= 1
+                if depth_g == 0:
+                    return cursor > 0 and tokens[cursor - 1].text in _TWO_ARGUMENT_COMMANDS
+            cursor -= 1
+        return False
+    if (idx >= 2 and tokens[idx - 2].text in _TWO_ARGUMENT_COMMANDS
+            and prev not in {"{", "}", "^", "_", r"\left", r"\right", r"\middle", "\\"}):
+        return True
+    return False
+
+
+def _valid_left_right_groups(tokens, touched_indices=frozenset()):
+    frames = [[]]
     index = 0
     while index < len(tokens):
         tok = tokens[index].text
         if tok == "{":
-            frames.append(0)
+            frames.append([])
             index += 1
             continue
         if tok == "}":
-            if len(frames) <= 1 or frames[-1] != 0:
+            if len(frames) <= 1 or frames[-1]:
                 return False
             frames.pop()
             index += 1
@@ -507,24 +628,29 @@ def _valid_left_right_groups(tokens):
         if tok == r"\left":
             if index + 1 >= len(tokens) or tokens[index + 1].text not in _VALID_LR_DELIMITERS:
                 return False
-            frames[-1] += 1
+            frames[-1].append((index, tokens[index + 1].text))
             index += 2
             continue
         if tok == r"\right":
-            if (frames[-1] <= 0 or index + 1 >= len(tokens)
+            if (not frames[-1] or index + 1 >= len(tokens)
                     or tokens[index + 1].text not in _VALID_LR_DELIMITERS):
                 return False
-            frames[-1] -= 1
+            left_idx, left_delim = frames[-1].pop()
+            right_delim = tokens[index + 1].text
+            if (left_idx in touched_indices or (left_idx + 1) in touched_indices
+                    or index in touched_indices or (index + 1) in touched_indices):
+                if _SYMMETRIC_LR_PAIRS.get(left_delim) != right_delim:
+                    return False
             index += 2
             continue
         if tok == r"\middle":
-            if (frames[-1] <= 0 or index + 1 >= len(tokens)
+            if (not frames[-1] or index + 1 >= len(tokens)
                     or tokens[index + 1].text not in _VALID_LR_DELIMITERS):
                 return False
             index += 2
             continue
         index += 1
-    return frames == [0]
+    return frames == [[]]
 
 
 def _structural_delimiter_insertion(original, before, after):
@@ -584,18 +710,17 @@ def _structural_delimiter_insertion(original, before, after):
     if any(after_tokens[idx].text == "{" and after_tokens[idx + 1].text == "}"
            for idx in range(len(after_tokens) - 1)):
         return False
-    if not _valid_left_right_groups(after_tokens):
-        return False
     if sum(1 for token in after_tokens if token.text == r"\left") != sum(
         1 for token in after_tokens if token.text == r"\right"
     ):
         return False
 
     token_by_start = {token.start: idx for idx, token in enumerate(after_tokens)}
-    for tgt_start, _tgt_end, kind, src_pos in insertions:
+    touched_lr_indices = set()
+    for tgt_start, tgt_end, kind, src_pos in insertions:
         if kind == "open":
             idx = token_by_start.get(tgt_start)
-            if idx is None or after_tokens[idx].text != "{":
+            if idx is None or after_tokens[idx].text != "{" or not _valid_open_brace_slot(after_tokens, idx):
                 return False
         elif kind == "close":
             idx = token_by_start.get(tgt_start)
@@ -604,6 +729,37 @@ def _structural_delimiter_insertion(original, before, after):
             if src_pos < len(match_src) and idx + 1 < len(after_tokens):
                 if after_tokens[idx + 1].text not in _INTERIOR_CLOSE_FOLLOWERS:
                     return False
+        elif kind == "left":
+            idx = token_by_start.get(tgt_start)
+            if idx is None or after_tokens[idx].text != r"\left":
+                return False
+            touched_lr_indices.add(idx)
+            if tgt_end > tgt_start + len(r"\left"):
+                touched_lr_indices.add(idx + 1)
+                if idx > 0 and after_tokens[idx - 1].text not in _FULL_LEFT_PREDECESSORS:
+                    return False
+        elif kind == "right":
+            idx = token_by_start.get(tgt_start)
+            if idx is None or after_tokens[idx].text != r"\right":
+                return False
+            touched_lr_indices.add(idx)
+            if tgt_end > tgt_start + len(r"\right"):
+                touched_lr_indices.add(idx + 1)
+            if src_pos < len(match_src) and idx + 2 < len(after_tokens):
+                if after_tokens[idx + 2].text not in _INTERIOR_CLOSE_FOLLOWERS:
+                    return False
+        elif kind == "bare_right":
+            idx = token_by_start.get(tgt_start)
+            if idx is None or idx < 1 or after_tokens[idx - 1].text != r"\right":
+                return False
+            touched_lr_indices.add(idx - 1)
+            touched_lr_indices.add(idx)
+            if src_pos < len(match_src) and idx + 1 < len(after_tokens):
+                if after_tokens[idx + 1].text not in _INTERIOR_CLOSE_FOLLOWERS:
+                    return False
+
+    if not _valid_left_right_groups(after_tokens, touched_lr_indices):
+        return False
 
     from .anchor_guard import anchor_drift
     if anchor_drift(before, after)["drift"]:

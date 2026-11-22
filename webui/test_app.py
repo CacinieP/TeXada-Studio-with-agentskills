@@ -605,6 +605,7 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(checks, [r"\frac{a}{b"], "abstained original must not be re-verified")
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX shell launcher")
 class MiniCPMProfileTest(unittest.TestCase):
     def test_example_env_preserves_exported_credentials_and_profile_endpoint_default(self):
         check = (
@@ -1249,6 +1250,8 @@ class StudioTrackARepairPipelineTest(unittest.TestCase):
                     return node["data"]["content"].replace(r"\section{综合测试", r"\section{综合测试}")
 
             with self.subTest(skill_selection=skill_selection), \
+                    tempfile.TemporaryDirectory() as temp_state, \
+                    patch.object(studio, "STUDIO_STATE", temp_state), \
                     patch.dict(studio._jobs, {job_id: {
                         "done": False, "log": [], "result": None, "name": "combined.tex",
                         "created_at": 1, "planner_mode": False, "skill_selection": skill_selection,
@@ -1270,6 +1273,116 @@ class StudioTrackARepairPipelineTest(unittest.TestCase):
             # Skill selection: 3 selection calls + 3 repair calls = 6 model calls.
             self.assertEqual(result["model_calls"], 6 if skill_selection else 3)
             self.assertEqual(result["provider"], "all-three-provider")
+
+    def test_planned_cleanup_and_table_with_commented_end_tabular_do_not_collide(self):
+        source = "\n".join([
+            r"\section{标题",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+        ]) + "\n"
+        bad_candidate = "\n".join([
+            r"\section{标题}",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"\end{center}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+        ]) + "\n"
+        good_candidate = "\n".join([
+            r"\section{标题}",
+            r"\begin{center}",
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 1 \\ % fake \end{tabular}",
+            r"合计 & 99 \\",
+            r"\end{tabular}",
+            r"\end{center}",
+        ]) + "\n"
+
+        class Provider:
+            name = "combo"
+            last_trace = {"model_calls": 1, "reason": "ok"}
+            fingerprint = lambda self: {}
+
+            def __init__(self):
+                self.replies = iter([bad_candidate, good_candidate])
+
+            def repair_cleanup(self, node, **kwargs):
+                self.last_trace = {"model_calls": 1, "reason": "ok"}
+                return next(self.replies)
+
+        fixed, edits, report = studio._apply_planned_fixes(
+            source, [], provider=Provider(), emit=lambda *a, **k: None, use_model_planner=False,
+        )
+        self.assertIn(r"\section{标题}", fixed)
+        self.assertIn(r"合计 & 1 \\", fixed)
+        self.assertTrue(fixed.endswith("\\end{tabular}\n\\end{center}\n"))
+        self.assertEqual({e["skill"] for e in edits}, {"latex-cleanup", "doc-table-audit"})
+        self.assertEqual(report["reserved_model_calls"], 2)
+
+    def test_mixed_wrong_and_blank_total_row_emits_single_deduplicated_line_edit(self):
+        source = "\n".join([
+            r"\begin{tabular}{lrr}",
+            r"项目 & 单价 & 数量 \\",
+            r"A & 10 & 2 \\",
+            r"B & 20 & 3 \\",
+            r"合计 & 99 &  \\",
+            r"\end{tabular}",
+        ]) + "\n"
+
+        class TableProvider:
+            name = "table-mix"
+            last_trace = {"model_calls": 1, "reason": "ok"}
+            fingerprint = lambda self: {}
+
+            def repair_table(self, node, **kwargs):
+                self.last_trace = {"model_calls": 1, "reason": "ok"}
+                return [["项目", "单价", "数量"], ["A", "10", "2"], ["B", "20", "3"], ["合计", "30", "5"]]
+
+        fixed, edits = studio._apply_fixes(source, [], provider=TableProvider())
+        self.assertIn(r"合计 & 30 & 5 \\", fixed)
+        self.assertEqual(len(edits), 1, edits)
+        self.assertEqual(edits[0], {
+            "line": 5,
+            "before": "合计 & 99 &  ",
+            "after": "合计 & 30 & 5 ",
+            "skill": "doc-table-audit",
+        })
+
+    def test_windows_subprocess_calls_pass_create_no_window_flag(self):
+        seen_kwargs = []
+
+        def fake_run(cmd, **kwargs):
+            seen_kwargs.append((cmd[0], kwargs))
+            if cmd[0] == studio._tectonic_command():
+                out_dir = Path(cmd[cmd.index("-o") + 1])
+                (out_dir / "main.pdf").write_bytes(b"%PDF-1.4\n")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+            if cmd[0] == "pdfinfo":
+                return SimpleNamespace(returncode=0, stdout=b"Pages: 1\n", stderr=b"")
+            if cmd[0] == "pdftoppm":
+                prefix = Path(cmd[-1])
+                prefix.with_suffix(".png").write_bytes(b"\x89PNG\r\n\x1a\n")
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+            raise AssertionError(f"unexpected cmd: {cmd}")
+
+        with tempfile.TemporaryDirectory() as temp_state, \
+                patch.object(studio, "STUDIO_STATE", temp_state), \
+                patch.object(studio._sys, "platform", "win32"), \
+                patch.object(studio.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            res = studio._studio_compile("synthetic", "example.tex", "win-check")
+        self.assertTrue(res["ok"])
+        self.assertEqual([name for name, _ in seen_kwargs], [studio._tectonic_command(), "pdfinfo", "pdftoppm"])
+        for name, kwargs in seen_kwargs:
+            with self.subTest(binary=name):
+                self.assertEqual(kwargs.get("creationflags"), 0x08000000)
 
 
 if __name__ == '__main__':

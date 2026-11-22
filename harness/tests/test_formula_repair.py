@@ -344,6 +344,60 @@ class StructuralDelimiterInsertionTests(unittest.TestCase):
             with self.subTest(original=original, candidate=candidate):
                 self.assertFalse(assess_candidate(original, candidate)["allowed"])
 
+    def test_rejects_delimiters_split_inside_number_literals(self):
+        for original, candidate in (
+            ("12 + 3}", "1{2 + 3}"),
+            (r"\left(12 + 3 = 0", r"\left(1\right)2 + 3 = 0"),
+            (r"12\right)", r"1\left(2\right)"),
+            ("3.14}", "3.{14}"),
+            ("3.14}", "3{.14}"),
+        ):
+            with self.subTest(original=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+    def test_opening_brace_requires_brace_accepting_slot_and_preserves_valid_slots(self):
+        for original, candidate in (
+            (r"2 \cdot 3 + 4}", r"2 \cdot {3 + 4}"),
+            (r"a b + c}", r"a {b + c}"),
+            (r"x + y} \cdot z", r"{x + y} \cdot z"),
+        ):
+            with self.subTest(rejected=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+        for original, candidate in (
+            (r"\frac1}{2}", r"\frac{1}{2}"),
+            (r"\frac{1}2}", r"\frac{1}{2}"),
+            (r"x^n+1}", r"x^{n+1}"),
+            (r"x_{i+1}+y_j+1}", r"x_{i+1}+y_{j+1}"),
+            (r"\sqrt[3]x+1}", r"\sqrt[3]{x+1}"),
+            (r"\sqrt x+1}", r"\sqrt{x+1}"),
+        ):
+            with self.subTest(allowed=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_left_right_interior_boundaries_and_symmetric_pairs(self):
+        for original, candidate in (
+            (r"\left(a b c = 1", r"\left(a\right) b c = 1"),
+            (r"a \cdot b + c\right)", r"a \cdot \left(b + c\right)"),
+            (r"\left(x + 1 = 0", r"\left(x + 1\right] = 0"),
+            (r"\left[x + 1 = 0", r"\left[x + 1\right) = 0"),
+        ):
+            with self.subTest(rejected=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+        for original, candidate in (
+            (r"\left(x + 1 = 0", r"\left(x + 1\right) = 0"),
+            (r"(x + 1\right)", r"\left(x + 1\right)"),
+            (r"y = x + 1\right)", r"y = \left(x + 1\right)"),
+            (r"\left(\frac{a}{b}^2", r"\left(\frac{a}{b}\right)^2"),
+            (r"\left[0, 1\right) + x^{n+1 = 0", r"\left[0, 1\right) + x^{n+1} = 0"),
+        ):
+            with self.subTest(allowed=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+
 
 if __name__ == "__main__":
     unittest.main()

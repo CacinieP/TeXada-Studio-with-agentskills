@@ -87,6 +87,48 @@ class TexCleanupInspectionTests(unittest.TestCase):
             with self.subTest(candidate=candidate):
                 self.assertFalse(assess_cleanup_candidate(source, candidate)["allowed"])
 
+    def test_unclosed_single_line_command_cannot_swallow_following_lines_or_comments(self):
+        multiline = "\\section{引言\n正文第一段。\n正文第二段。\n"
+        self.assertFalse(
+            assess_cleanup_candidate(multiline, "\\section{引言\n正文第一段。\n正文第二段。}\n")["allowed"]
+        )
+        self.assertTrue(
+            assess_cleanup_candidate(multiline, "\\section{引言}\n正文第一段。\n正文第二段。\n")["allowed"]
+        )
+
+        commented = "\\section{引言 % 标题注释\n正文。\n"
+        self.assertFalse(
+            assess_cleanup_candidate(commented, "\\section{引言 % 标题注释}\n正文。\n")["allowed"]
+        )
+        self.assertTrue(
+            assess_cleanup_candidate(commented, "\\section{引言} % 标题注释\n正文。\n")["allowed"]
+        )
+
+    def test_tabular_ranges_ignore_commented_end_tabular_and_forbid_interior_insertions(self):
+        from docforensics.tex_cleanup import _tabular_ranges
+
+        source = (
+            "\\section{标题\n"
+            "\\begin{tabular}{lr}\n"
+            "项目 & 金额 \\\\\n"
+            "A & 1 \\\\ % fake \\end{tabular}\n"
+            "合计 & 99 \\\\\n"
+            "\\end{tabular}\n"
+        )
+        ranges = _tabular_ranges(source)
+        self.assertEqual(len(ranges), 1)
+        self.assertEqual(source[ranges[0][0]:ranges[0][1]], source[source.index("\\begin{tabular}"):source.rindex("\\end{tabular}") + len("\\end{tabular}")])
+
+        # Closing \section{ inside the tabular body must be rejected.
+        bad_inside_tab = source.replace("合计 & 99 \\\\", "合计 & 99} \\\\")
+        self.assertFalse(assess_cleanup_candidate(source, bad_inside_tab)["allowed"])
+
+        good = source.replace("\\section{标题\n", "\\section{标题}\n")
+        self.assertTrue(assess_cleanup_candidate(source, good)["allowed"])
+        edits = cleanup_edits(source, good)
+        self.assertEqual(len(edits), 1)
+        self.assertLessEqual(edits[0]["end"], ranges[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

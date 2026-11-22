@@ -457,6 +457,32 @@ class ProviderRuntimeTest(unittest.TestCase):
         self.assertEqual(provider.last_trace["skill_id"], "latex-cleanup")
         self.assertEqual(provider.last_trace["skill_sha256"], cleanup_skill.sha256)
 
+    def test_repair_table_and_cleanup_raise_max_tokens_and_restore_on_return_or_error(self):
+        provider = vlm.OpenAICompatibleProvider(skill_mode="off", max_tokens=300)
+        rows = [["项目", "金额"], ["A", "1.5"], ["合计"]]
+        fixed_rows = [["项目", "金额"], ["A", "1.5"], ["合计", "1.5"]]
+        with patch.object(
+            vlm.urllib.request, "urlopen", return_value=response(json.dumps({"rows": fixed_rows}))
+        ) as network:
+            self.assertEqual(provider.repair_table({"data": {"rows": rows}}), fixed_rows)
+        table_payload = json.loads(network.call_args.args[0].data)
+        self.assertEqual(table_payload["max_tokens"], 1024)
+        self.assertEqual(provider.max_tokens, 300)
+
+        long_doc = "\\section{标题\n" + ("这里是较长的正文段落内容。\n" * 40)
+        repaired_doc = long_doc.replace("\\section{标题\n", "\\section{标题}\n")
+        with patch.object(
+            vlm.urllib.request, "urlopen", return_value=response(json.dumps({"content": repaired_doc}))
+        ) as network:
+            self.assertEqual(provider.repair_cleanup({"data": {"content": long_doc}}), repaired_doc)
+        cleanup_payload = json.loads(network.call_args.args[0].data)
+        self.assertEqual(cleanup_payload["max_tokens"], min(8192, max(300, len(long_doc) * 2 + 512)))
+        self.assertEqual(provider.max_tokens, 300)
+
+        with patch.object(vlm.urllib.request, "urlopen", side_effect=TimeoutError("timeout")):
+            self.assertIsNone(provider.repair_cleanup({"data": {"content": long_doc}}))
+        self.assertEqual(provider.max_tokens, 300)
+
     def test_configuration_and_skill_validation_precede_network(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(vlm.urllib.request, "urlopen") as network:
             with self.assertRaisesRegex(ValueError, "skill_unavailable"):

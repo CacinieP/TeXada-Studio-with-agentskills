@@ -671,6 +671,8 @@ class OpenAICompatibleProvider:
             if feedback:
                 request["repair_context"] = feedback
                 trace["repair_context_sha256"] = _hash(_canonical(feedback))
+            saved_max_tokens = self.max_tokens
+            self.max_tokens = max(saved_max_tokens, 1024)
             try:
                 response = self._chat(_canonical(request), system=system,
                                       examples=_table_json_examples() if self.disable_thinking else [],
@@ -693,6 +695,8 @@ class OpenAICompatibleProvider:
             except Exception:
                 trace["reason"] = "provider_error"
                 return None
+            finally:
+                self.max_tokens = saved_max_tokens
             content = self._completion_content(trace, response)
             if content is None:
                 return None
@@ -782,6 +786,8 @@ class OpenAICompatibleProvider:
                     }
                 request["repair_context"] = feedback
                 trace["repair_context_sha256"] = _hash(_canonical(feedback))
+            saved_max_tokens = self.max_tokens
+            self.max_tokens = max(saved_max_tokens, min(8192, len(content) * 2 + 512))
             try:
                 response = self._chat(_canonical(request), system=system,
                                       examples=_cleanup_json_examples() if self.disable_thinking else [],
@@ -804,6 +810,8 @@ class OpenAICompatibleProvider:
             except Exception:
                 trace["reason"] = "provider_error"
                 return None
+            finally:
+                self.max_tokens = saved_max_tokens
             raw_content = self._completion_content(trace, response)
             if raw_content is None:
                 return None

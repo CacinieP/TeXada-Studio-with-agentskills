@@ -25,6 +25,7 @@ from .tex_context import (
     _skip_opaque,
     _skip_verb,
     analyze_math,
+    mask_opaque,
 )
 
 MAX_CLEANUP_CHARS = 262144
@@ -90,6 +91,26 @@ def _protected_mask(content, math_report):
             for pos in range(diag["start"], len(content)):
                 protected[pos] = 1
     return protected, comments
+
+
+def _line_code_end(content, offset):
+    """Return the end offset of non-comment code on the line starting at ``offset``."""
+    limit = _line_end(content, offset)
+    if limit > offset and content[limit - 1] == "\r":
+        limit -= 1
+    cursor = offset
+    while cursor < limit:
+        ch = content[cursor]
+        if ch == "\\":
+            command, after = _command(content, cursor)
+            if command == "verb":
+                after, _ = _skip_verb(content, after)
+            cursor = max(after, cursor + 1)
+            continue
+        if ch == "%":
+            return cursor
+        cursor += 1
+    return limit
 
 
 def _command_brace_start_same_line(content, protected, after):
@@ -188,6 +209,7 @@ def inspect_tex_cleanup(content):
                         "line": _line_of(starts, cursor),
                         "offset": cursor,
                         "brace_offset": brace_pos,
+                        "line_code_end": _line_code_end(content, brace_pos + 1),
                     })
                     cursor = brace_pos + 1
                     continue
@@ -220,7 +242,9 @@ def inspect_tex_cleanup(content):
     if (not brace_negative
             and not math_report["diagnostics"]
             and brace_stack
-            and all(item["command"] in PROSE_BRACE_COMMANDS for item in brace_stack)):
+            and all(item["command"] in PROSE_BRACE_COMMANDS
+                    and content[item["brace_offset"] + 1:item["line_code_end"]].strip()
+                    for item in brace_stack)):
         unclosed_commands = list(brace_stack)
 
     problems = []
@@ -355,6 +379,7 @@ def _decompose_cleanup(original, candidate):
         env: re.compile(r"(?:\r?\n)?[ \t]*\\end\{" + re.escape(env) + r"\}(?:\r?\n)?")
         for env in set(need_envs)
     }
+    tab_ranges = _tabular_ranges(original)
 
     def safe_insert_position(base_idx):
         orig_pos = base_to_orig[base_idx]
@@ -364,6 +389,9 @@ def _decompose_cleanup(original, candidate):
             return False
         for node in orig_math["nodes"]:
             if node["start"] < orig_pos < node["end"]:
+                return False
+        for tab_s, tab_e in tab_ranges:
+            if tab_s < orig_pos < tab_e:
                 return False
         return True
 
@@ -378,7 +406,7 @@ def _decompose_cleanup(original, candidate):
             if rem_b > 0 and candidate[j] == "}" and _is_unescaped(candidate, j):
                 tail = dfs(i, j + 1, rem_b - 1, rem_envs)
                 if tail is not None:
-                    return ((j, j + 1, base_to_orig[i]),) + tail
+                    return ((j, j + 1, base_to_orig[i], "brace"),) + tail
             seen_envs = set()
             for idx_env, env in enumerate(rem_envs):
                 if env in seen_envs:
@@ -389,14 +417,28 @@ def _decompose_cleanup(original, candidate):
                     rest_envs = rem_envs[:idx_env] + rem_envs[idx_env + 1:]
                     tail = dfs(i, match.end(), rem_b, rest_envs)
                     if tail is not None:
-                        return ((j, match.end(), base_to_orig[i]),) + tail
+                        return ((j, match.end(), base_to_orig[i], "env"),) + tail
         if i < len(base) and j < len(candidate) and base[i] == candidate[j]:
             return dfs(i + 1, j + 1, rem_b, rem_envs)
         return None
 
-    insertions = dfs(0, 0, need_braces, need_envs)
-    if insertions is None:
+    raw_insertions = dfs(0, 0, need_braces, need_envs)
+    if raw_insertions is None:
         return None, None, "unauthorized_cleanup_change", None
+
+    brace_insertions = sorted(
+        (item for item in raw_insertions if item[3] == "brace"),
+        key=lambda item: item[2],
+    )
+    if len(brace_insertions) != len(orig_report["unclosed_commands"]):
+        return None, None, "unauthorized_cleanup_change", None
+    for cmd_info, (_js, _je, orig_pos, _kind) in zip(orig_report["unclosed_commands"], brace_insertions):
+        if not (cmd_info["brace_offset"] < orig_pos <= cmd_info["line_code_end"]):
+            return None, None, "cross_line_command_closure", None
+        if not original[cmd_info["brace_offset"] + 1:orig_pos].strip():
+            return None, None, "empty_command_closure", None
+
+    insertions = tuple((js, je, orig_pos) for js, je, orig_pos, _kind in raw_insertions)
 
     after_report = inspect_tex_cleanup(candidate)
     if after_report["problems"] or not after_report["brace_balanced"] or not after_report["env_balanced"]:
@@ -413,9 +455,22 @@ def assess_cleanup_candidate(original, candidate):
 
 
 def _tabular_ranges(content):
+    masked = mask_opaque(content)
     ranges = []
-    for match in re.finditer(r"\\begin\s*\{tabular\}.*?\\end\s*\{tabular\}", content, re.S):
-        ranges.append((match.start(), match.end()))
+    begin_re = re.compile(r"\\begin\s*\{tabular\}")
+    end_re = re.compile(r"\\end\s*\{tabular\}")
+    cursor = 0
+    while cursor < len(masked):
+        b_match = begin_re.search(masked, cursor)
+        if not b_match:
+            break
+        e_match = end_re.search(masked, b_match.end())
+        if e_match:
+            ranges.append((b_match.start(), e_match.end()))
+            cursor = e_match.end()
+        else:
+            ranges.append((b_match.start(), len(masked)))
+            break
     return ranges
 
 

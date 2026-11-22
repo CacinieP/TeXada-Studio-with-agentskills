@@ -71,6 +71,14 @@ def _tectonic_command():
     """编译器命令;每次读取环境,使会话内安装的 Tectonic 立即生效。"""
     return os.path.expanduser(os.environ.get("TECTONIC", "tectonic"))
 
+
+def _subprocess_window_kwargs() -> dict:
+    """Suppress transient console flashes when running CLI tools from a windowed Windows bundle."""
+    if os.name == "nt" or sys.platform == "win32":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        return {"creationflags": flags} if flags else {}
+    return {}
+
 @asynccontextmanager
 async def lifespan(_app):
     global _DEFAULT_MANAGED_MODELS, managed_models
@@ -241,7 +249,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
             f.write(tex)
         try:
             r = subprocess.run([_tectonic_command(), "--untrusted", "--only-cached", "-o", d, texf],
-                               capture_output=True, text=True, timeout=120)
+                               capture_output=True, text=True, timeout=120, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             return None
         pdf = os.path.join(d, "f.pdf")
@@ -249,7 +257,7 @@ def _compile_latex(latex: str, node_id: str, tag: str):
             return None
         try:
             subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf, png[:-4]],
-                           check=True, capture_output=True, timeout=30)
+                           check=True, capture_output=True, timeout=30, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             return None
         return png if os.path.exists(png) else None
@@ -536,7 +544,8 @@ def _studio_compile(content: str, name: str, tag: str):
         command = [_tectonic_command(), "--untrusted", "--only-cached", "--keep-logs",
                    "-o", str(directory), str(texf)]
         try:
-            run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120)
+            run = subprocess.run(command, cwd=directory, capture_output=True, timeout=120,
+                                 **_subprocess_window_kwargs())
         except subprocess.TimeoutExpired as exc:
             log = "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"
             for stream in (exc.stdout, exc.stderr):
@@ -556,7 +565,7 @@ def _studio_compile(content: str, name: str, tag: str):
         page_count = 1
         try:
             info = subprocess.run(["pdfinfo", str(directory / "main.pdf")],
-                                  capture_output=True, timeout=10)
+                                  capture_output=True, timeout=10, **_subprocess_window_kwargs())
             match = _re.search(r"^Pages:\s+(\d+)", _subprocess_text(info.stdout), _re.MULTILINE)
             if match:
                 page_count = int(match.group(1))
@@ -580,7 +589,7 @@ def _render_preview_page(directory, page):
         try:
             subprocess.run(["pdftoppm", "-f", str(page), "-l", str(page), "-png", "-r", "100",
                             "-singlefile", str(directory / "main.pdf"), str(png.with_suffix(""))],
-                           check=True, capture_output=True, timeout=45)
+                           check=True, capture_output=True, timeout=45, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             raise HTTPException(status_code=503, detail="PDF 已生成，但本机页面预览转换失败。") from None
     if not png.is_file():
@@ -1179,6 +1188,8 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
     emit("TABLE_CHECK", problems=tp, model_calls=0)
     raw_lines = content.split("\n")
     vis_lines = mask_opaque(content).split("\n")
+    orig_raw_lines = list(raw_lines)
+    orig_vis_lines = list(vis_lines)
     line_offsets, offset = [], 0
     for raw_line in raw_lines:
         line_offsets.append(offset)
@@ -1256,11 +1267,17 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
                 if accepted:
                     after_row = " & ".join(cand_rows[-1]) + tbl["trailing_space"]
                     if after_row != tbl["before"] and content[tbl["start"]:tbl["end"]] == tbl["before"]:
+                        orig_line = orig_raw_lines[tbl["line"] - 1].removesuffix("\r")
+                        orig_body_end = _table_row_spans(orig_vis_lines[tbl["line"] - 1].removesuffix("\r"))[2]
+                        orig_prefix = orig_line[:orig_body_end]
+                        orig_lead = len(orig_prefix) - len(orig_prefix.lstrip(" \t"))
+                        orig_before = orig_line[orig_lead:orig_body_end]
+                        edits = [e for e in edits if e["line"] != tbl["line"]]
                         model_replacements.append((tbl["start"], tbl["end"], after_row))
-                        edits.append({"line": tbl["line"], "before": tbl["before"],
+                        edits.append({"line": tbl["line"], "before": orig_before,
                                       "after": after_row, "skill": "doc-table-audit"})
                         emit("CANDIDATE_EDIT", node_id=tbl["id"], line=tbl["line"],
-                             before=tbl["before"], after=after_row, skill="doc-table-audit")
+                             before=orig_before, after=after_row, skill="doc-table-audit")
                         log.append(f"[doc-table-audit] {tbl['id']} 模型补全合计行 → 范围与审计回判 ✓ ：{after_row}")
                     break
                 previous_candidate, rejection_reason, feedback_check = cand_rows, reason, audit_res
