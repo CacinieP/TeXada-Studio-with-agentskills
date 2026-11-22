@@ -245,7 +245,7 @@ async function loadFile(name, force = false) {
 
 async function analyze(options={reveal:false}) {
   const epoch=fileEpoch,content=currentContent();
-  const data=await j(`/api/studio/analyze?token=${T}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:curName,content})});
+  const data=await j(`/api/studio/analyze?token=${encodeURIComponent(T)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:curName,content})});
   if(epoch===fileEpoch&&content===currentContent()){renderProblems(data.problems);if(options.reveal)toggleBottomPanel('problems',true,$('btnAnalyze'));}
 }
 
@@ -442,7 +442,7 @@ $("btnFix").onclick = async () => {
   try {
     const source = await captureSource();
     preFix = source.content; lastResult = null; lastCandidateSource = null;
-    const d0 = await j(`/api/studio/fix?token=${T}`, {
+    const d0 = await j(`/api/studio/fix?token=${encodeURIComponent(T)}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: curName, content: preFix, planner_mode: $("plannerMode").checked === true, skill_selection: $("skillSelection").checked === true })
     });
@@ -450,7 +450,7 @@ $("btnFix").onclick = async () => {
     let done = false;
     while (!done) {
       await new Promise(r => setTimeout(r, 1200));
-      const s = await j(`/api/studio/fixstatus?token=${T}&id=${d0.job}`);
+      const s = await j(`/api/studio/fixstatus?token=${encodeURIComponent(T)}&id=${encodeURIComponent(d0.job)}`);
       $("joblog").innerHTML = renderJobLog(s);
       $("joblog").scrollTop = 1e9;
       done = s.done;
@@ -544,7 +544,10 @@ async function applyResult(res, source = null) {
     `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
   if (res.compile_after.png) {
     $("preview").className = "";
-    $("preview").innerHTML = `<img src="${res.compile_after.png}&token=${T}">`;
+    const img = document.createElement("img");
+    img.alt = "修复候选 PDF 预览";
+    img.src = authUrl(res.compile_after.png);
+    $("preview").replaceChildren(img);
   }
   if (res.compile_after.png) {
     const png = res.compile_after.png;
@@ -614,7 +617,7 @@ async function decideCandidate(decision) {
     await validateCandidate(result, source);
     if (modModel && modModel.getValue() !== result.fixed_content) throw new Error("候选视图已变化；请重新生成。");
     if (result.handoff) {
-      const d = await j(`/api/studio/handoff/${result.handoff_transfer_id}/decision?token=${T}`, {
+      const d = await j(`/api/studio/handoff/${encodeURIComponent(result.handoff_transfer_id)}/decision?token=${encodeURIComponent(T)}`, {
         method: "POST", headers: {"Content-Type":"application/json"},
         body: JSON.stringify({decision, name:source.name, content:source.content, revision:source.revision})
       });
@@ -659,13 +662,35 @@ function formulaAtSelection(source) {
   const model = editor.getModel(), selection = editor.getSelection(), position = editor.getPosition();
   const from = model.getOffsetAt(selection.getStartPosition()), to = model.getOffsetAt(selection.getEndPosition());
   const cursor = model.getOffsetAt(position);
-  const matches = [...source.content.matchAll(/(?<!\\)\$([^$\r\n]+)(?<!\\)\$/gu)];
-  const match = matches.find(m => { const start = m.index + 1, end = start + m[1].length;
-    return from === to ? start <= cursor && cursor <= end : from === start && to === end; });
-  if (!match) throw new Error("请将光标放在一个 $...$ 行内公式内，或只选择它的完整正文。");
-  const start = match.index + 1, end = start + match[1].length;
-  return {original: match[1], range: {start: Array.from(source.content.slice(0, start)).length,
-                                   end: Array.from(source.content.slice(0, end)).length, encoding:"unicode-codepoints"}};
+  const masked = maskIgnoredTex(source.content);
+  const spans = [];
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] !== "$" || texEscapedAt(masked, i)) continue;
+    if (masked[i + 1] === "$") {
+      i += 2;
+      while (i < masked.length) {
+        if (masked[i] === "$" && !texEscapedAt(masked, i) && masked[i + 1] === "$") { i += 1; break; }
+        i++;
+      }
+      continue;
+    }
+    const start = i + 1;
+    let end = -1;
+    for (let j = start; j < masked.length; j++) {
+      if (masked[j] === "\r" || masked[j] === "\n") break;
+      if (masked[j] === "$" && !texEscapedAt(masked, j)) {
+        if (masked[j + 1] === "$") break;
+        end = j;
+        break;
+      }
+    }
+    if (end > start) { spans.push({start, end}); i = end; }
+  }
+  const span = spans.find(({start, end}) => from === to ? start <= cursor && cursor <= end : from === start && to === end);
+  if (!span) throw new Error("请将光标放在一个 $...$ 行内公式内，或只选择它的完整正文。");
+  const {start, end} = span, original = source.content.slice(start, end);
+  return {original, range: {start: Array.from(source.content.slice(0, start)).length,
+                            end: Array.from(source.content.slice(0, end)).length, encoding:"unicode-codepoints"}};
 }
 async function requestFormulaHandoff(action) {
   if (busy || !handoffEnabled) return;
@@ -677,7 +702,7 @@ async function requestFormulaHandoff(action) {
     if (!sourceMatches(boundSource)) throw new Error("原文或文件已变化。");
     preFix = source.content; lastCandidateSource = null; lastResult = null;
     invalidateCandidate("正在交接单公式；原文保持不变。");
-    const result = await j(`/api/studio/handoff?token=${T}`, {
+    const result = await j(`/api/studio/handoff?token=${encodeURIComponent(T)}`, {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({name:source.name, content:source.content, revision:source.revision,
                             source_range:formula.range, requested_action:action, transfer_id:formula.transfer_id})
@@ -692,7 +717,7 @@ async function requestFormulaHandoff(action) {
 }
 $("btnHandoff").onclick = () => requestFormulaHandoff("repair");
 $("btnHandoffComplete").onclick = () => requestFormulaHandoff("complete");
-j(`/api/studio/handoff/config?token=${T}`).then(config => {
+j(`/api/studio/handoff/config?token=${encodeURIComponent(T)}`).then(config => {
   handoffEnabled = config.enabled === true && config.checkpoint === "MiniCPM-V-4.7-1B";
   $("btnHandoff").disabled = !handoffEnabled; $("btnHandoffComplete").disabled = !handoffEnabled;
   $("handoffHint").textContent = handoffEnabled ? "同一 MiniCPM 4.7 checkpoint；仅生成单公式候选，需人工审阅。" : "服务默认关闭；仅交接当前行内公式，不读取图像。";

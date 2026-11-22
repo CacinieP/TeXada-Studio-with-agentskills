@@ -51,6 +51,18 @@ def _excerpt(text: str):
     return text[:RESPONSE_EXCERPT_LIMIT], len(text) > RESPONSE_EXCERPT_LIMIT
 
 
+def _image_mime(image_bytes: bytes) -> str:
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if image_bytes.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    return "image/png"
+
+
 def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
             transport: str = DEFAULT_TRANSPORT, timeout: int = 180, profile: str = "generic"):
     """请求一次 vision 模型。返回 (status, reason, payload)。
@@ -65,13 +77,16 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
         encoded = base64.b64encode(image_bytes).decode("ascii")
     except (TypeError, ValueError):
         return "NEEDS_ENV", "bad_image", {}
+    base_clean = base.strip().rstrip("/")
     if transport == "openai":
+        mime = _image_mime(image_bytes)
         payload = {"model": model, "stream": False, "max_tokens": 2048,
                    "messages": [{"role": "user", "content": [
                        {"type": "text", "text": prompt},
                        {"type": "image_url",
-                        "image_url": {"url": "data:image/png;base64," + encoded}}]}]}
-        path = "/v1/chat/completions"
+                        "image_url": {"url": f"data:{mime};base64," + encoded}}]}]}
+        url = (base_clean + "/chat/completions" if base_clean.endswith("/v1")
+               else base_clean + "/v1/chat/completions")
         if profile == "minicpm-ocr":
             payload.update(MINICPM_SAMPLING)
             payload["max_tokens"] = MINICPM_MAX_TOKENS
@@ -79,13 +94,13 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
     elif transport == "ollama":
         payload = {"model": model, "stream": False,
                    "messages": [{"role": "user", "content": prompt, "images": [encoded]}]}
-        path = "/api/chat"
+        url = base_clean + "/api/chat"
         if profile == "minicpm-ocr":
             payload["options"] = {**MINICPM_SAMPLING, "num_predict": MINICPM_MAX_TOKENS}
             payload["think"] = False
     else:
         return "NEEDS_ENV", "bad_transport", {}
-    request = urllib.request.Request(base + path,
+    request = urllib.request.Request(url,
                                      data=json.dumps(payload).encode("utf-8"),
                                      headers={"Content-Type": "application/json"})
     started = time.monotonic()
@@ -137,7 +152,7 @@ def extract(image_bytes: bytes, *, model: str, base: str, prompt: str,
             return "NEEDS_ENV", "bad_response_shape", {}
     if type(counter) is not int or counter < 0:
         counter = None
-    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    lines = [line.strip("\r\n ") for line in content.splitlines() if line.strip()]
     items = []
     if refusal:
         items.append({"reason": "refused_output", "scope": "record"})

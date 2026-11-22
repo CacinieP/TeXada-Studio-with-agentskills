@@ -161,6 +161,32 @@ class SourcePackageTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(before, {path.name: path.read_bytes() for path in self.output_files()})
 
+    def test_superpowers_and_worktrees_are_excluded_from_source_archive(self):
+        root_gitattributes = (SCRIPT.parent.parent / ".gitattributes").read_text(encoding="utf-8")
+        self.write(".gitattributes", root_gitattributes)
+        self.write("docs/superpowers/specs/plan.md", "internal planning spec\n")
+        self.write(".superpowers/session.md", "internal session\n")
+        self.write(".worktrees/pr1/README.md", "worktree checkout\n")
+        self.commit()
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        revision = self.git("rev-parse", "--short=12", "HEAD")
+        stem = "TeXada-Studio-with-agentskills-" + revision
+        archive = self.repo / "dist" / (stem + ".zip")
+        with zipfile.ZipFile(archive) as package:
+            names = package.namelist()
+            self.assertFalse(any("superpowers" in name for name in names), names)
+            self.assertFalse(any(".worktrees" in name for name in names), names)
+
+        # Even if export-ignore were removed, package.sh runtime_directories must reject it.
+        self.write(".gitattributes", ".github/ export-ignore\nstate/ export-ignore\n")
+        self.commit()
+        for stale in self.output_files():
+            stale.unlink()
+        rejected = self.package()
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("验证失败", rejected.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

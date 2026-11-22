@@ -41,7 +41,7 @@ state/quickstart/
 
 缺少操作数、歧义下标、重复上下标及已知解析器覆盖边界保留人工项，不补数、不删项。模型候选最多请求两次，使用原公式和有界 `repair_context` 反馈；语法通过之外仍需满足相同的来源修改范围约束。当前模型 fallback 不能扩大确定性规则已经授权的修复集合。重复候选停止，环境错误不触发继续猜测。规则范围、对照与局限见[公式修复质量记录](../docs/formula-repair-quality.md)。
 
-表格脚本检查矩形网格、显式行列数和有限十进制合计，使用 Decimal 精确求和。非法参考合计或索引是 `bad_expectation`，不应请求模型修表；显式目标形状缺行/缺列仍可报告 `shape_mismatch`。fixture 可以提供替换网格，真实模型提供方不实现表格重提取。格式与状态契约见[表格 Skill](../skills/doc-table-audit/SKILL.md)。
+表格脚本检查矩形网格、显式行列数和有限十进制合计（末行首格去空白并忽略大小写后须精确等于 `合计`、`总计` 或 `total`），使用 Decimal 精确求和。非法参考合计或索引是 `bad_expectation`，不应请求模型修表；显式目标形状缺行/缺列仍可报告 `shape_mismatch`。fixture 或模型提供方 `repair_table` 返回的网格候选均须同时通过 [table_repair.py](docforensics/table_repair.py)（`assess_table_candidate`，仅授权重算末行合计、补齐短合计行，或在无合计行且 `expected.n_rows == len(rows) + 1` 时追加一行合计，禁止改写表头/数据行或截断多余单元格）与 `audit_table.py` 回判；真实模型提供方不执行表格图像重提取。格式与状态契约见[表格 Skill](../skills/doc-table-audit/SKILL.md)。
 
 所有通过检查的修改仍是候选。报告保留原文、差异和原因，使用者需要核对来源及数学含义；语法 `OK`、合计一致和编译成功都是不同结论。
 
@@ -50,7 +50,7 @@ state/quickstart/
 | 参数 | 行为 |
 | --- | --- |
 | `--fixture-repairs <JSON>` | 必要时读取公式和表格的预设候选，无模型请求 |
-| `--vlm <服务根地址或 /v1 地址> --vlm-model <模型>` | 必要时通过 OpenAI-compatible Chat Completions 请求公式文本候选 |
+| `--vlm <服务根地址或 /v1 地址> --vlm-model <模型>` | 必要时通过 OpenAI-compatible Chat Completions 请求公式文本或受限表格网格候选 |
 | 两者均省略 | 使用空 fixture；仍执行检查与确定性公式修复，无法处理的节点转人工 |
 
 若同时提供，`--vlm` 优先。通用 CLI 提供方接受操作者配置的本机或授权云端地址，不继承 Studio 本地启动器的回环限制。接口使用 `VLM_API_KEY` 作为可选 Bearer 凭据；不将凭据加入提示、提供方指纹或报告。调用不需要鉴权的本机服务时应避免继承云 key，例如：
@@ -64,19 +64,19 @@ env -u VLM_API_KEY PYTHONPATH=harness .venv/bin/python -m docforensics run sampl
 
 该命令使用本机已有服务，不会启动或下载模型，模型名须与服务实际标签相符。需强制回环与无云 key 的本地产品流程时，使用[本地 Studio 启动器](../docs/local-studio.md#本机模型连接)。选择云端时先授权并在进程环境提供自己的凭据；不要把真实值写入命令示例、文档或仓库。旧云配置见[部署手册](../deploy/README.md#旧云-api-兼容入口)。
 
-`OllamaProvider` 作为兼容别名保留，实际提供方为 `OpenAICompatibleProvider`。MiniCPM-V 4.7 请求关闭 thinking；响应须为只含一个非空 `latex` 字符串的严格 JSON，拒绝控制符、多行候选和不合法结构。该文本通道不因模型具有视觉能力就开始读取 crop。
+`OllamaProvider` 作为兼容别名保留，实际提供方为 `OpenAICompatibleProvider`。MiniCPM-V 4.7 请求关闭 thinking；公式响应须为只含一个非空 `latex` 字符串的严格 JSON，表格响应须为只含字符串二维数组 `rows` 的严格 JSON，拒绝控制符和不合法结构。该文本通道不因模型具有视觉能力就开始读取 crop。
 
 | 参数 | 默认值 | 用途 |
 | --- | --- | --- |
 | `--state` | `state/run1` | 事件和报告目录 |
 | `--vlm-model` | `minicpm-v4.7-35b-a3b-q4` | 本机服务使用实际标签，可显式覆盖 |
-| `--skill-mode` | `on` | 加载公式 Skill；`off` 用于对照 |
+| `--skill-mode` | `on` | 按节点类型加载公式或表格 Skill；`off` 用于对照 |
 | `--seed` | `0` | 传给模型服务的 seed |
 | `--max-tokens` | `300` | 每次响应的 token 上限 |
 
 完整参数：`PYTHONPATH=harness .venv/bin/python -m docforensics run --help`。
 
-`on` 读取白名单公式 `SKILL.md` 并加入系统消息；`off` 省略该正文，保留基础模型参数。模型事件保存加载、Skill 和提示哈希；fixture 不加载模型指令。固定 CLI 不启用 Studio 的可选规划或 Skill 选择实验。更多 Skill 边界见[当前指南](../docs/agent-skills.md)，历史对照见[研究协议](../samples/research/README.md)。
+`on` 按节点类型读取白名单公式或表格 `SKILL.md` 并加入对应系统消息；`off` 省略该正文，保留基础模型参数。模型事件保存加载、Skill 和提示哈希；fixture 不加载模型指令。固定 CLI 不启用 Studio 的可选规划或 Skill 选择实验。更多 Skill 边界见[当前指南](../docs/agent-skills.md)，历史对照见[研究协议](../samples/research/README.md)。
 
 ## 状态与请求记录
 

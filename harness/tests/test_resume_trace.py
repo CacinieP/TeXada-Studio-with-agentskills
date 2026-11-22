@@ -232,7 +232,7 @@ class ResumeTest(unittest.TestCase):
 
     def test_exhausted_syntax_retries_and_human_boundaries_remain_resumable(self):
         for checks, candidates in (([{"status": "RETRY", "reason": "syntax"}] * 3,
-                                    [PROVIDER_SOURCE, " " + PROVIDER_SOURCE]),
+                                    [r"\sin(x]", r"\sin(x}"]),
                                     ([{"status": "NEEDS_HUMAN", "reason": "bad_input"}], [])):
             with self.subTest(checks=checks), tempfile.TemporaryDirectory() as directory:
                 sample, journal = Path(directory) / "sample", str(Path(directory) / "journal")
@@ -332,7 +332,7 @@ class CandidateTraceTest(unittest.TestCase):
         self.assertEqual(events[-1]["reason"], "env: missing_parser")
 
     def test_exhausted_candidates_remain_visible_and_original_is_preserved(self):
-        candidates = [PROVIDER_SOURCE, " " + PROVIDER_SOURCE]
+        candidates = [r"\sin(x]", r"\sin(x}"]
         provider = ProviderDouble(candidates, model_calls=0)
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 pipeline, "run_verify", return_value={"status": "RETRY", "reason": "parse_error"}):
@@ -341,6 +341,16 @@ class CandidateTraceTest(unittest.TestCase):
         self.assertEqual([e["candidate"] for e in events if e["action"] == "CANDIDATE_REJECTED"], candidates)
         self.assertEqual(events[-1]["latex"], PROVIDER_SOURCE)
         self.assertEqual(events[-1]["attempts"], 2)
+
+    def test_unchanged_formula_abstention_stops_at_first_attempt(self):
+        provider = ProviderDouble([PROVIDER_SOURCE, PROVIDER_CANDIDATE], model_calls=1)
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                pipeline, "run_verify", return_value={"status": "RETRY", "reason": "parse_error"}):
+            self.assertEqual(pipeline.process_formula(directory, "d", formula(), provider), "NEEDS_HUMAN")
+            events = state.load_events(directory)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(events[-1]["attempts"], 1)
+        self.assertEqual(events[-1]["reason"], "model_abstained")
 
     def test_invalid_candidate_response_is_preserved_with_bounded_trace(self):
         provider = pipeline.OllamaProvider(skill_mode="off")

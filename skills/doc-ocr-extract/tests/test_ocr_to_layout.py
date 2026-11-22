@@ -126,6 +126,15 @@ class LayoutTest(unittest.TestCase):
         self.assertIsNone(result['layout'])
         self.assertEqual(result['review_items'][0]['reason'], 'multiple_math_spans_require_review')
 
+    def test_formula_escaped_dollars_unclosed_delimiters_and_surrounding_prose(self):
+        self.assertEqual(converter._formula(r'$a + \$$'), r'a + \$')
+        self.assertEqual(converter._formula(r'$a + \\$'), r'a + \\')
+        self.assertEqual(converter._formula(r'a + \$'), r'a + \$')
+        for bad in ('$x+1', 'x+1$', r'$a + \$', '$$x+1', r'\[x+1', r'\(x+1\]',
+                    '1. Solve $x^2+1=0$', '$x=1$.', '$x=1$ and $y=2$'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                converter._formula(bad)
+
     def test_bad_status_is_review_not_layout(self):
         for status in ('NEEDS_ENV', 'NEEDS_HUMAN', None):
             result = converter.convert({'status': status}, doc='sample')

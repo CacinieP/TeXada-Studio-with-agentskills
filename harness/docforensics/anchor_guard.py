@@ -1,4 +1,4 @@
-"""Operator/anchor drift guard: name what a formula candidate silently changed.
+r"""Operator/anchor drift guard: name what a formula candidate silently changed.
 
 Issue #28 item B: a candidate that degrades ``\iint`` to ``\int``, drops
 ``\sum``, or loses a superscript must never slip through merely because the
@@ -17,13 +17,13 @@ from collections import Counter
 from .formula_repair import _tokens
 
 _BIG_OPERATORS = (
-    r"\int", r"\iint", r"\iiint", r"\oint", r"\varoint",
+    r"\int", r"\iint", r"\iiint", r"\iiiint", r"\oint", r"\varoint",
     r"\sum", r"\prod", r"\coprod",
     r"\bigcup", r"\bigcap", r"\bigvee", r"\bigwedge", r"\bigoplus", r"\bigotimes",
     r"\lim", r"\limsup", r"\liminf", r"\sup", r"\inf", r"\max", r"\min",
 )
 # Rank order for downgrade/upgrade detection, highest rank first.
-_OPERATOR_RANKS = (r"\iiint", r"\iint", r"\int")
+_OPERATOR_RANKS = (r"\iiiint", r"\iiint", r"\iint", r"\int")
 _GREEK_LETTERS = (
     r"\alpha", r"\beta", r"\gamma", r"\delta", r"\epsilon", r"\varepsilon",
     r"\zeta", r"\eta", r"\theta", r"\vartheta", r"\iota", r"\kappa", r"\varkappa",
@@ -62,20 +62,22 @@ def anchor_drift(original, candidate):
     surpluses = {anchor: new_ops[anchor] - old_ops[anchor] for anchor in _BIG_OPERATORS
                  if new_ops[anchor] > old_ops[anchor]}
     # Rank swaps are one drift event, not two: pair them along the chain first
-    # (\iiint→\iint→\int), then report what is genuinely lost or added.
-    for higher, lower in zip(_OPERATOR_RANKS, _OPERATOR_RANKS[1:]):
-        moved = min(deficits.get(higher, 0), surpluses.get(lower, 0))
-        if moved > 0:
-            findings.append({"kind": "operator_downgraded", "anchor": higher,
-                             "original": old_ops[higher], "candidate": new_ops[higher]})
-            deficits[higher] -= moved
-            surpluses[lower] -= moved
-        moved = min(surpluses.get(higher, 0), deficits.get(lower, 0))
-        if moved > 0:
-            findings.append({"kind": "operator_upgraded", "anchor": lower,
-                             "original": old_ops[lower], "candidate": new_ops[lower]})
-            surpluses[higher] -= moved
-            deficits[lower] -= moved
+    # (\iiiint→\iiint→\iint→\int), then report what is genuinely lost or added.
+    for step in range(1, len(_OPERATOR_RANKS)):
+        for index in range(len(_OPERATOR_RANKS) - step):
+            higher, lower = _OPERATOR_RANKS[index], _OPERATOR_RANKS[index + step]
+            moved = min(deficits.get(higher, 0), surpluses.get(lower, 0))
+            if moved > 0:
+                findings.append({"kind": "operator_downgraded", "anchor": higher,
+                                 "original": old_ops[higher], "candidate": new_ops[higher]})
+                deficits[higher] -= moved
+                surpluses[lower] -= moved
+            moved = min(surpluses.get(higher, 0), deficits.get(lower, 0))
+            if moved > 0:
+                findings.append({"kind": "operator_upgraded", "anchor": lower,
+                                 "original": old_ops[lower], "candidate": new_ops[lower]})
+                surpluses[higher] -= moved
+                deficits[lower] -= moved
     for anchor in _BIG_OPERATORS:
         if deficits.get(anchor, 0) > 0:
             findings.append({"kind": "operator_lost", "anchor": anchor,

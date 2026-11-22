@@ -14,6 +14,7 @@ The guard never authorizes an edit the checker rejects; both must pass.
 """
 
 import importlib.util
+import math
 import os
 
 _AUDIT = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "doc-table-audit", "scripts", "audit_table.py")
@@ -22,31 +23,56 @@ _audit = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_audit)
 
 TOTAL_LABELS = ("合计", "总计", "total")
+_MISSING = object()
 
 
 def is_total_row(row):
     return (isinstance(row, list) and bool(row)
-            and any(label in str(row[0]).strip().lower() for label in TOTAL_LABELS))
+            and str(row[0]).strip().lower() in TOTAL_LABELS)
+
+
+def _valid_cell(cell):
+    if isinstance(cell, bool):
+        return False
+    if isinstance(cell, float):
+        return math.isfinite(cell)
+    return isinstance(cell, (str, int))
 
 
 def _valid_grid(rows):
     return (isinstance(rows, list) and bool(rows)
             and all(isinstance(row, list) for row in rows)
-            and all(isinstance(cell, (str, int, float)) and not isinstance(cell, bool)
-                    for row in rows for cell in row))
+            and all(_valid_cell(cell) for row in rows for cell in row))
 
 
 def _reject(reason, **location):
     return {"allowed": False, "reason": reason, "method": None, **location}
 
 
+def _cell_preserved(left, right):
+    if type(left) is type(right) and type(left) is not bool and left == right:
+        return True
+    if isinstance(left, (int, float)) and not isinstance(left, bool) and isinstance(right, str):
+        if isinstance(left, int):
+            return right == str(left)
+        decimal_val = _audit.Decimal(str(left))
+        return decimal_val.is_finite() and right == format(decimal_val, "f")
+    return False
+
+
 def _first_difference(original_row, candidate_row):
     for index in range(max(len(original_row), len(candidate_row))):
-        left = original_row[index] if index < len(original_row) else None
-        right = candidate_row[index] if index < len(candidate_row) else None
-        if left != right:
+        left = original_row[index] if index < len(original_row) else _MISSING
+        right = candidate_row[index] if index < len(candidate_row) else _MISSING
+        if left is _MISSING or right is _MISSING or not _cell_preserved(left, right):
             return index
     return None
+
+
+def _grids_equal(original, candidate):
+    return (len(original) == len(candidate)
+            and all(_first_difference(orig_row, cand_row) is None
+                    for orig_row, cand_row in zip(original, candidate)))
 
 
 def _check_total_cells(candidate_row, width, row_index):
@@ -64,10 +90,11 @@ def assess_table_candidate(original, candidate, expected=None):
         return _reject("bad_original")
     if not _valid_grid(candidate):
         return _reject("bad_candidate_type")
-    if candidate == original:
+    if _grids_equal(original, candidate):
         return _reject("unchanged_candidate")
-    if candidate[0] != original[0]:
-        return _reject("table_header_modified", row_index=0, col_index=_first_difference(original[0], candidate[0]))
+    header_col = _first_difference(original[0], candidate[0])
+    if header_col is not None:
+        return _reject("table_header_modified", row_index=0, col_index=header_col)
     width = len(original[0])
     expected = expected if isinstance(expected, dict) else {}
 
@@ -81,6 +108,8 @@ def assess_table_candidate(original, candidate, expected=None):
                 return _reject("table_data_modified", row_index=row, col_index=col)
         if not candidate[total] or candidate[total][0] != original[total][0]:
             return _reject("table_total_label_modified", row_index=total, col_index=0)
+        if len(original[total]) > width:
+            return _reject("table_scope_violation", row_index=total)
         problem = _check_total_cells(candidate[total], width, total)
         if problem:
             return problem
