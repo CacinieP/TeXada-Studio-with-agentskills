@@ -94,6 +94,25 @@ jobs:
             "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/smoke.tex"
           test -f "$WORK/out/smoke.pdf" && echo "isolated compile OK"
 
+          # Compile the same layout with and without visible CJK glyphs. The
+          # broken renderer produces the same blank image for both PDFs.
+          for variant in cjk blank; do
+            body='微积分笔记'
+            if [ "$variant" = blank ]; then body='\phantom{微积分笔记}'; fi
+            printf '\\documentclass[UTF8,fontset=fandol]{ctexart}\n\\pagestyle{empty}\n\\begin{document}\n%s\n\\end{document}\n' \
+              "$body" > "$WORK/$variant.tex"
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+              "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$WORK/$variant.tex"
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+              "$R/bin/pdftoppm" -f 1 -l 1 -png -r 100 -singlefile \
+              "$WORK/out/$variant.pdf" "$WORK/out/$variant"
+            test -s "$WORK/out/$variant.png"
+          done
+          if cmp -s "$WORK/out/cjk.png" "$WORK/out/blank.png"; then
+            echo "Bundled renderer dropped all CJK glyphs" >&2
+            exit 1
+          fi
+
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'
         run: |
