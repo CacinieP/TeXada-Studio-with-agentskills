@@ -55,16 +55,30 @@ exec "$PYTHON" "$REPO_DIR/desktop/app.py" "$@"
 """
 
 
+ICONSET_SPECS = (
+    (16, "icon_16x16.png"),
+    (32, "icon_16x16@2x.png"),
+    (32, "icon_32x32.png"),
+    (64, "icon_32x32@2x.png"),
+    (128, "icon_128x128.png"),
+    (256, "icon_128x128@2x.png"),
+    (256, "icon_256x256.png"),
+    (512, "icon_256x256@2x.png"),
+    (512, "icon_512x512.png"),
+    (1024, "icon_512x512@2x.png"),
+)
+
+
 def build_icon(iconset_dir: Path, icns_path: Path) -> bool:
-    """用 sips+iconutil 生成 icns;工具缺失时返回 False。"""
+    """用 sips+iconutil 生成含 Retina 槽位的 icns;工具缺失时返回 False。"""
     if not BRAND_SOURCE.exists():
         return False
     if shutil.which("sips") is None or shutil.which("iconutil") is None:
         return False
-    iconset_dir.mkdir(parents=True)
-    for size in (16, 32, 64, 128, 256, 512):
+    iconset_dir.mkdir(parents=True, exist_ok=True)
+    for size, filename in ICONSET_SPECS:
         subprocess.run(["sips", "-z", str(size), str(size), str(BRAND_SOURCE),
-                        "--out", str(iconset_dir / f"icon_{size}x{size}.png")],
+                        "--out", str(iconset_dir / filename)],
                        check=True, capture_output=True)
     subprocess.run(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(icns_path)],
                    check=True, capture_output=True)
