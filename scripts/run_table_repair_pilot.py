@@ -42,6 +42,13 @@ def _sha256_file(path: Path) -> str | None:
         return None
 
 
+def _display_path(path: Path) -> str:
+    resolved = path.resolve()
+    if resolved.is_relative_to(REPO):
+        return resolved.relative_to(REPO).as_posix()
+    return resolved.name
+
+
 def _ollama_show(model: str) -> dict:
     try:
         proc = subprocess.run(
@@ -130,7 +137,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--outdir", type=Path, required=True)
     args = parser.parse_args(argv)
 
-    catalog = load_cases(args.cases)
+    cases_path = args.cases.resolve()
+    cases_display = _display_path(cases_path)
+    catalog = load_cases(cases_path)
     outdir = args.outdir.resolve()
     if outdir.exists() and any(outdir.iterdir()):
         print(f"outdir must be empty or new: {outdir}", file=sys.stderr)
@@ -159,9 +168,10 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": 1,
             "pilot_id": "table-repair-pilot-01",
             "dataset_id": catalog.get("dataset_id"),
-            "cases_path": str(args.cases.relative_to(REPO)),
-            "cases_sha256": _sha256_file(args.cases),
-            "source_sha256": catalog["cases"][0]["source"]["sha256"],
+            "cases_path": cases_display,
+            "cases_sha256": _sha256_file(cases_path),
+            "source_sha256": ((catalog["cases"][0].get("source") or {}).get("sha256")
+                              if catalog["cases"] else None),
             "base": args.base,
             "model": args.model,
             "skill_mode": args.skill_mode,
@@ -196,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             "",
             f"- base: `{args.base}`",
             f"- seed: `{args.seed}`, max_tokens: `{args.max_tokens}`",
-            f"- cases: `{args.cases.relative_to(REPO)}`",
+            f"- cases: `{cases_display}`",
             "",
             "| Case | Path | Status | Repaired | Model calls | Terminal reason | Scope/reject |",
             "| --- | --- | --- | --- | ---: | --- | --- |",
@@ -208,17 +218,24 @@ def main(argv: list[str] | None = None) -> int:
                 f"`{record['reason']}` | "
                 f"`{','.join(x or '-' for x in (record['rejection_reasons'] or record['scope_reasons'] or ['-']))}` |"
             )
+        adversarial = next(
+            (r["adversarial_host_scope"] for r in results if r["id"] == "TR04"),
+            next((r["adversarial_host_scope"] for r in results
+                  if r.get("adversarial_host_scope") is not None), None),
+        )
+        if adversarial is not None:
+            lines += [
+                "",
+                "## Host adversarial check (TR04)",
+                "",
+                "The catalog also records a checker-passing data-row rewrite. The host "
+                "scope guard must reject it offline regardless of model output:",
+                "",
+                "```json",
+                json.dumps(adversarial, ensure_ascii=False, indent=2),
+                "```",
+            ]
         lines += [
-            "",
-            "## Host adversarial check (TR04)",
-            "",
-            "The catalog also records a checker-passing data-row rewrite. The host "
-            "scope guard must reject it offline regardless of model output:",
-            "",
-            "```json",
-            json.dumps(next(r["adversarial_host_scope"] for r in results if r["id"] == "TR04"),
-                       ensure_ascii=False, indent=2),
-            "```",
             "",
             "Per-case journals and reports are under `runs/<case-id>/`.",
             "",

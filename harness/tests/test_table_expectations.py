@@ -56,6 +56,46 @@ class TableExpectationTests(unittest.TestCase):
         self.assertEqual(audit_module.audit({"rows": self.rows, "expected": {"totals": {"col:1": "5"}}})[:2],
                          ("RETRY", "sum_mismatch"))
 
+    def test_non_total_labels_containing_total_substrings_are_treated_as_data_rows(self):
+        non_total_tables = [
+            [["Test", "Value"], ["LDL", "100"], ["Total Cholesterol", "185"]],
+            [["Item", "Amount"], ["A", "60"], ["Subtotal", "100"]],
+            [["项目", "金额"], ["甲", "5"], ["非合计项", "10"]],
+        ]
+        for rows in non_total_tables:
+            with self.subTest(last_label=rows[-1][0]):
+                self.assertEqual(audit_module.audit({"rows": rows}), ("OK", "", ""))
+        # Reference col total sums all data rows including "Total Cholesterol"
+        cholesterol_rows = [["Test", "Value"], ["LDL", "100"], ["Total Cholesterol", "185"]]
+        self.assertEqual(
+            audit_module.audit({"rows": cholesterol_rows, "expected": {"totals": {"col:1": "285"}}}),
+            ("OK", "", ""),
+        )
+        # Exact normalized total labels (trimmed, case-insensitive) still audit as total rows
+        for label in ("合计", " 总计 ", "Total", " TOTAL "):
+            with self.subTest(total_label=label):
+                bad_rows = [["Item", "Amount"], ["A", "1.5"], ["B", "2.5"], [label, "4.5"]]
+                self.assertEqual(audit_module.audit({"rows": bad_rows})[:2], ("RETRY", "sum_mismatch"))
+                good_rows = [["Item", "Amount"], ["A", "1.5"], ["B", "2.5"], [label, "4.0"]]
+                self.assertEqual(audit_module.audit({"rows": good_rows}), ("OK", "", ""))
+
+    def test_scientific_repr_finite_float_scalars_and_non_finite_values(self):
+        small_rows = [["item", "amount"], ["A", 0.00001], ["B", 0.00002], ["total", 0.00003]]
+        self.assertEqual(
+            audit_module.audit({"rows": small_rows, "expected": {"totals": {"col:1": 0.00003}}}),
+            ("OK", "", ""),
+        )
+        neg_rows = [["item", "amount"], ["A", -0.00001], ["B", 0.00003], ["total", "0.00002"]]
+        self.assertEqual(audit_module.audit({"rows": neg_rows}), ("OK", "", ""))
+        # Non-finite floats/Decimals and scientific-notation strings remain rejected
+        for bad_ref in (float("nan"), float("inf"), float("-inf"),
+                        audit_module.Decimal("NaN"), audit_module.Decimal("Infinity"), "1e-05"):
+            with self.subTest(bad_ref=bad_ref):
+                status, reason, _ = audit_module.audit({"rows": self.rows, "expected": {"totals": {"col:1": bad_ref}}})
+                self.assertEqual((status, reason), ("NEEDS_HUMAN", "bad_expectation"))
+        sci_str_rows = [["item", "amount"], ["A", "1e-05"], ["B", "0.00002"], ["total", "0.00003"]]
+        self.assertEqual(audit_module.audit({"rows": sci_str_rows})[:2], ("RETRY", "bad_number"))
+
 
 if __name__ == "__main__":
     unittest.main()

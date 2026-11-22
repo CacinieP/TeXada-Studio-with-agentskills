@@ -9,8 +9,9 @@ Studio 的编辑器是本地 Web UI：Python/FastAPI 提供服务，浏览器中
 | --- | --- | --- |
 | 操作 Studio 编辑器 | [texada-studio](../skills/texada-studio/SKILL.md) | 打开与保存、检查、候选审阅、OCR 导入、版本冲突和 PDF 导出 |
 | 检查或修复公式语法 | [doc-formula-verify](../skills/doc-formula-verify/SKILL.md) | 公式文本、严格解析、有限候选与人工语义核对 |
-| 检查简单表格合计 | [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI 网格约束；Studio 对受支持 `tabular` 的确定性重算 |
-| 选择文档输入路线 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | Studio 图片/PDF 转写候选，或 CLI 已有 `layout.json`；两种输出不能直接互换 |
+| 检查或修复简单表格合计 | [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI 网格约束与受限末行合计修复候选；Studio 对受支持 `tabular` 的确定性重算 |
+| 单页图片逐行 OCR 与转树 | [doc-ocr-extract](../skills/doc-ocr-extract/SKILL.md) | 本机视觉模型候选文本行、显式逐行审阅及 `ocr_to_layout.py` 哈希绑定转换 |
+| 选择文档输入路线 | [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | Studio 图片/PDF 转写候选、`doc-ocr-extract` 审阅转 `layout.json` 或已有 `layout.json` |
 | 交付检查证据 | [doc-report](../skills/doc-report/SKILL.md) | 本轮事件、候选与拒绝原因、复用来源及未验证项 |
 | 直接清洗磁盘源码 | [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 保留内容含义的 TeX/Markdown 清洗、编译与有来源的 OCR 校订 |
 
@@ -22,21 +23,22 @@ Studio 的编辑器是本地 Web UI：Python/FastAPI 提供服务，浏览器中
 保留其引用的仓库相对路径，或让宿主直接读取完整 checkout。`texada-studio` 的 API 参考按需读取，
 普通编辑不需要预先加载全部参考文件。
 
-## Studio 运行时怎样使用 Skill
+## Studio 与 CLI 运行时怎样使用 Skill
 
 固定公式修复宿主在 `skill_mode=on` 时加载 `doc-formula-verify/SKILL.md`，
-校验白名单和路径，记录正文与请求哈希；`off` 用于保持其他参数相同的对照。
-表格候选由确定性规则生成。
+CLI 表格修复（`vlm.repair_table`）在 `skill_mode=on` 时加载 `doc-table-audit/SKILL.md`，
+各自校验白名单和路径，记录正文与请求哈希；`off` 用于保持其他参数相同的对照。
+CLI 模型表格候选须同时通过 `assess_table_candidate` 来源范围守卫与 `audit_table.py` 回判；Studio 表格候选仍由确定性规则生成（无模型请求）。
 
 公式修复也优先使用本地确定性语法规则。模型候选须同时通过语法与来源修改范围检查；
 重试反馈保留原公式、上一候选和拒绝类别。当前保真范围及对照结果见[公式修复质量记录](formula-repair-quality.md)。
 
 独立的“自动选择检查 Skill”实验默认关闭。开启后，宿主先提供公式/表格两种 capability 元数据，
 验证适用性、版本和当前 revision，再加载正文；模型选择不赋予任意脚本执行能力。
-新加入的 `texada-studio` 是外部 Agent 的操作说明，未加入此运行时工具白名单。
+`texada-studio` 与 `doc-ocr-extract` 分别是外部 Agent 操作说明和独立命令行提取工作流，未加入此运行时工具白名单。
 `doc-layout-parse` 和 `doc-report` 也分别是输入准备与证据交付约定，不会因此被自动注入 OCR 或报告请求。
 
-两份运行时 Skill 保留与 `capability.json` 一致的顶层 `version: 1.0.0`。
+两份运行时 Skill 保留与各自 `capability.json` 一致的顶层 `version`（`doc-formula-verify` 为 `1.1.1`，`doc-table-audit` 为 `1.0.0`）。
 本次修订更正流程说明，没有改变 capability schema；正文 SHA256 会随修改变化，旧执行上下文不能据此冒充新运行。
 研究比较须保存实际正文、模型、输入和请求记录，不能从文字修订直接推断准确率提升。
 
