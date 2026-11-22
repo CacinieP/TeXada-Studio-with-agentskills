@@ -35,7 +35,7 @@
 <dialog id="importDialog"><div class="dialog-heading"><h2>图片 / PDF 识别</h2><button id="btnImportClose" class="icon-button" aria-label="关闭识别面板" title="关闭识别面板"></button></div><p class="hint">打开 LaTeX，或从图片和 PDF 生成可编辑候选。</p>
  <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖入图片和PDF"><div class="drop-symbol">▧</div><div id="ocrFileLabel">拖入 PDF / 图片，或点击选择</div></div><input id="ocrInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
  <div class="row"><label for="ocrStart" class="hint">起始页</label><input id="ocrStart" type="number" min="1" step="1" value="1" class="light-button" style="width:64px" aria-label="起始页(PDF)"><label for="ocrPages" class="hint">最多页数</label><select id="ocrPages" class="light-button" aria-label="最多识别页数"><option value="1">1 页</option><option value="3">3 页</option><option value="5">5 页</option></select><button class="light-button" id="btnOcr" disabled>开始识别</button></div><p class="local-note" id="ocrHint">仅向配置的本地模型发送。识别结果经你确认后新建文档。</p></dialog>
-<dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="minicpm-v4.7-35b-a3b-q4"></div><div class="field"><label for="btnInstallTools">本地工具</label><button class="light-button" id="btnInstallTools">下载 Tectonic 0.17.0（官方 Release）</button><button class="light-button" id="btnInstallPoppler" style="margin-left:6px">安装 Poppler（brew）</button><p class="hint" id="installToolsHint">仅在点击时执行：Tectonic 从官方 Release 下载并校验 SHA256；Poppler 经 Homebrew 安装（GPL-2+，进程调用）。Linux 请用系统包管理器。</p></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
+<dialog id="settingsDialog"><h2>本地模型</h2><p class="hint">连接本机运行的 MiniCPM。文档不发送到云端。</p><div class="field" id="managedModelField"><label for="managedModel">Studio 管理的模型</label><select id="managedModel" aria-describedby="managedModelHint"><option value="1b">MiniCPM-V 4.7 1B · Q4_K_M</option><option value="35b">MiniCPM-V 4.7 35B-A3B · Q4_K_M</option></select><p class="hint" id="managedModelHint" role="status">正在检查本地权重…</p><progress id="managedModelProgress" aria-label="模型下载进度" hidden></progress><div class="actions"><button class="light-button" id="btnDownloadModel" disabled>下载模型</button><button class="light-button" id="btnStartModel" disabled>启动并使用</button><button class="light-button" id="btnStopModel" disabled>停止</button></div></div><div class="field"><label for="modelBaseUrl">服务地址</label><input id="modelBaseUrl" type="url" placeholder="http://127.0.0.1:8080/v1"></div><div class="field"><label for="modelName">模型名称</label><input id="modelName" placeholder="minicpm-v4.7-35b-a3b-q4"></div><div class="field"><label for="btnInstallTools">本地工具</label><button class="light-button" id="btnInstallTools">下载 Tectonic 0.17.0（官方 Release）</button><button class="light-button" id="btnInstallPoppler" style="margin-left:6px">安装 Poppler（brew）</button><p class="hint" id="installToolsHint">仅在点击时执行：Tectonic 从官方 Release 下载并校验 SHA256；Poppler 经 Homebrew 安装（GPL-2+，进程调用）。Linux 请用系统包管理器。</p></div><p class="hint" id="configStatus"></p><div class="actions"><button class="light-button" id="btnSettingsClose">取消</button><button class="light-button" id="btnTestModel">检查连接</button><button class="act star" id="btnSettingsSave">保存设置</button></div></dialog>
 <dialog id="ocrDialog"><h2>审阅识别结果</h2><p class="hint">对照原件检查公式和正文。识别结果不会自动覆盖现有文档。</p><div class="field"><label for="ocrName">新文档名称</label><input id="ocrName" value="识别文档.tex"></div><div class="field"><label for="ocrCandidate">LaTeX 候选</label><textarea id="ocrCandidate"></textarea></div><div class="field" id="ocrPageSplitField" hidden><label>分页切割</label><div id="ocrPageList"></div><p class="hint">「新建文档」保存文本框内容。编辑文本框之前，勾选页会自动重组候选。「按页拆分」使用各勾选页的原始识别结果。</p></div><div class="actions"><button class="light-button" id="btnOcrMore" hidden>继续识别后续页</button></div><div class="actions"><button class="light-button" id="btnOcrCancel">取消</button><button class="light-button" id="btnOcrSplit" hidden>按页拆分为多文档</button><button class="act star" id="btnOcrCreate">新建文档</button></div></dialog>
 <dialog id="historyDialog"><h2>运行记录</h2><div id="historyJobs"></div><div class="actions"><button class="light-button" id="btnHistoryClose">关闭</button></div></dialog>
 <dialog id="editorSettingsDialog"><div class="dialog-heading"><h2>编辑器设置</h2><button class="light-button icon-only" id="btnEditorSettingsClose" aria-label="关闭编辑器设置" title="关闭"></button></div><p class="hint">只调整本机编辑体验，修改立即生效。</p><div class="preference-row"><label for="prefFontSize">字体大小</label><div class="row"><button class="light-button icon-only" id="btnZoomOut" aria-label="缩小字号" title="缩小字号">A−</button><input id="prefFontSize" type="number" min="10" max="28" step="1" value="15" aria-label="编辑器字号"><span class="hint">px</span><button class="light-button icon-only" id="btnZoomIn" aria-label="增大字号" title="增大字号">A+</button></div></div><label class="preference-row" for="prefWordWrap"><span>自动换行<small>长行在编辑区域内折行，不改变源文件。</small></span><input id="prefWordWrap" type="checkbox" checked></label><label class="preference-row" for="prefMinimap"><span>代码小地图<small>在右侧展示全文缩略导航。</small></span><input id="prefMinimap" type="checkbox"></label><div class="actions"><button class="light-button" id="btnEditorReset">恢复默认</button><button class="act star" id="btnEditorDone">完成</button></div></dialog>
@@ -859,6 +859,7 @@ function sameModelConfiguration(a,b) {
 }
 function displayConfig(config, preserveDraft=false) {
   studioConfig=config;
+  $("managedModelField").hidden = config.local_mode === false;
   if (!preserveDraft) {
     $("modelBaseUrl").value=config.base_url || "http://127.0.0.1:8080/v1";
     $("modelName").value=config.model || "minicpm-v4.7-35b-a3b-q4";
@@ -881,6 +882,7 @@ function openModelSettings() {
   if (studioConfig) displayConfig(studioConfig);
   openDialog("settingsDialog");
   loadConfig().catch(warn);
+  refreshManagedModels().catch(showManagedModelError);
 }
 for (const id of ["modelBaseUrl","modelName"]) $(id).addEventListener("input",()=>{modelDraftEdited=true;});
 $("btnSettings").onclick = openModelSettings;
@@ -911,6 +913,77 @@ $("btnTestModel").onclick = async () => {
   } catch(error) { if(sameModelConfiguration(draft,studioConfig))displayModelConnection(false);warn(error); }
   finally { $("btnTestModel").disabled=false; }
 };
+let managedModelStatus = null, managedModelTimer = null, managedModelRequest = 0;
+let managedModelSubmitting = false;
+function renderManagedModels() {
+  if (!managedModelStatus) return;
+  const {profiles, active, job, runtime_available: runtime} = managedModelStatus;
+  const profile = profiles.find(item => item.id === $("managedModel").value) || profiles[0];
+  const running = job?.state === "running";
+  const disabled = running || managedModelSubmitting;
+  $("managedModel").disabled = disabled;
+  $("btnDownloadModel").disabled = disabled;
+  $("btnDownloadModel").textContent = profile.downloaded ? "校验模型" : "下载模型";
+  $("btnStartModel").disabled = disabled || !runtime || !profile.downloaded || active?.model === profile.model;
+  $("btnStopModel").disabled = disabled || !active;
+  const progress = $("managedModelProgress");
+  progress.hidden = !(running && job.action === "download");
+  progress.max = job?.total || 1;
+  progress.value = job?.bytes || 0;
+  const hints = [profile.downloaded ? "权重已就位" : "约 " + (profile.size / 1e9).toFixed(1) + " GB（含视觉投影）"];
+  if (active) hints.push(active.model + " 正在运行");
+  if (!runtime) hints.push("未找到 llama-server。源码版可先安装 llama.cpp。");
+  if (running) hints.push(job.action === "download" ? "正在下载并校验权重…" : "正在校验并加载模型…");
+  if (job?.profile === profile.id && job.state === "failed") hints.push(job.message);
+  if (job?.profile === profile.id && job.state === "done" && job.action === "download") hints.push("SHA-256 校验通过，可以启动模型。");
+  $("managedModelHint").textContent = hints.join(" · ");
+}
+function showManagedModelError(error) {
+  $("managedModelHint").textContent = error.message;
+}
+function scheduleManagedModelRefresh() {
+  clearTimeout(managedModelTimer);
+  if (managedModelStatus?.job?.state === "running" && ($("settingsDialog").open || managedModelStatus.job.action === "start")) {
+    managedModelTimer = setTimeout(() => refreshManagedModels().catch(showManagedModelError), 700);
+  }
+}
+async function refreshManagedModels() {
+  if (managedModelSubmitting || studioConfig?.local_mode === false) return;
+  const request = ++managedModelRequest;
+  const previous = managedModelStatus?.job;
+  const status = await j("/api/studio/models?token=" + encodeURIComponent(T));
+  if (request !== managedModelRequest || !Array.isArray(status.profiles) || !status.profiles.length) return;
+  managedModelStatus = status;
+  renderManagedModels();
+  scheduleManagedModelRefresh();
+  if (previous?.action === "start" && previous.state === "running" && status.job?.state !== "running") {
+    await loadConfig(true);
+  }
+}
+async function managedModelAction(action) {
+  if (managedModelSubmitting) return;
+  managedModelSubmitting = true;
+  ++managedModelRequest;
+  let failure;
+  renderManagedModels();
+  try {
+    managedModelStatus = await post("models/" + action, {profile:$("managedModel").value});
+    if (action === "stop" || (action === "start" && managedModelStatus.job?.state !== "running")) {
+      await loadConfig(true);
+    }
+    scheduleManagedModelRefresh();
+  } catch (error) {
+    failure = error;
+  } finally {
+    managedModelSubmitting = false;
+    renderManagedModels();
+    if (failure) showManagedModelError(failure);
+  }
+}
+$("managedModel").addEventListener("change",renderManagedModels);
+$("btnDownloadModel").onclick = () => managedModelAction("download");
+$("btnStartModel").onclick = () => managedModelAction("start");
+$("btnStopModel").onclick = () => managedModelAction("stop");
 async function installLocalTools(tool="tectonic"){
   const button=$(tool==="poppler"?"btnInstallPoppler":"btnInstallTools"),hint=$("installToolsHint");
   button.disabled=true;

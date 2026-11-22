@@ -329,6 +329,108 @@ class AppTest(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer " + key)
         self.assertEqual(json.loads(request.data)["chat_template_kwargs"], {"enable_thinking": False})
 
+    def test_dynamic_studio_state_isolates_managed_models_and_preserves_explicit_override(self):
+        getter = getattr(studio, "_managed_models", None)
+        self.assertTrue(callable(getter), "_managed_models() helper must exist")
+        state_a = self.base / "isolated-a"
+        state_b = self.base / "isolated-b"
+        with patch.object(studio, "STUDIO_STATE", str(state_a)):
+            manager_a = getter()
+            self.assertEqual(manager_a.state, state_a)
+            self.assertIsNot(manager_a, studio.managed_models)
+        with patch.object(studio, "STUDIO_STATE", str(state_b)):
+            manager_b = getter()
+            self.assertEqual(manager_b.state, state_b)
+            self.assertIsNot(manager_b, manager_a)
+        explicit = studio.ManagedModels(self.base / "explicit-override")
+        with patch.object(studio, "managed_models", explicit), \
+                patch.object(studio, "STUDIO_STATE", str(state_a)):
+            self.assertIs(getter(), explicit)
+
+    def test_settings_post_is_idempotent_under_normalization_when_managed_model_active(self):
+        active_conn = {"base_url": "http://127.0.0.1:43210/v1", "model": "minicpm-v4.7-1b-q4_k_m"}
+        fake_proc = SimpleNamespace(poll=lambda: None, terminate=lambda: None, wait=lambda timeout=None: 0)
+        manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+        manager.active = active_conn.copy()
+        manager.process = fake_proc
+        stop_calls = []
+        original_stop = manager.stop
+
+        def record_stop():
+            stop_calls.append(True)
+            original_stop()
+
+        manager.stop = record_stop
+        with patch.object(studio, "managed_models", manager):
+            same = self.client.post(
+                "/api/studio/settings",
+                params=self.auth,
+                json={"base_url": "  http://127.0.0.1:43210/  ", "model": " minicpm-v4.7-1b-q4_k_m "},
+            )
+            self.assertEqual(same.status_code, 200, same.text)
+            payload = same.json()
+            self.assertEqual(payload["base_url"], active_conn["base_url"])
+            self.assertEqual(payload["model"], active_conn["model"])
+            self.assertEqual(set(payload["tools"]), {"tectonic", "pdftoppm", "pdfinfo"})
+            self.assertFalse((Path(studio.STUDIO_STATE) / "local-runtime.json").exists())
+            self.assertEqual(stop_calls, [])
+            self.assertEqual(manager.connection(), active_conn)
+
+            changed = self.client.post(
+                "/api/studio/settings",
+                params=self.auth,
+                json={"base_url": "http://127.0.0.1:18147/v1", "model": "custom-local-model"},
+            )
+            self.assertEqual(changed.status_code, 200, changed.text)
+            self.assertTrue((Path(studio.STUDIO_STATE) / "local-runtime.json").is_file())
+            self.assertEqual(len(stop_calls), 1)
+            self.assertIsNone(manager.connection())
+
+    def test_nodeinfo_reports_active_managed_model_consistently_across_all_model_fields(self):
+        active_conn = {"base_url": "http://127.0.0.1:43210/v1", "model": "minicpm-v4.7-1b-q4_k_m"}
+        manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+        manager.active = active_conn.copy()
+        manager.process = SimpleNamespace(poll=lambda: None)
+        for local_flag in ("1", "0"):
+            with self.subTest(local_mode=local_flag), \
+                    patch.dict(os.environ, {"TEXADA_LOCAL_MODE": local_flag}), \
+                    patch.object(studio, "managed_models", manager):
+                response = self.client.get("/api/nodeinfo", params=self.auth)
+            self.assertEqual(response.status_code, 200)
+            info = response.json()
+            self.assertEqual(info["configured_model"], active_conn["model"])
+            self.assertEqual(info["model"], active_conn["model"])
+            self.assertEqual(info["repair_model"], active_conn["model"])
+            self.assertEqual(info["ocr_model"], active_conn["model"])
+
+    def test_studio_import_route_uses_active_managed_model_endpoint(self):
+        from test_local_runtime import FakeModel, PNG
+        import base64
+
+        with FakeModel() as managed_server:
+            manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+            manager.active = {"base_url": managed_server.base, "model": "minicpm-v4.7-1b-q4_k_m"}
+            manager.process = SimpleNamespace(poll=lambda: None)
+            Path(studio.STUDIO_STATE).mkdir(parents=True, exist_ok=True)
+            (Path(studio.STUDIO_STATE) / "local-runtime.json").write_text(
+                '{"base_url":"http://127.0.0.1:1/v1","model":"offline-saved-model"}', encoding="utf-8"
+            )
+            with patch.object(studio, "managed_models", manager):
+                response = self.client.post(
+                    "/api/studio/import",
+                    params=self.auth,
+                    json={
+                        "name": "scan.png",
+                        "mime_type": "image/png",
+                        "data_base64": base64.b64encode(PNG).decode("ascii"),
+                    },
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()
+            self.assertEqual(payload["model"], "minicpm-v4.7-1b-q4_k_m")
+            self.assertEqual(len(managed_server.requests), 1)
+            self.assertEqual(managed_server.requests[0]["path"], "/v1/chat/completions")
+
     def test_studio_config_succeeds_when_local_mode_disabled_with_https_endpoint(self):
         with patch.multiple(studio, VLM_BASE_URL="https://api.modelbest.cn/v1", REPAIR_MODEL="MiniCPM-V-4.7-1B"), \
                 patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "0", "VLM_BASE_URL": "https://api.modelbest.cn/v1"}):
@@ -680,6 +782,94 @@ class StudioTableAuditTest(unittest.TestCase):
         lines.extend(label + ' & ' + value + r' \\' for label, value in rows)
         lines.extend(['合计 & ' + total + r' \\', r'\end{tabular}'])
         return newline.join(lines) + newline
+
+    def test_model_deferral_does_not_gate_deterministic_formula_and_table_repairs(self):
+        formula = r"$\left(\frac{x+1}{x-1}$"
+        content = formula + "\n" + self.table([("A", "20"), ("B", "31")], "50")
+        summary = {"executed": 0, "rejected": 1, "nodes": [{"state": "human"}]}
+        provider = SimpleNamespace(repair_formula=lambda _: self.fail("Fallback must not call a model"))
+        for use_model_planner, skill_selection in ((True, False), (False, True), (True, True)):
+            with self.subTest(planner=use_model_planner, selection=skill_selection), \
+                    patch.object(studio, "ConstrainedPlanner") as planner, \
+                    patch.object(studio, "_verify_formula",
+                                 side_effect=lambda latex: {"status": "OK" if r"\right)" in latex else "RETRY"}):
+                planner.return_value.run.return_value = ([], summary)
+                planner.return_value.remaining_seconds.return_value = 30
+                fixed, edits, _ = studio._apply_planned_fixes(
+                    content, [], provider=provider, emit=lambda *args, **kwargs: None,
+                    use_model_planner=use_model_planner, skill_selection=skill_selection)
+                expected = content.replace(formula, formula[:-1] + r"\right)$").replace("合计 & 50", "合计 & 51")
+                self.assertEqual(fixed, expected)
+                self.assertEqual([edit["skill"] for edit in edits], ["doc-formula-verify", "doc-table-audit"])
+
+    def test_planned_fallback_aligns_shifted_formula_ordinals_and_skips_attempted_nodes(self):
+        lines = [
+            "$x+$",
+            r"$\left(a+b\right)$",
+            r"$\left(\frac{u+1}{u-1}$",
+            r"$\left(c+d$",
+        ]
+        content = "\n".join(lines) + "\n"
+        nodes = studio.extract_math(content)
+        multiline_edit = {
+            "line": 1,
+            "before": "x+",
+            "after": "x\n+1",
+            "skill": "doc-formula-verify",
+            "start": nodes[0]["body_start"],
+            "end": nodes[0]["body_end"],
+        }
+        summary = {
+            "executed": 3,
+            "rejected": 0,
+            "nodes": [
+                {"id": "f-001-1", "kind": "formula", "line": 1, "state": "candidate", "attempts": 1},
+                {"id": "f-002-2", "kind": "formula", "line": 2, "state": "ok", "attempts": 0},
+                {"id": "f-003-3", "kind": "formula", "line": 3, "state": "human", "attempts": 0,
+                 "human_reason": "model_deferred"},
+                {"id": "f-004-4", "kind": "formula", "line": 4, "state": "needs_human", "attempts": 1,
+                 "human_reason": "repair_rejected"},
+            ],
+        }
+        verified = []
+
+        def fake_verify(latex):
+            verified.append(latex)
+            if latex == r"\left(\frac{u+1}{u-1}\right)":
+                return {"status": "OK"}
+            return {"status": "RETRY"}
+
+        provider = SimpleNamespace(repair_formula=lambda *a, **k: self.fail("Fallback must not call model"))
+        with patch.object(studio, "ConstrainedPlanner") as planner_cls, \
+                patch.object(studio, "_verify_formula", side_effect=fake_verify):
+            planner_cls.return_value.run.return_value = ([multiline_edit], summary)
+            planner_cls.return_value.remaining_seconds.return_value = 30
+            fixed, edits, out_summary = studio._apply_planned_fixes(
+                content, [], provider=provider, emit=lambda *a, **k: None
+            )
+
+        self.assertIn(r"$\left(\frac{u+1}{u-1}\right)$", fixed)
+        self.assertEqual(
+            verified,
+            [r"\left(\frac{u+1}{u-1}", r"\left(\frac{u+1}{u-1}\right)"],
+            "Fallback must skip already-ok and already-attempted formulas",
+        )
+        self.assertEqual(
+            out_summary.get("deterministic_resolved"),
+            ["f-003-3"],
+            "deterministic_resolved must store only the canonical pre-edit formula ID",
+        )
+        remaining = studio._planned_problems(out_summary, fixed)
+        self.assertEqual(len(remaining), 1, remaining)
+        self.assertEqual(remaining[0]["id"], "f-004-4")
+        self.assertEqual(remaining[0]["line"], 5, "Shifted post-edit line number must be reported")
+
+        synthetic = studio._planned_problems({"nodes": [
+            {"state": "human"},
+            {"id": "table-document", "kind": "table", "line": 9, "state": "human"},
+        ]})
+        self.assertEqual(len(synthetic), 2)
+        self.assertEqual(synthetic[1]["type"], "table_total")
 
     def assert_manual_unchanged(self, content):
         problems = studio._table_problems(content)

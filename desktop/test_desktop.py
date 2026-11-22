@@ -298,6 +298,47 @@ class TerminateFallbackTests(unittest.TestCase):
             signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
         self.assertEqual(calls, ["closer"], "窗口路径不强制退出，主循环走正常收尾")
 
+    def test_close_shown_windows_skips_unshown_window_and_falls_back_to_shutdown(self):
+        import types
+
+        unshown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=threading.Event()),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned: list[str] = []
+        exits: list[int] = []
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([unshown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        unshown.destroy.assert_not_called()
+        self.assertEqual(cleaned, ["shutdown"])
+        self.assertEqual(exits, [0])
+
+        shown_event = threading.Event()
+        shown_event.set()
+        shown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=shown_event),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned.clear()
+        exits.clear()
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([shown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        shown.destroy.assert_called_once()
+        self.assertEqual(cleaned, [])
+        self.assertEqual(exits, [])
+
 
 class NativeTerminateIntegrationTests(unittest.TestCase):
     """原生集成验证:真实 Cocoa 事件循环中 SIGTERM 必须有界退出(#50)。
@@ -338,11 +379,15 @@ class NativeTerminateIntegrationTests(unittest.TestCase):
             "    'model': '', 'owned_model_pid': None,\n"
             "    'created_at': time.time(), 'running': True}))\n"
             "import webview\n"
-            "orig = webview.start\n"
-            "def start(*args, **kwargs):\n"
-            "    print('IN_RUNLOOP', flush=True)\n"
-            "    return orig(*args, **kwargs)\n"
-            "webview.start = start\n"
+            "orig_create = webview.create_window\n"
+            "def create_window(*args, **kwargs):\n"
+            "    win = orig_create(*args, **kwargs)\n"
+            "    def on_shown():\n"
+            "        from PyObjCTools import AppHelper\n"
+            "        AppHelper.callAfter(lambda: print('IN_RUNLOOP', flush=True))\n"
+            "    win.events.shown += on_shown\n"
+            "    return win\n"
+            "webview.create_window = create_window\n"
             "spec = importlib.util.spec_from_file_location(\n"
             "    'texada_desktop_app', os.path.join(repo, 'desktop', 'app.py'))\n"
             "mod = importlib.util.module_from_spec(spec)\n"
@@ -1084,6 +1129,103 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                     str(staging / "bin" / "pdfinfo"): str(real_pdfinfo.resolve()),
                     str(staging / "bin" / "pdftoppm"): str(real_cpp_lib.resolve()),
                 },
+            )
+
+    def test_stage_resources_merges_poppler_and_llama_server_into_single_bundle_dylibs_pass(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brew_bin = root / "opt" / "homebrew" / "bin"
+            opt_poppler = root / "opt" / "homebrew" / "opt" / "poppler"
+            cellar_poppler = root / "opt" / "homebrew" / "Cellar" / "poppler" / "25.0"
+            cellar_llama = root / "opt" / "homebrew" / "Cellar" / "llama.cpp" / "12000"
+            (cellar_poppler / "bin").mkdir(parents=True)
+            (cellar_poppler / "lib").mkdir(parents=True)
+            (cellar_llama / "libexec" / "bin").mkdir(parents=True)
+            brew_bin.mkdir(parents=True)
+            opt_poppler.parent.mkdir(parents=True, exist_ok=True)
+            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+
+            real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
+            real_pdfinfo.write_bytes(b"pdfinfo")
+            symlink_pdfinfo = brew_bin / "pdfinfo"
+            symlink_pdfinfo.symlink_to(os.path.relpath(real_pdfinfo, brew_bin))
+
+            real_cpp_lib = cellar_poppler / "lib" / "libpoppler-cpp.0.dylib"
+            real_cpp_lib.write_bytes(b"dylib")
+            (cellar_poppler / "lib" / "libpoppler-cpp.dylib").symlink_to("libpoppler-cpp.0.dylib")
+
+            real_llama = cellar_llama / "libexec" / "bin" / "llama-server"
+            real_llama.write_bytes(b"llama")
+            symlink_llama = brew_bin / "llama-server"
+            symlink_llama.symlink_to(os.path.relpath(real_llama, brew_bin))
+            (cellar_llama / "LICENSE").write_text("MIT License - llama.cpp\n", encoding="utf-8")
+
+            fake_tectonic = root / "tectonic"
+            fake_tectonic.write_bytes(b"tectonic")
+            fake_tex_cache = root / "tex-cache"
+            fake_tex_cache.mkdir()
+            (fake_tex_cache / "sample.fmt").write_bytes(b"fmt")
+
+            staging = root / "staging"
+            staging.mkdir()
+            bundle_calls: list[dict[str, str]] = []
+            smoke_cmds: list[tuple[str, str]] = []
+
+            def fake_which(name):
+                if name == "pdfinfo":
+                    return str(symlink_pdfinfo)
+                if name == "llama-server":
+                    return str(symlink_llama)
+                return None
+
+            def fake_run(argv, **kwargs):
+                if argv[:3] == ["brew", "--prefix", "poppler"]:
+                    return subprocess.CompletedProcess(argv, 0, str(opt_poppler) + "\n", "")
+                if argv[0] == "xcrun":
+                    out_idx = argv.index("-o") + 1
+                    Path(argv[out_idx]).write_bytes(b"renderer")
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                if len(argv) == 2 and Path(argv[0]).parent == staging / "bin":
+                    smoke_cmds.append((Path(argv[0]).name, argv[1]))
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            def fake_bundle_dylibs(bin_dir, lib_dir, originals=None):
+                bundle_calls.append(dict(originals or {}))
+                return 3
+
+            with unittest.mock.patch.object(build_bundle, "TECTONIC", fake_tectonic), \
+                 unittest.mock.patch.object(build_bundle, "TEX_CACHE", fake_tex_cache), \
+                 unittest.mock.patch.object(build_bundle, "copy_tree",
+                                            side_effect=lambda src, dst, ignore=None: dst.mkdir(parents=True, exist_ok=True)), \
+                 unittest.mock.patch.object(build_bundle.shutil, "which", side_effect=fake_which), \
+                 unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run), \
+                 unittest.mock.patch.object(build_bundle, "install_poppler_data"), \
+                 unittest.mock.patch.object(build_bundle, "bundle_dylibs", side_effect=fake_bundle_dylibs):
+                build_bundle.stage_resources(staging, skip_poppler=False, with_llama_server=True)
+
+            self.assertEqual(len(bundle_calls), 1, "bundle_dylibs must run in a single combined pass")
+            self.assertEqual(
+                bundle_calls[0],
+                {
+                    str(staging / "bin" / "pdfinfo"): str(real_pdfinfo.resolve()),
+                    str(staging / "bin" / "pdftoppm"): str(real_cpp_lib.resolve()),
+                    str(staging / "bin" / "llama-server"): str(real_llama.resolve()),
+                },
+            )
+            self.assertEqual(
+                (staging / "licenses" / "llama.cpp-LICENSE.txt").read_text(encoding="utf-8"),
+                "MIT License - llama.cpp\n",
+            )
+            self.assertEqual(
+                smoke_cmds,
+                [
+                    ("tectonic", "--version"),
+                    ("pdfinfo", "-v"),
+                    ("pdftoppm", "-v"),
+                    ("llama-server", "--version"),
+                ],
             )
 
 

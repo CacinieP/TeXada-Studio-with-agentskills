@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Download and launch Studio-managed MiniCPM-V 4.7 1B or 35B-A3B models in Local Models. Both use the pinned OpenBMB Q4_K_M weights and matching F16 vision projector. Keep the existing loopback endpoint available when the managed model stops.
+
 ## 0.1.0
 
 ### Fixed

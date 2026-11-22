@@ -242,7 +242,7 @@ def install_poppler_data(staging: Path) -> None:
             shutil.copy2(license_file, notices)
 
 
-def bundle_poppler(staging: Path) -> int:
+def stage_poppler(staging: Path) -> dict[str, str]:
     pdfinfo = shutil.which("pdfinfo")
     require(pdfinfo is not None, "未找到 pdfinfo;先 brew install poppler")
     prefix = Path(run(["brew", "--prefix", "poppler"], capture_output=True, text=True).stdout.strip())
@@ -256,17 +256,17 @@ def bundle_poppler(staging: Path) -> int:
          str(DESKTOP / "poppler_render.cpp"), str(poppler_cpp_lib),
          "-o", str(renderer)])
     install_poppler_data(staging)
-    return bundle_dylibs(
-        staging / "bin",
-        staging / "tools-lib",
-        {
-            str(target): str(Path(pdfinfo).resolve()),
-            str(renderer): str(poppler_cpp_lib.resolve()),
-        },
-    )
+    return {
+        str(target): str(Path(pdfinfo).resolve()),
+        str(renderer): str(poppler_cpp_lib.resolve()),
+    }
 
 
-def stage_resources(staging: Path, skip_poppler: bool) -> dict:
+def bundle_poppler(staging: Path) -> int:
+    return bundle_dylibs(staging / "bin", staging / "tools-lib", stage_poppler(staging))
+
+
+def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool = False) -> dict:
     """把运行所需源码与数据放进 staging(其后整体合并进 .app/Contents/Resources)。"""
     sizes = {}
     copy_tree(REPO_ROOT / "webui", staging / "webui")
@@ -289,11 +289,31 @@ def stage_resources(staging: Path, skip_poppler: bool) -> dict:
     shutil.copy2(TECTONIC, staging / "bin" / "tectonic")
     os.chmod(staging / "bin" / "tectonic", 0o755)
 
+    originals: dict[str, str] = {}
+    smoke: list[tuple[str, str]] = [("tectonic", "--version")]
     if not skip_poppler:
-        count = bundle_poppler(staging)
+        originals.update(stage_poppler(staging))
+        smoke.extend((("pdfinfo", "-v"), ("pdftoppm", "-v")))
+    if with_llama_server:
+        tool = shutil.which("llama-server")
+        require(tool is not None, "未找到 llama-server；请安装所需的 Homebrew 构建依赖")
+        destination = staging / "bin" / "llama-server"
+        shutil.copy2(tool, destination)
+        os.chmod(destination, 0o755)
+        resolved = str(Path(tool).resolve())
+        originals[str(destination)] = resolved
+        license_file = next(
+            (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
+            None,
+        )
+        require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
+        shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
+        smoke.append(("llama-server", "--version"))
+    if originals:
+        count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
-        for name, flag in (("tectonic", "--version"), ("pdfinfo", "-v"), ("pdftoppm", "-v")):
-            run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
+    for name, flag in smoke:
+        run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],
@@ -312,6 +332,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="构建自包含 TeXada Studio.app")
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "dist")
     parser.add_argument("--skip-poppler", action="store_true", help="不捆绑 Poppler(PDF 导入/预览仍需系统安装)")
+    parser.add_argument("--with-llama-server", action="store_true", help="捆绑 Homebrew llama.cpp 运行时")
     args = parser.parse_args(argv)
     args.output = args.output.expanduser().resolve()  # py2app 子进程以 desktop/ 为 cwd,必须绝对路径
     require(sys.platform == "darwin", "自包含包仅支持 macOS")
@@ -338,7 +359,7 @@ def main(argv=None) -> int:
         raise SystemExit("无法生成 Studio 图标：请检查品牌源图、sips 和 iconutil。")
 
     print("② 收集资源(webui/harness/编译器/TeX 缓存/Poppler)…")
-    sizes = stage_resources(staging, args.skip_poppler)
+    sizes = stage_resources(staging, args.skip_poppler, args.with_llama_server)
     for area, size in sizes.items():
         print(f"   {area}: {size / 1_048_576:.1f} MiB")
 

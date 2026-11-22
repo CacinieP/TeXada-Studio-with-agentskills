@@ -49,6 +49,7 @@
 
 | 组件 | 许可证 |
 | --- | --- |
+| llama.cpp（可选，自包含发行包经 Homebrew 构建） | MIT；随包附许可证，作为独立进程调用。模型由用户启动下载 |
 | Monaco 0.52.2(已 vendored) | MIT |
 | 本项目代码/文档/合成样本 | AGPL-3.0-only(见 LICENSE、THIRD_PARTY_NOTICES.md) |
 
@@ -59,6 +60,7 @@
 - Tectonic:https://github.com/tectonic-typesetting/tectonic(tag `tectonic@0.17.0`);
 - TeX 资源:Tectonic 官方 bundle(构建说明见上);
 - Poppler 及依赖:`brew info poppler` 指向的 Homebrew formula 与上游 https://gitlab.freedesktop.org/poppler/poppler;
+- llama.cpp: https://github.com/ggml-org/llama.cpp;
 - Homebrew 构建脚本:https://github.com/Homebrew/homebrew-core(各 formula)。
 
 如需完整对应源码包,按上表来源自行获取,或联系维护者索取构建时所用的确切版本清单。
