@@ -9,3 +9,6 @@ docs/evaluation-results/** -text
 docs/evaluation-results/**/*.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 .github/ export-ignore
 state/ export-ignore
+docs/superpowers export-ignore
+.superpowers export-ignore
+.worktrees export-ignore

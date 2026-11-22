@@ -51,17 +51,28 @@ def copy_tree(source: Path, target: Path, ignore=PY_IGNORE) -> None:
     shutil.copytree(source, target, ignore=ignore, dirs_exist_ok=True)
 
 
+ICONSET_SPECS = (
+    (16, "icon_16x16.png"),
+    (32, "icon_16x16@2x.png"),
+    (32, "icon_32x32.png"),
+    (64, "icon_32x32@2x.png"),
+    (128, "icon_128x128.png"),
+    (256, "icon_128x128@2x.png"),
+    (256, "icon_256x256.png"),
+    (512, "icon_256x256@2x.png"),
+    (512, "icon_512x512.png"),
+    (1024, "icon_512x512@2x.png"),
+)
+
+
 def build_icon(workdir: Path) -> Path | None:
     iconset, icns = workdir / "AppIcon.iconset", workdir / "AppIcon.icns"
     if shutil.which("sips") is None or shutil.which("iconutil") is None or not BRAND_SOURCE.exists():
         return None
     iconset.mkdir(parents=True, exist_ok=True)
-    for points in (16, 32, 128, 256, 512):
-        for scale, suffix in ((1, ""), (2, "@2x")):
-            pixels = str(points * scale)
-            target = iconset / f"icon_{points}x{points}{suffix}.png"
-            run(["sips", "-z", pixels, pixels, str(BRAND_SOURCE), "--out", str(target)],
-                capture_output=True)
+    for size, filename in ICONSET_SPECS:
+        run(["sips", "-z", str(size), str(size), str(BRAND_SOURCE), "--out", str(iconset / filename)],
+            capture_output=True)
     run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], capture_output=True)
     shutil.rmtree(iconset, ignore_errors=True)
     return icns if icns.exists() else None
@@ -116,32 +127,43 @@ def _load_commands(binary: Path):
     return dependencies, rpaths
 
 
+def _resolve_dep(
+    entry: str,
+    owner_source_dir: Path,
+    rpaths: list | None = None,
+    bin_dir: Path | None = None,
+) -> str | None:
+    owner_dir = Path(owner_source_dir)
+    if entry.startswith("@rpath/"):
+        rel = entry.removeprefix("@rpath/")
+        for rpath in rpaths or ():
+            expanded = rpath.replace("@loader_path", str(owner_dir))
+            if bin_dir is not None:
+                expanded = expanded.replace("@executable_path", str(bin_dir))
+            candidate = (Path(expanded) / rel).resolve()
+            if candidate.exists():
+                return str(candidate)
+        return None
+    if entry.startswith("@loader_path/"):
+        candidate = (owner_dir / entry.removeprefix("@loader_path/")).resolve()
+        return str(candidate) if candidate.exists() else None
+    if entry.startswith(("@executable_path", "@loader_path")):
+        return None
+    candidate = Path(entry)
+    return str(candidate.resolve()) if candidate.exists() else None
+
+
 def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -> int:
     """递归收集非系统动态库到 lib_dir,并把引用重写为 @executable_path/../<lib_dir 名>。
 
     替代 dylibbundler(其对 Homebrew rpath 链会死循环):otool 发现 + install_name_tool 重写。
-    @rpath 按**原始二进制**的 rpath 展开(@executable_path 按捆绑 bin,@loader_path 按原文件目录);
+    @rpath 与 @loader_path 按**原始二进制**目录展开(@executable_path 按捆绑 bin);
     originals 提供 {staging 副本: 原始路径},缺省用副本自身位置。
     """
     lib_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"@executable_path/../{lib_dir.name}/"
     originals = originals or {}
     relocated: dict[str, Path] = {}
-
-    def resolve(entry: str, rpaths: list, loader_dir: Path) -> str | None:
-        if entry.startswith("@rpath/"):
-            for rpath in rpaths:
-                expanded = rpath.replace("@executable_path", str(bin_dir)).replace("@loader_path", str(loader_dir))
-                candidate = Path(expanded) / entry[len("@rpath/"):]
-                if candidate.exists():
-                    return str(candidate)
-            return None
-        if entry.startswith("@loader_path/"):
-            candidate = loader_dir / entry.removeprefix("@loader_path/")
-            return str(candidate) if candidate.is_file() else None
-        if entry.startswith("@executable_path/"):
-            return None  # @executable_path is relative to the root binary.
-        return entry if Path(entry).exists() else None
 
     def is_system(path: str) -> bool:
         return path.startswith(SYSTEM_PREFIXES)
@@ -151,9 +173,10 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
         subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(binary)],
                        check=True, capture_output=True)
 
-    queue = [(item, Path(originals.get(str(item), str(item))).parent) for item in bin_dir.iterdir()
+    queue = [(item, Path(originals.get(str(item), str(item))).resolve().parent) for item in bin_dir.iterdir()
              if item.is_file() and not item.name.endswith((".txt", ".version"))]
     processed: set[str] = set()
+    seen_sources: set[str] = set()
     while queue:
         binary, loader_dir = queue.pop()
         if str(binary) in processed:
@@ -164,9 +187,10 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
         except subprocess.CalledProcessError:
             continue  # 非 Mach-O(脚本等)
         for entry in dependencies:
-            source = resolve(entry, rpaths, loader_dir)
-            if source is None or is_system(source) or source in processed:
+            source = _resolve_dep(entry, loader_dir, rpaths=rpaths, bin_dir=bin_dir)
+            if source is None or is_system(source) or source in seen_sources:
                 continue
+            seen_sources.add(source)
             target = lib_dir / Path(source).name
             if not target.exists():
                 shutil.copy2(source, target)
@@ -174,7 +198,7 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
             relocated[source] = target
             queue.append((target, Path(source).resolve().parent))
         for entry in dependencies:
-            source = resolve(entry, rpaths, loader_dir)
+            source = _resolve_dep(entry, loader_dir, rpaths=rpaths, bin_dir=bin_dir)
             if source is None or is_system(source):
                 continue
             target = relocated.get(source) or lib_dir / Path(source).name
@@ -226,12 +250,20 @@ def bundle_poppler(staging: Path) -> int:
     shutil.copy2(pdfinfo, target)
     target.chmod(0o755)
     renderer = staging / "bin" / "pdftoppm"
+    poppler_cpp_lib = prefix / "lib" / "libpoppler-cpp.dylib"
     run(["xcrun", "clang++", "-std=c++17", "-O2", "-mmacosx-version-min=15.0",
          "-I", str(prefix / "include" / "poppler" / "cpp"),
-         str(DESKTOP / "poppler_render.cpp"), str(prefix / "lib" / "libpoppler-cpp.dylib"),
+         str(DESKTOP / "poppler_render.cpp"), str(poppler_cpp_lib),
          "-o", str(renderer)])
     install_poppler_data(staging)
-    return bundle_dylibs(staging / "bin", staging / "tools-lib", {str(target): pdfinfo})
+    return bundle_dylibs(
+        staging / "bin",
+        staging / "tools-lib",
+        {
+            str(target): str(Path(pdfinfo).resolve()),
+            str(renderer): str(poppler_cpp_lib.resolve()),
+        },
+    )
 
 
 def stage_resources(staging: Path, skip_poppler: bool) -> dict:
@@ -312,7 +344,9 @@ def main(argv=None) -> int:
 
     print("③ py2app 冻结程序部分(首次较慢)…")
     py2app_dist = workdir / "py2app-dist"
+    py2app_build = workdir / "py2app-build"
     run([str(venv_python), str(DESKTOP / "setup_bundle.py"), "py2app",
+         "--bdist-base", str(py2app_build),
          "--dist-dir", str(py2app_dist), "--no-strip"], cwd=str(DESKTOP))
     produced = next(path for path in py2app_dist.iterdir() if path.suffix == ".app")
     app = args.output / "TeXada Studio.app"

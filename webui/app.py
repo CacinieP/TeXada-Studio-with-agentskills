@@ -14,10 +14,11 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -25,7 +26,10 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from document_store import DocumentStore, DocumentError, document_name, document_text, text_hash
-from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, MAX_PDF_PAGES, LocalRuntime, LocalRuntimeError, make_local_provider
+from local_runtime import (
+    DEFAULT_BASE, DEFAULT_MODEL, MAX_FILE_BYTES, MAX_IMAGE_PIXELS, MAX_PDF_PAGES,
+    LocalRuntime, LocalRuntimeError, make_local_provider,
+)
 import tool_fetch
 
 TOKEN = os.environ.get("DEMO_TOKEN", "")
@@ -35,6 +39,22 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(REPO, "state", "demo")
 VLM_MODEL = os.environ.get("VLM_MODEL", DEFAULT_MODEL)
 VLM_BASE_URL = os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE") or DEFAULT_BASE
+_INITIAL_LOCAL_MODE = os.environ.get("TEXADA_LOCAL_MODE", "1") == "1"
+LOCAL_MODE = _INITIAL_LOCAL_MODE
+
+
+def _is_local_mode() -> bool:
+    if LOCAL_MODE != _INITIAL_LOCAL_MODE:
+        return bool(LOCAL_MODE)
+    if "TEXADA_LOCAL_MODE" in os.environ:
+        return os.environ["TEXADA_LOCAL_MODE"] == "1"
+    return bool(LOCAL_MODE)
+
+
+def _effective_port(scheme: str, port: int | None) -> int:
+    if port is not None:
+        return port
+    return 443 if scheme == "https" else 80
 
 
 def _tectonic_command():
@@ -43,6 +63,41 @@ def _tectonic_command():
 
 app = FastAPI(title="TeXada Studio Local")
 _run = {"proc": None, "log": [], "done": True, "code": None, "started": None}
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+@app.middleware("http")
+async def _loopback_csrf_guard(request: Request, call_next):
+    if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
+        sec_fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+        if sec_fetch_site == "cross-site":
+            return JSONResponse({"detail": "cross-site request blocked"}, status_code=403)
+        origin = request.headers.get("origin")
+        if origin is not None:
+            try:
+                parts = urlsplit(origin.strip())
+                valid_syntax = (parts.scheme in {"http", "https"}
+                                and bool(parts.hostname)
+                                and parts.username is None and parts.password is None
+                                and parts.path in {"", "/"} and not parts.query and not parts.fragment
+                                and (parts.port is None or 1 <= parts.port <= 65535))
+            except ValueError:
+                valid_syntax = False
+            allowed_origin = False
+            if valid_syntax:
+                if parts.hostname in _LOOPBACK_HOSTS:
+                    allowed_origin = True
+                elif not _is_local_mode():
+                    req_scheme = (request.url.scheme or "").lower()
+                    req_host = (request.url.hostname or "").lower()
+                    allowed_origin = (
+                        parts.scheme == req_scheme
+                        and parts.hostname == req_host
+                        and _effective_port(parts.scheme, parts.port) == _effective_port(req_scheme, request.url.port)
+                    )
+            if not allowed_origin:
+                return JSONResponse({"detail": "cross-origin request blocked"}, status_code=403)
+    return await call_next(request)
 
 
 def _guard(token: str):
@@ -149,23 +204,29 @@ def _compile_latex(latex: str, node_id: str, tag: str):
     png = os.path.join(RENDER, f"{node_id}-{tag}-{h}.png")
     if os.path.exists(png):
         return png
-    d = os.path.join(RENDER, f"tmp-{h}")
-    os.makedirs(d, exist_ok=True)
-    tex = ("\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n"
-           "\\begin{document}\n$\\displaystyle " + latex + "$\n\\end{document}\n")
-    texf = os.path.join(d, "f.tex")
-    with open(texf, "w") as f:
-        f.write(tex)
+    d = tempfile.mkdtemp(prefix=f"tmp-{h}-", dir=RENDER)
     try:
-        r = subprocess.run([_tectonic_command(), "-o", d, texf],
-                           capture_output=True, text=True, timeout=120)
-    except subprocess.TimeoutExpired:
-        return None
-    pdf = os.path.join(d, "f.pdf")
-    if r.returncode != 0 or not os.path.exists(pdf):
-        return None
-    subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf, png[:-4]], check=True)
-    return png if os.path.exists(png) else None
+        tex = ("\\documentclass[border=6pt]{standalone}\n\\usepackage{amsmath,amssymb}\n"
+               "\\begin{document}\n$\\displaystyle " + latex + "$\n\\end{document}\n")
+        texf = os.path.join(d, "f.tex")
+        with open(texf, "w", encoding="utf-8") as f:
+            f.write(tex)
+        try:
+            r = subprocess.run([_tectonic_command(), "--untrusted", "--only-cached", "-o", d, texf],
+                               capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        pdf = os.path.join(d, "f.pdf")
+        if r.returncode != 0 or not os.path.exists(pdf):
+            return None
+        try:
+            subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf, png[:-4]],
+                           check=True, capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return png if os.path.exists(png) else None
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 @app.get("/api/render/{node_id}")
@@ -211,7 +272,7 @@ def nodeinfo(token: str = Query("")):
     runtime_platform = " ".join(part for part in (
         platform.system(), platform.release(), platform.machine()) if part)
     configured_model = REPAIR_MODEL
-    if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
+    if _is_local_mode():
         try:
             configured_model = _local_runtime().get_config()["model"]
         except LocalRuntimeError:
@@ -311,7 +372,7 @@ SKILL_MODE = os.environ.get("SKILL_MODE", "on")
 
 def _new_provider(*, skill_selection=False):
     # Selection must see metadata first; do not eagerly load the fixed formula body.
-    if os.environ.get("TEXADA_LOCAL_MODE", "1") == "1":
+    if _is_local_mode():
         config = _local_runtime().get_config()
         return make_local_provider(config["base_url"], config["model"],
                                    skill_mode="off" if skill_selection else SKILL_MODE)
@@ -353,10 +414,10 @@ def _document_body(body):
 
 
 def _artifact_directory(name, tag):
-    _document_call(lambda: document_name(name))
+    norm_name = _document_call(lambda: document_name(name))
     if not isinstance(tag, str) or not _re.fullmatch(r"[\w-]{1,80}", tag):
         raise HTTPException(status_code=400, detail="bad artifact tag")
-    return Path(STUDIO_STATE) / name.removesuffix(".tex") / tag
+    return Path(STUDIO_STATE) / "builds" / norm_name.removesuffix(".tex") / tag
 
 
 def _subprocess_text(value) -> str:
@@ -517,6 +578,13 @@ def _verify_formula(latex: str):
         return {"status": "NEEDS_ENV", "reason": "公式检查器不可用，请检查 SymPy / antlr 依赖与服务日志"}
 
 
+def _math_boundary_problems(diagnostics):
+    return [{**diagnostic, "id": f"math-boundary-{index}", "type": "formula",
+             "status": "NEEDS_HUMAN", "latex": "",
+             "reason": "数学边界未闭合或无法可靠抽取，请先检查原文：" + diagnostic.get("reason", diagnostic.get("code", "unknown"))}
+            for index, diagnostic in enumerate(diagnostics)]
+
+
 def _formula_problems(content: str, emit=None):
     problems = []
     parsed = analyze_math(content)
@@ -534,16 +602,67 @@ def _formula_problems(content: str, emit=None):
             problems.append({**node, "type": "formula", "status": "NEEDS_HUMAN" if blocker else vj["status"],
                              "reason": ("无法确定语法修复，保留原文供人工核对：" + blocker) if blocker else vj.get("reason", ""),
                              **({"repair_blocker": blocker} if blocker else {})})
-    for index, diagnostic in enumerate(parsed["diagnostics"]):
-        problems.append({**diagnostic, "id": f"math-boundary-{index}", "type": "formula",
-                         "status": "NEEDS_HUMAN", "latex": "",
-                         "reason": "数学边界未闭合或无法可靠抽取，请先检查原文：" + diagnostic.get("reason", diagnostic.get("code", "unknown"))})
+    problems.extend(_math_boundary_problems(parsed["diagnostics"]))
     return problems
+
+
+def _is_escaped_tex(text: str, index: int) -> bool:
+    slashes = 0
+    while index > 0 and text[index - 1] == "\\":
+        slashes += 1
+        index -= 1
+    return slashes % 2 == 1
+
+
+def _table_row_spans(vis_line: str):
+    row_end = len(vis_line.rstrip())
+    has_row_break = (row_end >= 2 and vis_line[row_end - 2:row_end] == r"\\"
+                     and not _is_escaped_tex(vis_line, row_end - 2))
+    body_end = row_end - 2 if has_row_break else row_end
+    spans = []
+    start = 0
+    for idx in range(body_end):
+        if vis_line[idx] == "&" and not _is_escaped_tex(vis_line, idx):
+            spans.append((start, idx))
+            start = idx + 1
+    spans.append((start, body_end))
+    return spans, has_row_break, body_end
 
 
 def _table_number_match(cell: str):
     """Match the entire plain numeric cell, retaining its source replacement span."""
     return _re.fullmatch(rf"\s*(?P<number>{_TABLE_NUMBER})\s*(?:\\\\)?\s*", cell)
+
+
+def _resolve_table_edit(raw_lines, vis_lines, line_offsets, problem):
+    line_idx = problem["line"] - 1
+    cell_idx = problem["col"]
+    right = problem.get("right")
+    if (not isinstance(right, str) or not _re.fullmatch(_TABLE_NUMBER, right)
+            or not (0 <= line_idx < len(raw_lines))):
+        return None
+    raw_line = raw_lines[line_idx].removesuffix("\r")
+    vis_line = vis_lines[line_idx].removesuffix("\r")
+    spans, _, _ = _table_row_spans(vis_line)
+    if not (0 <= cell_idx < len(spans)):
+        return None
+    cell_start, cell_end = spans[cell_idx]
+    raw_cell = raw_line[cell_start:cell_end]
+    vis_cell = vis_line[cell_start:cell_end]
+    if raw_cell != vis_cell:
+        return None
+    match = _table_number_match(raw_cell)
+    if not match:
+        return None
+    num_start, num_end = match.span("number")
+    return {
+        "line": problem["line"],
+        "before": match.group("number"),
+        "after": right,
+        "skill": "doc-table-audit",
+        "start": line_offsets[line_idx] + cell_start + num_start,
+        "end": line_offsets[line_idx] + cell_start + num_end,
+    }
 
 
 def _table_problems(content: str):
@@ -595,37 +714,43 @@ def _table_problems(content: str):
                     problems.append({**item, "right": right, "status": "RETRY",
                                      "reason": f"合计列 {j+1}：标注 {want}，数据行之和 {got}"})
 
-    visible_lines = mask_opaque(content).splitlines()
-    for i, line in enumerate(content.splitlines()):
-        # Keep raw text for numeric replacement; masked source only decides
-        # whether this line is executable TeX rather than a printed example.
-        if not visible_lines[i].strip():
+    visible_lines = mask_opaque(content).split("\n")
+    raw_lines = content.split("\n")
+    for i, raw_full in enumerate(raw_lines):
+        # Split strictly on "\n" so \f, \v, \u2028, \u2029 inside comments or
+        # verbatim blocks never desynchronize line indices or character offsets.
+        vis_line = visible_lines[i].removesuffix("\r")
+        vis_stripped = vis_line.strip()
+        if not vis_stripped:
             continue
-        stripped = line.strip()
-        if stripped.startswith("%"):
-            continue
-        if r"\begin{tabular}" in visible_lines[i]:
+        if r"\begin{tabular}" in vis_line:
             if in_tab:
                 shape_reason = "嵌套表格不在自动合计检查范围，需人工核对"
                 continue
             in_tab, rows, shape_reason = True, [], ""
-            spec = _re.fullmatch(r"\\begin\{tabular\}\s*\{([lcr|\s]+)\}", stripped)
+            spec = _re.fullmatch(r"\\begin\{tabular\}\s*\{([lcr|\s]+)\}", vis_stripped)
             width = sum(c in "lcr" for c in spec.group(1)) if spec else None
             continue
         if not in_tab:
             continue
-        if r"\end{tabular}" in visible_lines[i]:
-            if stripped != r"\end{tabular}":
+        if r"\end{tabular}" in vis_line:
+            if vis_stripped != r"\end{tabular}":
                 shape_reason = "表格结束标记必须独占一行，需人工核对"
             audit_rows()
             rows, in_tab = [], False
             continue
-        if not stripped or stripped in (r"\hline", r"\toprule", r"\midrule", r"\bottomrule"):
+        if vis_stripped in (r"\hline", r"\toprule", r"\midrule", r"\bottomrule"):
             continue
-        if not stripped.endswith(r"\\") or r"\\" in stripped[:-2]:
+        spans, has_row_break, body_end = _table_row_spans(vis_line)
+        if not has_row_break or r"\\" in vis_line[:body_end]:
             shape_reason = "仅支持每行一条且以双反斜杠结束的简单表格行，需人工核对"
-        body = stripped[:-2] if stripped.endswith(r"\\") else stripped
-        rows.append((i, [c.strip() for c in body.split("&")]))
+        raw_line = raw_full.removesuffix("\r")
+        cells = []
+        for c_start, c_end in spans:
+            raw_cell = raw_line[c_start:c_end]
+            vis_cell = vis_line[c_start:c_end]
+            cells.append(vis_cell.strip() if raw_cell == vis_cell else raw_cell.strip())
+        rows.append((i, cells))
     if in_tab:
         shape_reason = "表格缺少结束标记，需人工核对"
         audit_rows()
@@ -746,6 +871,11 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
                 emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
                      candidate=cand, reason=rejection_reason)
                 continue
+            if assess_candidate(latex, cand).get("method") == "unchanged":
+                emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
+                     candidate=cand, reason="model_abstained")
+                log.append(f"[doc-formula-verify] {p['id']} 模型保持原文放弃修复，停止尝试并保留原文")
+                break
             if cand in seen:
                 emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
                      candidate=cand, reason="repeated_candidate")
@@ -778,37 +908,36 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None):
 
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
-    lines = content.splitlines(keepends=True)
+    raw_lines = content.split("\n")
+    vis_lines = mask_opaque(content).split("\n")
+    line_offsets, offset = [], 0
+    for raw_line in raw_lines:
+        line_offsets.append(offset)
+        offset += len(raw_line) + 1
+    table_replacements = []
     for p in tp:
         if p["status"] != "RETRY" or not isinstance(p.get("right"), str):
             log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 保留原文供人工审阅")
             continue
-        li = p["line"] - 1
-        cells = lines[li].split("&")
-        j = p["col"]
-        if j < len(cells):
-            match = _table_number_match(cells[j])
-            if not match or not _re.fullmatch(_TABLE_NUMBER, p["right"]):
-                continue
-            start, end = match.span("number")
-            replacement = cells[j][:start] + p["right"] + cells[j][end:]
-            if replacement == cells[j]:
-                continue
-            log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 重算为 {p['right']}")
-            edits.append({"line": p["line"], "before": match.group("number"), "after": p["right"], "skill": "doc-table-audit"})
-            cells[j] = replacement
-            lines[li] = "&".join(cells)
-            emit("CANDIDATE_EDIT", node_id=p["id"], line=p["line"],
-                 before=match.group("number"), after=p["right"],
-                 provider="deterministic-table", model_calls=0)
-    content = "".join(lines)
+        resolved = _resolve_table_edit(raw_lines, vis_lines, line_offsets, p)
+        if not resolved or resolved["before"] == resolved["after"]:
+            continue
+        log.append(f"[doc-table-audit] {p['id']} {p['reason']} → 重算为 {p['right']}")
+        edits.append({k: resolved[k] for k in ("line", "before", "after", "skill")})
+        table_replacements.append((resolved["start"], resolved["end"], resolved["after"]))
+        emit("CANDIDATE_EDIT", node_id=p["id"], line=p["line"],
+             before=resolved["before"], after=resolved["after"],
+             provider="deterministic-table", model_calls=0)
+    for start, end, replacement in sorted(table_replacements, reverse=True):
+        content = content[:start] + replacement + content[end:]
     return content, edits
 
 
 def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False, use_model_planner=True):
     """Install explicit checker/repair callbacks; the planner cannot supply edits."""
+    parsed_math = analyze_math(content)
     nodes = [{**node, "math_kind": node["kind"], "kind": "formula",
-              "start": node["body_start"], "end": node["body_end"]} for node in extract_math(content)]
+              "start": node["body_start"], "end": node["body_end"]} for node in parsed_math["nodes"]]
     if r"\begin{tabular}" in mask_opaque(content):
         nodes.append({"id": "table-document", "kind": "table", "line": 1, "document_text": content})
 
@@ -820,9 +949,11 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         if node["kind"] == "formula":
             if verifier_unavailable:
                 result = {"status": "NEEDS_ENV", "reason": "checker_unavailable"}
+            elif node.get("checkable", True):
+                result = _verify_formula(node["latex"])
             else:
-                result = (_verify_formula(node["latex"]) if node.get("checkable", True) else
-                          {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")})
+                grid = check_math_grids(node["latex"]) if node.get("reason") == "structured_math" else None
+                result = grid or {"status": "NEEDS_HUMAN", "reason": node.get("reason", "复杂结构需人工核对")}
             if result.get("status") == "NEEDS_ENV":
                 verifier_unavailable = True
             emit("CHECK", node_id=node["id"], line=node["line"], original=node["latex"],
@@ -904,6 +1035,9 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             if not isinstance(candidate, str) or not candidate.strip():
                 reason = provider_trace.get("reason") or "no_valid_candidate"
                 return finish(None, {"accepted": False, "check": node.get("check", {"status": "RETRY"}), "reason": reason})
+            if assess_candidate(original, candidate).get("method") == "unchanged":
+                return finish(candidate, {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_abstained"},
+                                          "reason": "model_abstained"}, stop=True)
             if candidate in feedback["seen"]:
                 return finish(candidate, {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "repeated_candidate"},
                                           "reason": "repeated_candidate"}, stop=True)
@@ -912,24 +1046,19 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                                                attempt=attempt, emit=emit, remaining=planner.remaining_seconds)
             return finish(candidate, outcome)
         edits, line_offsets, offset = [], [], 0
-        lines = content.splitlines(keepends=True)
-        for line in lines:
+        raw_lines = content.split("\n")
+        vis_lines = mask_opaque(content).split("\n")
+        for raw_line in raw_lines:
             line_offsets.append(offset)
-            offset += len(line)
+            offset += len(raw_line) + 1
         for problem in node["check"]["problems"]:
             if problem["status"] != "RETRY" or not isinstance(problem.get("right"), str):
                 continue
-            line_idx = problem["line"] - 1
-            cells = lines[line_idx].split("&")
-            cell_idx = problem["col"]
-            match = _table_number_match(cells[cell_idx])
-            if not match or not _re.fullmatch(_TABLE_NUMBER, problem["right"]):
+            resolved = _resolve_table_edit(raw_lines, vis_lines, line_offsets, problem)
+            if not resolved:
                 return {"accepted": False, "check": {"status": "NEEDS_HUMAN"}}
-            cell_offset = sum(len(cell) + 1 for cell in cells[:cell_idx])
-            start, end = match.span("number")
-            edits.append({"line": problem["line"], "before": match.group("number"), "after": problem["right"],
-                          "skill": "doc-table-audit", "start": line_offsets[line_idx] + cell_offset + start,
-                          "end": line_offsets[line_idx] + cell_offset + end})
+            if resolved["before"] != resolved["after"]:
+                edits.append(resolved)
         return {"accepted": True, "check": {"status": "OK"}, "edits": edits}
 
     catalog = None
@@ -947,18 +1076,21 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             raise ValueError("candidate_source_mismatch")
         fixed = fixed[:edit["start"]] + edit["after"] + fixed[edit["end"]:]
         emit("CANDIDATE_EDIT", **{k: v for k, v in edit.items() if k not in {"start", "end"}})
+    summary["lexical_diagnostics"] = analyze_math(fixed)["diagnostics"]
     public_edits = [{k: v for k, v in edit.items() if k not in {"start", "end"}} for edit in edits]
     log.append(f"[planner] 执行 {summary['executed']}，拒绝 {summary['rejected']}；候选需人工采用")
     return fixed, public_edits, summary
 
 
-def _planned_problems(summary):
+def _planned_problems(summary, fixed=None):
     # Planner candidates have already been checked. Re-running the whole source
     # here would execute unchosen checks after a refusal or an exhausted budget.
-    return [{"id": node["id"], "type": "formula" if node["kind"] == "formula" else "table_total",
-             "line": node.get("line", 1), "status": "NEEDS_HUMAN",
-             "reason": node.get("human_reason", "planner_unresolved")}
-            for node in summary["nodes"] if node["state"] not in {"ok", "candidate"}]
+    problems = [{"id": node["id"], "type": "formula" if node["kind"] == "formula" else "table_total",
+                 "line": node.get("line", 1), "status": "NEEDS_HUMAN",
+                 "reason": node.get("human_reason", "planner_unresolved")}
+                for node in summary["nodes"] if node["state"] not in {"ok", "candidate"}]
+    diagnostics = analyze_math(fixed)["diagnostics"] if isinstance(fixed, str) else summary.get("lexical_diagnostics", [])
+    return problems + _math_boundary_problems(diagnostics)
 
 
 def _job_path(job_id):
@@ -1025,88 +1157,104 @@ def _read_job(job_id):
     return job
 
 
+def _job_cancelled(job):
+    with _job_lock:
+        return bool(job.get("cancel_requested"))
+
+
 def _studio_job(name: str, content: str, job_id: str):
-    job = _jobs[job_id]
+    with _job_lock:
+        job = _jobs[job_id]
+        log = job["log"]
+        skill_selection = job.get("skill_selection", False)
+        planner_mode = job.get("planner_mode", False)
     started = time.monotonic()
-    log = job["log"]
     trace = []
     input_sha256 = None
 
     def emit(action, **fields):
-        if job.get("cancel_requested") and action not in {"JOB_ERROR", "JOB_CANCELLED"}:
+        if _job_cancelled(job) and action not in {"JOB_ERROR", "JOB_CANCELLED"}:
             raise JobCancelled()
-        event = {"schema_version": 2, "job_id": job_id, "seq": len(trace) + 1,
-                 "ts": time.time(), "input_sha256": input_sha256, "action": action, **fields}
-        directory = _job_path(job_id)
-        os.makedirs(directory, exist_ok=True)
-        with open(os.path.join(directory, "events.jsonl"), "a", encoding="utf-8") as stream:
-            stream.write(json.dumps(event, ensure_ascii=False) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        trace.append(event)
-        # Checkpoint the human-readable log too; full events stay in JSONL.
-        _save_job(job_id, job)
+        with _job_lock:
+            event = {"schema_version": 2, "job_id": job_id, "seq": len(trace) + 1,
+                     "ts": time.time(), "input_sha256": input_sha256, "action": action, **fields}
+            directory = _job_path(job_id)
+            os.makedirs(directory, exist_ok=True)
+            with open(os.path.join(directory, "events.jsonl"), "a", encoding="utf-8") as stream:
+                stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            trace.append(event)
+            # Checkpoint the human-readable log too; full events stay in JSONL.
+            _save_job(job_id, job)
 
     try:
         input_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        _save_job(job_id, job)
-        skill_selection = job.get("skill_selection", False)
+        with _job_lock:
+            _save_job(job_id, job)
         provider = _new_provider(skill_selection=True) if skill_selection else _new_provider()
         emit("JOB_START", name=name, provider_context=provider.fingerprint())
-        log.append(f"[studio] 编译修复前版本（原始文档）…")
+        with _job_lock:
+            log.append(f"[studio] 编译修复前版本（原始文档）…")
         before = _studio_compile(content, name, "before-" + job_id)
-        log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败，请检查编译日志'}")
-        _append_compiler_log(log, before)
+        with _job_lock:
+            log.append(f"[studio] 修复前编译：{'✓ 通过' if before['ok'] else '✗ 失败，请检查编译日志'}")
+            _append_compiler_log(log, before)
         emit("COMPILE", phase="before", ok=before["ok"])
-        planner_mode = job.get("planner_mode", False)
         planner_summary = None
         if planner_mode or skill_selection:
             fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit,
                                                                  skill_selection=skill_selection, use_model_planner=planner_mode)
         else:
             fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
-        log.append(f"[studio] 共应用 {len(edits)} 处修复")
-        log.append(f"[studio] 编译修复后版本…")
+        with _job_lock:
+            log.append(f"[studio] 共应用 {len(edits)} 处修复")
+            log.append(f"[studio] 编译修复后版本…")
         after = _studio_compile(fixed, name, "after-" + job_id)
         emit("COMPILE", phase="after", ok=after["ok"])
         model_calls = sum(e.get("provider_trace", {}).get("model_calls") or 0
                           for e in trace if e["action"] in {"PROVIDER_RESULT", "PLANNER_RESULT", "SKILL_SELECTION_PROPOSED"})
         emit("JOB_END", model_calls=model_calls, edits=len(edits),
              candidate_sha256=hashlib.sha256(fixed.encode()).hexdigest())
-        log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
-        _append_compiler_log(log, after)
-        job["result"] = {"fixed_content": fixed, "edits": edits,
-                         "compile_before": before, "compile_after": after,
-                         "problems_after": _planned_problems(planner_summary) if planner_summary is not None else _analyze(fixed),
-                         "model": getattr(provider, "model", REPAIR_MODEL) if model_calls else None,
-                         "configured_model": getattr(provider, "model", REPAIR_MODEL), "model_calls": model_calls,
-                         "provider": provider.name if model_calls else "deterministic-checks",
-                         "skill_mode": "selected" if skill_selection else SKILL_MODE,
-                         "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,
-                         "trace": trace, "job_id": job_id,
-                         "elapsed_seconds": round(time.monotonic() - started, 2),
-                         "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
-                         "candidate_sha256": hashlib.sha256(fixed.encode()).hexdigest(),
-                         "requires_review": True,
-                         "scope": "TeX 数学片段语法与简单表格合计；不验证数学结论或 OCR 忠实度"}
-        job["done"] = True
-        _save_job(job_id, job)
+        problems_after = _planned_problems(planner_summary, fixed) if planner_summary is not None else _analyze(fixed)
+        result_payload = {"fixed_content": fixed, "edits": edits,
+                          "compile_before": before, "compile_after": after,
+                          "problems_after": problems_after,
+                          "model": getattr(provider, "model", REPAIR_MODEL) if model_calls else None,
+                          "configured_model": getattr(provider, "model", REPAIR_MODEL), "model_calls": model_calls,
+                          "provider": provider.name if model_calls else "deterministic-checks",
+                          "skill_mode": "selected" if skill_selection else SKILL_MODE,
+                          "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,
+                          "trace": trace, "job_id": job_id,
+                          "elapsed_seconds": round(time.monotonic() - started, 2),
+                          "original_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                          "candidate_sha256": hashlib.sha256(fixed.encode()).hexdigest(),
+                          "requires_review": True,
+                          "scope": "TeX 数学片段语法与简单表格合计；不验证数学结论或 OCR 忠实度"}
+        with _job_lock:
+            log.append(f"[studio] 修复后编译：{'✓ 通过' if after['ok'] else '✗ 失败'}")
+            _append_compiler_log(log, after)
+            job["result"] = result_payload
+            job["done"] = True
+            _save_job(job_id, job)
     except JobCancelled:
-        job.update(done=True, result=None, error="任务已取消；原文保持不变。")
-        log.append("[studio] 取消已在阶段边界生效，未采用任何候选。")
-        emit("JOB_CANCELLED")
-        _save_job(job_id, job)
+        with _job_lock:
+            job.update(done=True, cancelled=True, result=None, error="任务已取消；原文保持不变。")
+            log.append("[studio] 取消已在阶段边界生效，未采用任何候选。")
+            emit("JOB_CANCELLED")
+            _save_job(job_id, job)
     except Exception as e:  # noqa: BLE001
         # Error text from dependencies may contain private paths or endpoints.
-        log.append(f"[studio] 任务失败：{type(e).__name__}")
-        job["done"] = True
-        job["error"] = f"任务失败（{type(e).__name__}）；请检查运行环境或输入后新建任务。"
-        job["trace"] = trace
-        try:
-            emit("JOB_ERROR", reason=type(e).__name__)
-            _save_job(job_id, job)
-        except OSError:
-            pass
+        with _job_lock:
+            log.append(f"[studio] 任务失败：{type(e).__name__}")
+            job["done"] = True
+            job["error"] = f"任务失败（{type(e).__name__}）；请检查运行环境或输入后新建任务。"
+            job["trace"] = trace
+            try:
+                emit("JOB_ERROR", reason=type(e).__name__)
+                _save_job(job_id, job)
+            except OSError:
+                pass
 
 
 @app.get("/studio")
@@ -1138,11 +1286,19 @@ def _runtime_call(operation):
 @app.get("/api/studio/config")
 def studio_config(token: str = Query(""), probe: bool = False):
     _guard(token)
-    runtime = _local_runtime()
-    config = _runtime_call(runtime.probe if probe else runtime.get_config)
-    return {**config, "local_mode": os.environ.get("TEXADA_LOCAL_MODE", "1") == "1", "offline": True,
-            "tools": {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm")),
-                      "pdfinfo": bool(shutil.which("pdfinfo"))},
+    local_mode = _is_local_mode()
+    tools = {"tectonic": bool(shutil.which(_tectonic_command())), "pdftoppm": bool(shutil.which("pdftoppm")),
+             "pdfinfo": bool(shutil.which("pdfinfo"))}
+    if local_mode:
+        config = _runtime_call(lambda: _local_runtime().probe() if probe else _local_runtime().get_config())
+    else:
+        base_url = os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE") or VLM_BASE_URL
+        config = {"base_url": base_url, "model": REPAIR_MODEL, "local_mode": False, "offline": False,
+                  "model_available": None, "tools": tools,
+                  "limits": {"file_bytes": MAX_FILE_BYTES, "pdf_pages": MAX_PDF_PAGES,
+                             "image_pixels": MAX_IMAGE_PIXELS}}
+    return {**config, "local_mode": local_mode, "offline": local_mode,
+            "tools": tools,
             "max_document_bytes": 2 * 1024 * 1024, "max_import_pages": 5,
             "math_scope": ["$...$", "$$...$$", "\\(...\\)", "\\[...\\]", "equation", "align"]}
 
@@ -1240,7 +1396,11 @@ def studio_rename(token: str = Query(""), body: dict = None):
 def studio_delete(token: str = Query(""), body: dict = None):
     _guard(token)
     body = body or {}
-    return _document_call(lambda: _documents().delete(body.get("name"), body.get("expected_sha256")))
+    result = _document_call(lambda: _documents().delete(body.get("name"), body.get("expected_sha256")))
+    builds = Path(STUDIO_STATE) / "builds" / result["name"].removesuffix(".tex")
+    if not builds.is_symlink():
+        shutil.rmtree(builds, ignore_errors=True)
+    return result
 
 
 @app.post("/api/studio/analyze")
@@ -1267,15 +1427,18 @@ def studio_fix(token: str = Query(""), body: dict = None):
     if type(skill_selection) is not bool:
         raise HTTPException(status_code=400, detail="skill_selection must be boolean")
     job_id = _uuid.uuid4().hex
-    _jobs[job_id] = {"done": False, "name": name, "created_at": time.time(),
-                     "log": [f"[studio] 任务 {job_id} 接收：{name}"],
-                     "result": None, "planner_mode": planner_mode, "skill_selection": skill_selection}
+    record = {"done": False, "name": name, "created_at": time.time(),
+              "log": [f"[studio] 任务 {job_id} 接收：{name}"],
+              "result": None, "planner_mode": planner_mode, "skill_selection": skill_selection}
     # Persist acceptance before returning an ID, even if shutdown precedes the worker.
     try:
-        _save_job(job_id, _jobs[job_id])
+        with _job_lock:
+            _jobs[job_id] = record
+            _save_job(job_id, record)
         threading.Thread(target=_studio_job, args=(name, content, job_id), daemon=True).start()
     except (OSError, RuntimeError):
-        _jobs.pop(job_id, None)
+        with _job_lock:
+            _jobs.pop(job_id, None)
         raise HTTPException(status_code=503, detail="could not start repair task") from None
     return {"job": job_id}
 
@@ -1284,29 +1447,35 @@ def studio_fix(token: str = Query(""), body: dict = None):
 def studio_fixstatus(id: str = Query(""), token: str = Query("")):
     _guard(token)
     _job_path(id)
-    job = _jobs.get(id) or _read_job(id)
-    if not job:
-        raise HTTPException(status_code=404, detail="no job")
-    return {"done": job["done"], "log": job["log"][-30:], "result": job.get("result"),
-            "error": job.get("error"), "trace": job.get("trace", []),
-            "review": job.get("review"), "cancel_requested": job.get("cancel_requested", False)}
+    with _job_lock:
+        job = _jobs.get(id) or _read_job(id)
+        if not job:
+            raise HTTPException(status_code=404, detail="no job")
+        return {"done": job["done"], "log": list(job["log"][-30:]), "result": job.get("result"),
+                "error": job.get("error"), "trace": list(job.get("trace", [])),
+                "review": job.get("review"), "cancel_requested": bool(job.get("cancel_requested", False)),
+                "cancelled": bool(job.get("cancelled", False))}
 
 
 @app.get("/api/studio/jobs")
 def studio_jobs(token: str = Query("")):
     _guard(token)
-    ids = set(_jobs)
+    with _job_lock:
+        ids = set(_jobs)
+        memory_jobs = {job_id: dict(job) for job_id, job in _jobs.items()}
     directory = Path(STUDIO_STATE) / "jobs"
     if directory.is_dir():
         ids.update(p.name for p in directory.iterdir() if p.is_dir() and _re.fullmatch(r"[a-f0-9]{8,32}", p.name))
     jobs = []
     for job_id in ids:
-        job = _jobs.get(job_id) or _read_job(job_id)
+        job = memory_jobs.get(job_id) or _read_job(job_id)
         if not job:
             continue
         jobs.append({"id": job_id, "name": job.get("name", "历史文档"),
                      "created_at": job.get("created_at", 0), "done": job["done"],
                      "error": job.get("error"), "review": job.get("review"),
+                     "cancel_requested": bool(job.get("cancel_requested")),
+                     "cancelled": bool(job.get("cancelled")),
                      "has_candidate": isinstance(job.get("result"), dict),
                      "original_sha256": (job.get("result") or {}).get("original_sha256")})
     return {"jobs": sorted(jobs, key=lambda job: job["created_at"], reverse=True)[:100]}

@@ -30,7 +30,7 @@ CLI
 
 模型候选除语法回判外，还需通过修改范围校验。当前规则只授权不变内容或已知确定性规则的同一个结果，不允许数字、变量、运算符、项或既有分组被改写。拒绝反馈随下一次请求提交，最多两次模型请求；重复候选和环境故障会停止继续尝试。这是保守的来源保真约束，不是数学等价证明，详见[公式修复质量记录](formula-repair-quality.md)。
 
-表格路径分开实现：Studio 检查受支持的简单 `tabular`，用 Decimal 为末行合计生成候选；CLI 检查布局树网格和显式形状、合计约束，真实模型提供方不实现表格重提取。两者都不从单位或表达式中猜取数字；表格候选假设数据行正确，仍需与来源核对。
+表格路径分开实现：Studio 检查受支持的简单 `tabular`，用 Decimal 为末行合计确定性生成候选；CLI 检查布局树网格和显式形状、合计约束，必要时由提供方 `repair_table` 请求受限末行合计候选，并经 [table_repair.py](../harness/docforensics/table_repair.py)（`assess_table_candidate` 来源范围守卫）与 [audit_table.py](../skills/doc-table-audit/scripts/audit_table.py) 双重回判，但不实现表格图像重提取或改写数据行。两者都不从单位或表达式中猜取数字；表格候选假设数据行正确，仍需与来源核对。
 
 ## 模型、OCR 与 Skill
 
@@ -38,7 +38,7 @@ CLI
 
 CLI 的通用 OpenAI-compatible 提供方和显式选择的[旧云入口](../deploy/README.md#旧云-api-兼容入口)可使用授权的云服务。它们不继承本地启动器的回环限制，不能把对应记录当作本地推理结果。
 
-默认固定流程在 `skill_mode=on` 时，通过[白名单加载器](../harness/docforensics/skills_runtime.py)验证并读取公式 `SKILL.md`，将正文加入模型 system 消息；公式和有界反馈放在独立的 user JSON 中。`off` 省去 Skill 正文，保留基础参数。fixture 是预设候选，确定性公式与表格工具不调用模型；它们的成功不能记为模型推理成功。
+默认固定流程在 `skill_mode=on` 时，通过[白名单加载器](../harness/docforensics/skills_runtime.py)按节点类型验证并读取公式或 CLI 表格 `SKILL.md`，将正文加入对应模型 system 消息；原节点内容和有界反馈放在独立的 user JSON 中。`off` 省去 Skill 正文，保留基础参数。fixture 是预设候选，确定性公式与 Studio 表格工具不调用模型；它们的成功不能记为模型推理成功。
 
 [受限规划](studio-constrained-planner.md)和[Skill 选择](studio-skill-selection.md)是两个独立、默认关闭的实验开关。选择先读取 capability 元信息，验证种类、版本和当前状态后才加载正文；宿主仍控制动作、参数、预算、检查和候选构造。服务间使用普通 HTTP；这些流程不依赖 MCP，也不允许模型任意执行 Skill 文件。可选[Math Agent 交接](studio-formula-handoff.md)需要另外运行对应服务，普通本地工作流不依赖它。
 

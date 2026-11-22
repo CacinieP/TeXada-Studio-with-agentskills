@@ -26,10 +26,28 @@ _UNSAFE_COMMANDS = frozenset({
 _TRAILING_OPERATORS = frozenset({"+", "-", "*", "/", "=", "<", ">", r"\cdot", r"\times", r"\pm", r"\mp"})
 _PAIRS = {"(": ")", "[": "]", r"\{": r"\}", r"\langle": r"\rangle"}
 _CLOSERS = frozenset(_PAIRS.values())
+_SCRIPT_INVALID_RIGHT = frozenset({"^", "_", "}", *_CLOSERS, r"\right", ",", ";"})
 _RELATIONS = frozenset({"=", "<", ">", "≤", "≥", "≠", r"\le", r"\leq", r"\ge", r"\geq",
                         r"\ne", r"\neq", r"\equiv", r"\approx", r"\sim", r"\simeq"})
 _TWO_ARGUMENT_COMMANDS = frozenset({
     r"\frac", r"\dfrac", r"\tfrac", r"\binom", r"\dbinom", r"\tbinom",
+})
+_POSTFIX_SCRIPT_FOLLOWERS = frozenset(
+    {"}", ")", "]", r"\}", r"\rangle", ",", ";", "|", r"\vert", r"\rvert", r"\right"}
+    | _RELATIONS
+    | _TRAILING_OPERATORS
+    | {
+        r"\to", r"\rightarrow", r"\leftarrow", r"\leftrightarrow", r"\mapsto",
+        r"\implies", r"\iff", r"\Rightarrow", r"\Leftarrow", r"\Leftrightarrow",
+        r"\in", r"\notin", r"\ni", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
+        r"\quad", r"\qquad", r"\,", r"\;", r"\:", r"\!", r"\thinspace", r"\negthinspace",
+    }
+)
+_UNARY_SCRIPT_COMMANDS = frozenset({
+    r"\mathrm", r"\mathit", r"\mathbf", r"\mathsf", r"\mathtt",
+    r"\mathcal", r"\mathbb", r"\boldsymbol", r"\overline", r"\underline",
+    r"\hat", r"\widehat", r"\bar", r"\vec", r"\dot", r"\ddot",
+    r"\tilde", r"\widetilde", r"\sqrt",
 })
 
 
@@ -40,12 +58,44 @@ class _Token:
     end: int
 
 
+def _strip_math(text):
+    stripped = text.lstrip()
+    while stripped and stripped[-1].isspace():
+        slashes = 0
+        pos = len(stripped) - 2
+        while pos >= 0 and stripped[pos] == "\\":
+            slashes += 1
+            pos -= 1
+        if slashes % 2 == 1:
+            break
+        stripped = stripped[:-1]
+    return stripped
+
+
 def _tokens(text):
     return [_Token(match[0], match.start(), match.end()) for match in _TOKEN.finditer(text)]
 
 
+def _script_arg_end(tokens, index, group_ends):
+    if index >= len(tokens):
+        return None
+    argument = tokens[index].text
+    if argument == "{":
+        return group_ends.get(index)
+    if len(argument) == 1 and argument.isalnum():
+        return index + 1
+    if (argument.startswith("\\") and len(argument) > 1
+            and argument not in {r"\left", r"\right", r"\middle"}):
+        if argument in _UNARY_SCRIPT_COMMANDS and index + 1 < len(tokens) and tokens[index + 1].text == "{":
+            return group_ends.get(index + 1)
+        return index + 1
+    # TeX consumes one character of an unbraced multi-digit literal;
+    # treating the entire number as the script would invent a conflict.
+    return None
+
+
 def _duplicate_script(tokens):
-    """Recognize duplicate scripts only when their first argument is unambiguous."""
+    """Recognize duplicate scripts only when their preceding arguments are unambiguous."""
     stack, group_ends = [], {}
     for index, token in enumerate(tokens):
         if token.text == "{":
@@ -55,20 +105,14 @@ def _duplicate_script(tokens):
     for index, token in enumerate(tokens[:-1]):
         if token.text not in {"^", "_"}:
             continue
-        end = index + 1
-        argument = tokens[end].text
-        if argument == "{":
-            if end not in group_ends:
-                continue
-            end = group_ends[end]
-        elif len(argument) == 1 and argument.isalnum():
-            end += 1
-        else:
-            # TeX consumes one character of an unbraced multi-digit literal;
-            # treating the entire number as the script would invent a conflict.
-            continue
-        if end < len(tokens) and tokens[end].text == token.text:
-            return True
+        seen = {token.text}
+        cursor = _script_arg_end(tokens, index + 1, group_ends)
+        while cursor is not None and cursor < len(tokens) and tokens[cursor].text in {"^", "_"}:
+            script = tokens[cursor].text
+            if script in seen:
+                return True
+            seen.add(script)
+            cursor = _script_arg_end(tokens, cursor + 1, group_ends)
     return False
 
 
@@ -101,40 +145,79 @@ def _parser_coverage_unsupported(tokens):
     return False
 
 
-def _skip_argument(tokens, index):
-    """Return the index after one TeX argument, or ``None`` when it is absent."""
-    if index >= len(tokens):
+def _skip_argument(arg_tokens, index):
+    """Return the index after one non-empty TeX argument, or ``None`` when absent."""
+    if index >= len(arg_tokens):
         return None
-    if tokens[index].text != "{":
+    first = arg_tokens[index]
+    if first != "{":
+        if first in {"}", "^", "_", r"\left", r"\right", r"\middle", "\\"}:
+            return None
         return index + 1
     depth = 0
-    for cursor in range(index, len(tokens)):
-        if tokens[cursor].text == "{":
+    has_payload = False
+    for cursor in range(index, len(arg_tokens)):
+        piece = arg_tokens[cursor]
+        if piece == "{":
             depth += 1
-        elif tokens[cursor].text == "}":
+        elif piece == "}":
             depth -= 1
             if depth == 0:
-                return cursor + 1
+                return (cursor + 1) if has_payload else None
+        else:
+            has_payload = True
     return None
 
 
 def _missing_required_argument(text):
     """True when a known two-argument command still lacks one after brace closing."""
-    tokens = _tokens(text)
-    for index, token in enumerate(tokens):
-        if token.text not in _TWO_ARGUMENT_COMMANDS:
+    arg_tokens = []
+    for token in _tokens(text):
+        if token.text.startswith("\\"):
+            arg_tokens.append(token.text)
+        else:
+            arg_tokens.extend(token.text)
+    for index, piece in enumerate(arg_tokens):
+        if piece not in _TWO_ARGUMENT_COMMANDS:
             continue
-        first = _skip_argument(tokens, index + 1)
-        if first is None or _skip_argument(tokens, first) is None:
+        first = _skip_argument(arg_tokens, index + 1)
+        if first is None or _skip_argument(arg_tokens, first) is None:
             return True
     return False
 
 
-def repair_blocker(original):
+def _has_missing_script_operand(tokens):
+    if tokens[-1].text in {"^", "_"}:
+        return True
+    for index, left in enumerate(tokens[:-1]):
+        if left.text not in {"^", "_"}:
+            continue
+        if index == 0 or (
+            tokens[index - 1].text in {"{", *_PAIRS} | _TRAILING_OPERATORS | _RELATIONS
+            and not (index >= 2 and tokens[index - 2].text == "^" and tokens[index - 1].text in {"+", "-", "*"})
+        ):
+            return True
+        right = tokens[index + 1]
+        if left.text == "_":
+            if right.text in _TRAILING_OPERATORS | _RELATIONS | _SCRIPT_INVALID_RIGHT:
+                return True
+            continue
+        if right.text == "*":
+            continue
+        if right.text in {"+", "-"}:
+            if index + 2 >= len(tokens) or tokens[index + 2].text in _POSTFIX_SCRIPT_FOLLOWERS:
+                continue
+            return True
+        if right.text in (_TRAILING_OPERATORS - {"+", "-", "*"}) | _RELATIONS | _SCRIPT_INVALID_RIGHT:
+            return True
+    return False
+
+
+def repair_blocker(original, *, allow_parser_gaps=False):
     """Return a stable reason for source that must not be guessed, or ``None``."""
-    if not isinstance(original, str) or not original.strip():
+    if not isinstance(original, str) or not _strip_math(original):
         return "invalid_original"
-    text = original.strip()
+    text = _strip_math(original)
     if len(text) > MAX_FORMULA_CHARS:
         return "original_too_large"
     if any((ord(char) < 32 and char not in _MATH_WHITESPACE) or ord(char) == 127 for char in original):
@@ -156,16 +239,15 @@ def repair_blocker(original):
         depth += (token.text == "{") - (token.text == "}")
         if depth < 0:
             return "extra_closing_brace"
-    if _parser_coverage_unsupported(tokens):
+    if not allow_parser_gaps and _parser_coverage_unsupported(tokens):
         return "parser_coverage_unsupported"
     if tokens[-1].text == "\\":
         return "incomplete_command"
-    if tokens[-1].text in {"^", "_"} or any(
-        left.text in {"^", "_"} and right.text in _TRAILING_OPERATORS | _RELATIONS | {"^", "_", "}"}
-        for left, right in zip(tokens, tokens[1:])
-    ):
+    if _has_missing_script_operand(tokens):
         return "missing_script_operand"
-    if tokens[-1].text in _TRAILING_OPERATORS:
+    if tokens[-1].text in _TRAILING_OPERATORS and not (
+        len(tokens) >= 3 and tokens[-2].text == "^" and tokens[-1].text in {"+", "-", "*"}
+    ):
         return "missing_operator_operand"
     if tokens[-1].text == "{":
         return "missing_group_content"
@@ -260,19 +342,19 @@ def assess_candidate(original, candidate):
     differing token in a rejection is available for bounded retry feedback.
     """
     rejected = {"allowed": False, "reason": "invalid_candidate", "method": "none"}
-    if not isinstance(original, str) or not original.strip():
+    if not isinstance(original, str) or not _strip_math(original):
         return {**rejected, "reason": "invalid_original"}
-    if not isinstance(candidate, str) or not candidate.strip():
+    if not isinstance(candidate, str) or not _strip_math(candidate):
         return rejected
     if len(candidate) > MAX_FORMULA_CHARS:
         return {**rejected, "reason": "candidate_too_large"}
-    before, after = original.strip(), candidate.strip()
+    before, after = _strip_math(original), _strip_math(candidate)
     if any((ord(char) < 32 and char not in _MATH_WHITESPACE) or ord(char) == 127 for char in candidate):
         return {**rejected, "reason": "control_character_in_candidate"}
     if before == after:
         return {"allowed": True, "reason": "unchanged_source", "method": "unchanged"}
     expected, method = _deterministic_patch(original)
-    if expected is not None and after == expected.strip():
+    if expected is not None and after == _strip_math(expected):
         return {"allowed": True, "reason": "deterministic_syntax_patch", "method": method}
     reason = repair_blocker(original) or "unauthorized_source_change"
     result = {**rejected, "reason": reason}

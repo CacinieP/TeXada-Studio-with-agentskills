@@ -21,13 +21,14 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "harness"))
 from docforensics.__main__ import repair_model_default  # noqa: E402  # #23 契约同源
 
 REQUIRED_MODELS = (repair_model_default(), "minicpm-ocr")
 DEFAULT_MODELS_BASE = "http://127.0.0.1:11434/v1"
-OCR_SCRIPT = Path(__file__).resolve().parent.parent / "skills/doc-ocr-extract/scripts/ocr_extract.py"
-LAYOUT_SCRIPT = Path(__file__).resolve().parent.parent / "skills/doc-ocr-extract/scripts/ocr_to_layout.py"
+OCR_SCRIPT = REPO_ROOT / "skills/doc-ocr-extract/scripts/ocr_extract.py"
+LAYOUT_SCRIPT = REPO_ROOT / "skills/doc-ocr-extract/scripts/ocr_to_layout.py"
 _OCR_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 
@@ -35,7 +36,7 @@ class PreflightError(RuntimeError):
     """预检失败：环境或模型不满足真实 E2E 运行条件，消息含修复提示。"""
 
 
-def probe_python(python_path=Path(".venv/bin/python")):
+def probe_python(python_path=REPO_ROOT / ".venv/bin/python"):
     """真实运行需要仓库 .venv（macOS ARM 开发环境）。"""
     if not Path(python_path).exists():
         raise PreflightError(f"缺少虚拟环境 {python_path}（先 python3 -m venv .venv 并安装依赖）")
@@ -264,63 +265,68 @@ def run_e2e3_ocr(image_dir, *, model="minicpm-ocr:latest", base=DEFAULT_MODELS_B
         result["detail"] = "OCR 记录未过记录级门（status=OK/lines 非空/review_items 空/output_complete 真）"
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         return result
+    own_workdir = workdir is None
     root = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="e2e3-"))
-    root.mkdir(parents=True, exist_ok=True)
-    raw = json.dumps(record, ensure_ascii=False).encode("utf-8")
-    record_path = root / "record.json"
-    record_path.write_bytes(raw)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("_ocr_to_layout", LAYOUT_SCRIPT)
-    layout_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(layout_mod)
-    digest = layout_mod.record_digest(record)  # 单一事实源：与 converter 同一摘要算法
-    gate_dir = root / "gate"
-    gate = subprocess.run(
-        [str(python), str(LAYOUT_SCRIPT), str(record_path), "--doc", "e2e-ocr-01",
-         "--output-dir", str(gate_dir)], capture_output=True, text=True, timeout=120)
-    criteria["review_gate_enforced"] = (
-        gate.returncode == 1 and (gate_dir / "review-template.json").exists()
-        and not (gate_dir / "layout.json").exists())
-    decisions = []
-    index = 0
-    while index < len(record["lines"]):
-        kind = _classify_review_line(record["lines"][index])
-        if kind["type"] == "table":
-            end = index
-            while (end + 1 < len(record["lines"])
-                   and _classify_review_line(record["lines"][end + 1])["type"] == "table"):
-                end += 1
-            decisions.append({"start_line": index + 1, "end_line": end + 1, **kind})
-            index = end + 1
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        raw = json.dumps(record, ensure_ascii=False).encode("utf-8")
+        record_path = root / "record.json"
+        record_path.write_bytes(raw)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_ocr_to_layout", LAYOUT_SCRIPT)
+        layout_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(layout_mod)
+        digest = layout_mod.record_digest(record)  # 单一事实源：与 converter 同一摘要算法
+        gate_dir = root / "gate"
+        gate = subprocess.run(
+            [str(python), str(LAYOUT_SCRIPT), str(record_path), "--doc", "e2e-ocr-01",
+             "--output-dir", str(gate_dir)], capture_output=True, text=True, timeout=120)
+        criteria["review_gate_enforced"] = (
+            gate.returncode == 1 and (gate_dir / "review-template.json").exists()
+            and not (gate_dir / "layout.json").exists())
+        decisions = []
+        index = 0
+        while index < len(record["lines"]):
+            kind = _classify_review_line(record["lines"][index])
+            if kind["type"] == "table":
+                end = index
+                while (end + 1 < len(record["lines"])
+                       and _classify_review_line(record["lines"][end + 1])["type"] == "table"):
+                    end += 1
+                decisions.append({"start_line": index + 1, "end_line": end + 1, **kind})
+                index = end + 1
+            else:
+                decisions.append({"start_line": index + 1, "end_line": index + 1, **kind})
+                index += 1
+        review_path = root / "review-decisions.json"
+        review_path.write_text(json.dumps(
+            {"record_sha256": digest, "reviewer": "e2e-release-check", "decisions": decisions},
+            ensure_ascii=False), encoding="utf-8")
+        reviewed_dir = root / "reviewed"
+        conv = subprocess.run(
+            [str(python), str(LAYOUT_SCRIPT), str(record_path), "--review", str(review_path),
+             "--doc", "e2e-ocr-01", "--output-dir", str(reviewed_dir)],
+            capture_output=True, text=True, timeout=120)
+        layout_path = reviewed_dir / "layout.json"
+        criteria["layout_emitted"] = conv.returncode == 0 and layout_path.exists()
+        if criteria["layout_emitted"]:
+            layout = json.loads(layout_path.read_text(encoding="utf-8"))
+            nodes = layout.get("nodes", [])
+            result["layout"] = {
+                "node_types": sorted({n.get("type") for n in nodes}),
+                "record_sha256": layout.get("ocr_record_sha256"),
+                "node_count": len(nodes)}
+            criteria["layout_bound_to_source"] = bool(nodes) and layout.get("ocr_record_sha256") == digest and all(
+                n.get("ocr_source", {}).get("record_sha256") == digest for n in nodes)
+            review_result = json.loads((reviewed_dir / "review.json").read_text(encoding="utf-8"))
+            criteria["no_pending_blockers"] = review_result.get("review_items") == []
         else:
-            decisions.append({"start_line": index + 1, "end_line": index + 1, **kind})
-            index += 1
-    review_path = root / "review-decisions.json"
-    review_path.write_text(json.dumps(
-        {"record_sha256": digest, "reviewer": "e2e-release-check", "decisions": decisions},
-        ensure_ascii=False), encoding="utf-8")
-    reviewed_dir = root / "reviewed"
-    conv = subprocess.run(
-        [str(python), str(LAYOUT_SCRIPT), str(record_path), "--review", str(review_path),
-         "--doc", "e2e-ocr-01", "--output-dir", str(reviewed_dir)],
-        capture_output=True, text=True, timeout=120)
-    layout_path = reviewed_dir / "layout.json"
-    criteria["layout_emitted"] = conv.returncode == 0 and layout_path.exists()
-    if criteria["layout_emitted"]:
-        layout = json.loads(layout_path.read_text(encoding="utf-8"))
-        nodes = layout.get("nodes", [])
-        result["layout"] = {
-            "node_types": sorted({n.get("type") for n in nodes}),
-            "record_sha256": layout.get("ocr_record_sha256"),
-            "node_count": len(nodes)}
-        criteria["layout_bound_to_source"] = bool(nodes) and layout.get("ocr_record_sha256") == digest and all(
-            n.get("ocr_source", {}).get("record_sha256") == digest for n in nodes)
-        review_result = json.loads((reviewed_dir / "review.json").read_text(encoding="utf-8"))
-        criteria["no_pending_blockers"] = review_result.get("review_items") == []
-    else:
-        criteria["layout_bound_to_source"] = False
-        criteria["no_pending_blockers"] = False
-        result["detail"] = f"布局未产出：converter exit={conv.returncode} {conv.stderr.strip()[-200:]}"
+            criteria["layout_bound_to_source"] = False
+            criteria["no_pending_blockers"] = False
+            result["detail"] = f"布局未产出：converter exit={conv.returncode} {conv.stderr.strip()[-200:]}"
+    finally:
+        if own_workdir:
+            shutil.rmtree(root, ignore_errors=True)
     result["passed"] = all(criteria.values())
     result["elapsed_seconds"] = round(time.monotonic() - started, 3)
     return result
@@ -399,13 +405,13 @@ def _persistence_factory(token, env_extra):
 
 def build_app(output) -> Path:
     """子进程 desktop/build_bundle.py --output <dir> 构建 .app，返回其路径。"""
-    output = Path(output)
+    output = Path(output).resolve()
     proc = subprocess.run(
-        [sys.executable, "desktop/build_bundle.py", "--output", str(output)],
-        capture_output=True, text=True, timeout=3600)
+        [sys.executable, str(REPO_ROOT / "desktop/build_bundle.py"), "--output", str(output)],
+        cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=3600)
     if proc.returncode != 0:
         raise PreflightError(f"构建 .app 失败：{(proc.stderr or proc.stdout)[-500:]}")
-    apps = sorted(Path(output).glob("*.app"))
+    apps = sorted(output.glob("*.app"))
     if not apps:
         raise PreflightError(f"构建产物缺少 .app：{output}")
     return apps[-1]
@@ -430,7 +436,8 @@ def smoke_app(app_path, *, timeout=30.0, popen_factory=subprocess.Popen,
     """
     started = time.monotonic()
     criteria = {"app_launched": False, "nodeinfo_ready": False,
-                "sigterm_bounded_exit": False, "graceful_exit_code": False}
+                "sigterm_bounded_exit": False, "graceful_exit_code": False,
+                "session_stopped": False}
     result = {"id": "E2E-5", "passed": False, "criteria": criteria, "detail": ""}
     app_path = Path(app_path)
     try:
@@ -438,10 +445,12 @@ def smoke_app(app_path, *, timeout=30.0, popen_factory=subprocess.Popen,
     except OSError:
         exec_name = ""  # 仅测试注入假件时到此；真 .app 缺 plist 会在拉起时响亮失败
     binary = app_path / "Contents/MacOS" / (exec_name or app_path.stem)
+    own_state = state_dir is None
     state = Path(state_dir) if state_dir else Path(tempfile.mkdtemp(prefix="e2e5-"))
-    proc = popen_factory([str(binary), "--state-dir", str(state), "--port", str(_free_port())],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = None
     try:
+        proc = popen_factory([str(binary), "--state-dir", str(state), "--port", str(_free_port())],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         session = None
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -472,13 +481,25 @@ def smoke_app(app_path, *, timeout=30.0, popen_factory=subprocess.Popen,
                 proc.wait(timeout=5.0)
                 criteria["sigterm_bounded_exit"] = True
                 criteria["graceful_exit_code"] = proc.returncode == 0
+                path = state / "session.json"
+                if not path.exists():
+                    criteria["session_stopped"] = True
+                else:
+                    try:
+                        after = json.loads(path.read_text(encoding="utf-8"))
+                    except ValueError:
+                        after = None
+                    criteria["session_stopped"] = isinstance(after, dict) and after.get("running") is False
             except subprocess.TimeoutExpired:
                 result["detail"] = "SIGTERM 后 5 秒未退出（#50 契约违约）"
     finally:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        if own_state:
+            shutil.rmtree(state, ignore_errors=True)
     if not all(criteria.values()) and not result["detail"]:
         result["detail"] = "冒烟判据未全过：" + ",".join(k for k, v in criteria.items() if not v)
     result["passed"] = all(criteria.values())
@@ -563,10 +584,10 @@ def _run_scenarios(args, repair_model, state):
             wait_ready(call)
         if want("E2E-1"):
             print("[e2e] E2E-1 编译场景…")
-            results.append(run_e2e1_compile(call, Path("samples/docs")))
+            results.append(run_e2e1_compile(call, REPO_ROOT / "samples/docs"))
         if want("E2E-2"):
             print("[e2e] E2E-2 修复场景（确定性补定界符，保留缺项）…")
-            results.append(run_e2e2_repair(call, Path("samples/research/smoke_cases.json")))
+            results.append(run_e2e2_repair(call, REPO_ROOT / "samples/research/smoke_cases.json"))
     finally:
         if proc is not None:
             proc.terminate()
@@ -576,14 +597,14 @@ def _run_scenarios(args, repair_model, state):
                 proc.kill()
     if want("E2E-3"):
         print("[e2e] E2E-3 OCR→布局场景（真实模型，可能较久）…")
-        results.append(run_e2e3_ocr(Path("samples/ocr"), model=args.ocr_model,
+        results.append(run_e2e3_ocr(REPO_ROOT / "samples/ocr", model=args.ocr_model,
                                     base=args.models_base))
     if want("E2E-4"):
         print("[e2e] E2E-4 持久化场景（两起两停后端）…")
         results.append(run_e2e4_persistence(_persistence_factory(token, backend_env)))
     if want("E2E-5"):
         print("[e2e] E2E-5 .app 构建与冒烟（构建可能较久）…")
-        output = Path("dist-app")
+        output = REPO_ROOT / "dist-app"
         shutil.rmtree(output, ignore_errors=True)
         app = build_app(output)
         results.append(smoke_app(app))

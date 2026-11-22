@@ -1,20 +1,21 @@
 ---
 name: doc-layout-parse
-description: Prepare inputs for TeXada document checks. Use for a supplied layout.json tree or for routing images and PDFs through the local Studio transcription workflow. Distinguish reviewable page LaTeX from structured layout extraction.
+description: Prepare inputs for TeXada document checks. Use for a supplied layout.json tree, reviewed line-to-layout conversion via doc-ocr-extract, or routing images and PDFs through the local Studio transcription workflow. Distinguish reviewable page LaTeX from structured layout extraction.
 ---
 
 # Document Input Preparation
 
 ## Choose the input route
 
-The repository has two implemented routes. Select from the user's source and intended output:
+The repository has three implemented routes. Select from the user's source and intended output:
 
 | Source and goal | Route | Output |
 | --- | --- | --- |
 | Existing document nodes for CLI formula/table checks | Inspect a supplied `layout.json`, then use the harness | Node checks, candidates and a report |
+| Page image to CLI `layout.json` via reviewed OCR lines | Run [doc-ocr-extract](../doc-ocr-extract/SKILL.md) (`scripts/ocr_extract.py`), review all candidate lines, then convert with [`scripts/ocr_to_layout.py`](../doc-ocr-extract/LAYOUT.md) | Hash-bound `layout.json` (plus optional operator-annotated pixel regions) after explicit accept/reject decisions |
 | PNG, JPEG, WebP or PDF to edit as LaTeX | Use Studio's image/PDF import with the configured local vision model | Page transcriptions merged into a reviewable `.tex` candidate |
 
-Read [input contracts and layout proposals](references/vlm-prompts.md) for the relevant request and output fields. Do not treat the Studio candidate as a `layout.json` tree.
+Read [input contracts and layout proposals](references/vlm-prompts.md) for the relevant request and output fields. Do not treat the Studio `.tex` candidate as a `layout.json` tree.
 
 ## Supplied layout tree
 
@@ -28,8 +29,8 @@ Read [input contracts and layout proposals](references/vlm-prompts.md) for the r
 - Open the local Studio WebUI and use image/PDF import. Its authenticated `POST /api/studio/import` calls `LocalRuntime.import_document`; no separate `scripts/parse.py` exists.
 - Import only the user's chosen source. The local route accepts a file up to 12 MiB, sends image content to an explicitly configured loopback vision endpoint, and handles at most five PDF pages per request. PDF rasterization requires `pdfinfo` and `pdftoppm`.
 - Keep the original file and inspect the returned pages and LaTeX against it, including formulas, notation, page coverage and `[UNREADABLE]` spans. `requires_review: true` means a candidate awaits review; the import does not save over an existing document. Creating a new Studio document is a separate explicit action.
-- Preserve the import ID, source/content hashes and available page metadata when the user needs provenance. Report the actual imported page range; a request starting after page 1 or returning `has_more_pages: true` does not cover the whole PDF. The API supports `page_start`; the current import dialog selects a page limit and starts at page 1.
-- Compilation or a syntax check can help inspect the candidate, but neither establishes OCR fidelity or mathematical correctness. For CLI checking afterward, prepare an explicit layout tree from reviewed content; no automatic Studio-to-layout converter is implemented.
+- Preserve the import ID, source/content hashes and available page metadata when the user needs provenance. Report the actual imported page range; a request starting after page 1 or returning `has_more_pages: true` does not cover the whole PDF. Both `POST /api/studio/import` and Studio's import UI support `page_start` alongside batch page limits (`1`, `3`, `5`), per-page exclusion or splitting into separate `.tex` documents during review, and continuation batching when `has_more_pages: true`.
+- Compilation or a syntax check can help inspect the candidate, but neither establishes OCR fidelity or mathematical correctness. No automatic Studio-`.tex`-to-`layout.json` converter is implemented; for CLI checking afterward, prepare an explicit `layout.json` from reviewed content or use the reviewed [doc-ocr-extract](../doc-ocr-extract/SKILL.md) + `ocr_to_layout.py` line workflow on page images.
 
 ## Scope and runtime loading
 

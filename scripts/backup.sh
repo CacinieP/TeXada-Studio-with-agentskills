@@ -13,6 +13,11 @@ git -C "$REPO_DIR" bundle create "$BUNDLE" --all
 git -C "$REPO_DIR" bundle verify "$BUNDLE"
 echo "备份完成: $BUNDLE"
 
-# 只保留最近 10 份
-ls -1t "$BACKUP_DIR"/*.bundle 2>/dev/null | tail -n +11 | xargs -r rm -- 
+# 只保留最近 10 份自动时间戳备份（兼容含空格路径与 macOS Bash 3.2，不误删手动快照）
+shopt -s nullglob
+LC_COLLATE=C
+bundles=("$BACKUP_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]*.bundle)
+if [ "${#bundles[@]}" -gt 10 ]; then
+  rm -- "${bundles[@]:0:${#bundles[@]}-10}"
+fi
 echo "（保留最近 10 份备份）"
