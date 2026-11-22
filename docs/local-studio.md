@@ -43,12 +43,22 @@
 
 ## 首次准备与离线使用
 
-需要 Python 3.11+；本轮开发和验证环境使用 3.13。先在项目目录准备虚拟环境：
+需要 Python 3.11+；开发和双系统回归 CI（`ubuntu-latest` + `windows-latest`）使用 Python 3.13。先在项目目录准备虚拟环境：
+
+macOS / Linux：
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r webui/requirements.txt
 .venv/bin/python scripts/run-local-studio.py --check
+```
+
+Windows（PowerShell 或命令提示符）：
+
+```powershell
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r webui\requirements.txt
+.venv\Scripts\python.exe scripts\run-local-studio.py --check
 ```
 
 `--check` 只检查 Python 依赖、可选工具和配置，不探测模型、不启动服务、不写会话。缺少依赖时给出提示，不会自动安装。
@@ -57,14 +67,14 @@ Monaco 编辑器及其字体、工作线程资源已随源码提供。安装依�
 
 ### 准备 PDF 编译资源
 
-PDF 预览需要 Tectonic 和 Poppler。Poppler（`pdftoppm`、`pdfinfo`）用系统包管理器安装（macOS：`brew install poppler`）；Tectonic 可一键自举：在 Studio 设置面板点「下载 Tectonic」，或运行
+PDF 预览需要 Tectonic 和 Poppler。Tectonic 支持 macOS、Linux 与 Windows x64 一键自举（在 Studio 设置面板点「下载 Tectonic」，或运行下方脚本）；Poppler（`pdftoppm`、`pdfinfo`）在 macOS 可通过 `brew install poppler` 或设置面板安装，在 Windows 可通过设置面板「安装 Poppler」自动下载校验官方固定版本 `poppler-windows`（`v26.09.0-0`）到 `~/.texada/bin` 与 `~/.texada/share/poppler`，在 Linux 请用系统包管理器安装 `poppler-utils`：
 
 ```bash
-.venv/bin/python scripts/install_local_tools.py          # 下载到 ~/.texada/bin 并校验 SHA256
+.venv/bin/python scripts/install_local_tools.py          # Windows 用 .venv\Scripts\python.exe；下载到 ~/.texada/bin 并校验 SHA256
 .venv/bin/python scripts/install_local_tools.py --status # 查看安装状态
 ```
 
-下载固定为官方 Release（`tectonic@0.17.0`），按平台选择资产、校验 SHA256 后原子安装；本地启动器会把 `~/.texada/bin` 自动加入 `PATH`，已在运行的会话安装后无需重启。也可以自行把 `tectonic` 放入 `PATH`，或用 `TECTONIC` 环境变量明确指定本机编译器。
+下载固定为官方 Release（`tectonic@0.17.0`，Windows 为 `tectonic-0.17.0-x86_64-pc-windows-msvc.zip`），按平台选择资产、校验 SHA256 后原子安装；本地启动器会把 `~/.texada/bin` 自动加入 `PATH`，已在运行的会话安装后无需重启。也可以自行把 `tectonic` / `tectonic.exe` 放入 `PATH`，或用 `TECTONIC` 环境变量明确指定本机编译器。
 
 先离线检查中文、公式、表格与两页 PDF 所需资源：
 
@@ -85,21 +95,24 @@ PDF 预览需要 Tectonic 和 Poppler。Poppler（`pdftoppm`、`pdfinfo`）用�
 
 ### 启动和退出
 
-macOS 可双击 `scripts/start-local-studio.command`，或运行：
+macOS 可双击 `scripts/start-local-studio.command`，Windows 可双击 `scripts/start-local-studio.bat`，或在终端运行：
 
 ```bash
-./scripts/start-local-studio.command
+./scripts/start-local-studio.command      # macOS / Linux
+scripts\start-local-studio.bat            # Windows
 ```
 
 启动器使用项目 `.venv`，打开本机浏览器，默认监听 `127.0.0.1:8888`。访问凭据不会打印；私密入口只写入用户数据目录的 `session.json`。不要把该文件或带访问参数的地址放进截图、报告、仓库或公开分享。
 
 按启动终端中的 `Ctrl+C` 停止。启动器只停止自己启动的模型，不会关闭已经存在的 Ollama 或 llama-server 服务。
 
-macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口，复用已有会话或自启后端，详见 [desktop/README](../desktop/README.md)）：
+macOS 与 Windows 还提供自包含桌面发行包及本地构建脚本（macOS 使用 WKWebView 独立窗口，Windows 使用系统内置 Edge WebView2 独立窗口，详见 [desktop/README](../desktop/README.md)）：
 
 ```bash
 .venv/bin/pip install -r desktop/requirements.txt
-.venv/bin/python desktop/build_app.py    # 生成 dist/TeXada Studio.app
+.venv/bin/python desktop/build_app.py                     # macOS 薄壳：dist/TeXada Studio.app
+.venv/bin/python desktop/build_bundle.py                  # macOS 自包含包
+.venv\Scripts\python.exe desktop\build_windows_bundle.py  # Windows x64 自包含便携包：dist-win\TeXada Studio
 ```
 
 需要自行打开浏览器、调整端口或选择数据目录时：
@@ -116,10 +129,10 @@ macOS 还可以生成桌面窗口应用（WKWebView 独立窗口 + Dock 入口�
 
 ## 本机模型连接
 
-自包含 macOS 安装包可在「本地模型 → Studio 管理的模型」选择 MiniCPM-V 4.7
+自包含 macOS 安装包与 Windows 便携包可在「本地模型 → Studio 管理的模型」选择 MiniCPM-V 4.7
 1B（约 1.8 GB）或 35B-A3B（约 22.3 GB），点击「下载模型」，校验完成后点击
 「启动并使用」。权重与视觉投影来自 OpenBMB，支持续传与 SHA-256 校验。
-Studio 在本机启动 llama-server，该模型同时供修复与图片转写使用。
+Studio 在本机启动 `llama-server`（Windows 为无控制台弹窗的 `llama-server.exe`），该模型同时供修复与图片转写使用。
 关闭 Studio 或点击「停止」会结束它启动的模型。此前保存的本机服务连接
 会重新生效。源码运行需先安装兼容的 llama.cpp（build 11609 或更新版本）。
 
@@ -179,7 +192,7 @@ Studio 在本机启动 llama-server，该模型同时供修复与图片转写使
 | Windows | `%LOCALAPPDATA%/TeXada Studio` |
 | Linux | `$XDG_DATA_HOME/texada-studio`，未设置时为 `~/.local/share/texada-studio` |
 
-可使用 `--state-dir` 或 `TEXADA_STUDIO_STATE_DIR` 另选目录。当前实际验收以 macOS 为主；提供路径分支不代表已经完成 Windows/Linux 实机验收。
+可使用 `--state-dir` 或 `TEXADA_STUDIO_STATE_DIR` 另选目录。GitHub Actions 回归工作流同时在 `ubuntu-latest` 与 `windows-latest` 验证全部 Python 与 JavaScript 套件，并在 `windows-bundle.yml` 中构建和冒烟验证 Windows x64 自包含便携包。
 
 | 内容 | 位置与含义 |
 | --- | --- |

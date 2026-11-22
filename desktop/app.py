@@ -29,14 +29,64 @@ import urllib.request
 from urllib.parse import quote
 from pathlib import Path
 
+def _default_venv_python(repo_root: Path = Path(__file__).resolve().parents[1], *, os_name: str | None = None) -> Path:
+    effective_os = os_name if os_name is not None else os.name
+    if effective_os == "nt":
+        return repo_root / ".venv" / "Scripts" / "python.exe"
+    return repo_root / ".venv" / "bin" / "python"
+
+
+def _default_state_dir(
+    *,
+    platform_name: str | None = None,
+    os_name: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    source_env = os.environ if env is None else env
+    override = source_env.get("TEXADA_STUDIO_STATE_DIR")
+    if override:
+        return Path(override).expanduser()
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Application Support" / "TeXada Studio"
+    if effective_os == "nt":
+        local_appdata = source_env.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local")
+        return Path(local_appdata) / "TeXada Studio"
+    xdg_data = source_env.get("XDG_DATA_HOME") or str(user_home / ".local" / "share")
+    return Path(xdg_data) / "texada-studio"
+
+
+def _default_tex_cache_target(
+    *,
+    platform_name: str | None = None,
+    os_name: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    source_env = os.environ if env is None else env
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Caches" / "TectonicProject.Tectonic"
+    if effective_os == "nt":
+        local_appdata = source_env.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local")
+        return Path(local_appdata) / "TectonicProject" / "Tectonic" / "Cache"
+    xdg_cache = source_env.get("XDG_CACHE_HOME") or str(user_home / ".cache")
+    return Path(xdg_cache) / "Tectonic"
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_DIR = Path(os.environ["TEXADA_BUNDLE_DIR"]).resolve() if os.environ.get("TEXADA_BUNDLE_DIR") else None
 LAUNCHER = (BUNDLE_DIR or REPO_ROOT) / "scripts" / "run-local-studio.py"
-VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
-DEFAULT_STATE_DIR = Path.home() / "Library" / "Application Support" / "TeXada Studio"
+VENV_PYTHON = _default_venv_python(REPO_ROOT)
+DEFAULT_STATE_DIR = _default_state_dir()
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 TEX_CACHE_SOURCE = BUNDLE_DIR / "tex-cache" if BUNDLE_DIR else None
-TEX_CACHE_TARGET = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
+TEX_CACHE_TARGET = _default_tex_cache_target()
 
 
 def tool_bin_dirs():
@@ -79,16 +129,51 @@ def read_entry(state_dir: Path):
     if not token or parts.username or parts.password or parts.fragment:
         return None
     pid = record.get("pid")
-    return {"url": url, "pid": pid if isinstance(pid, int) else None,
+    return {"url": url, "pid": pid if type(pid) is int and pid >= 1 else None,
             "running": record.get("running") is True}
+
+
+def _win32_pid_alive(pid: int) -> bool:
+    import ctypes
+
+    windll = getattr(ctypes, "windll", None)
+    if isinstance(windll, ctypes.LibraryLoader) and hasattr(ctypes, "WinDLL"):
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+    elif windll is not None:
+        kernel32 = windll.kernel32
+    else:
+        return False
+
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == 5
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 0x00000102
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def entry_alive(entry) -> bool:
     """会话记录是否指向一个仍在运行的启动器进程。"""
-    if not entry or not entry["running"] or not isinstance(entry.get("pid"), int):
+    if not entry or not entry["running"]:
         return False
+    pid = entry.get("pid")
+    if type(pid) is not int or pid < 1:
+        return False
+    if os.name == "nt":
+        return _win32_pid_alive(pid)
     try:
-        os.kill(entry["pid"], 0)
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
     except OSError:
         return False
     return True
@@ -201,12 +286,18 @@ def seed_tex_cache(source=None, target=None, copier=None):
         if destination.exists():
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=destination.parent) as staging:
-            shutil.copyfile(entry, staging.name)
+        staging = destination.parent / f".{destination.name}.tmp-{os.getpid()}-{secrets.token_hex(6)}"
+        try:
+            shutil.copyfile(entry, staging)
             try:
-                os.link(staging.name, destination)
+                os.link(staging, destination)
             except FileExistsError:
                 continue
+            except OSError:
+                if not destination.exists():
+                    os.replace(staging, destination)
+        finally:
+            staging.unlink(missing_ok=True)
         copied = True
     return copied
 
@@ -218,6 +309,8 @@ def start_backend_thread(state_dir: Path, port, server_box: dict):
         return server_box
 
     seed_tex_cache()
+    if os.name == "nt" and TEX_CACHE_TARGET.is_dir():
+        os.environ.setdefault("TECTONIC_CACHE_DIR", str(TEX_CACHE_TARGET))
     state_dir.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     os.environ.update({

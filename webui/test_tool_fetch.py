@@ -8,6 +8,7 @@ import os
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -18,7 +19,7 @@ import tool_fetch
 def build_release_archive(members, compression="gz"):
     """构造发布 tar.gz;members 为 {相对路径: 字节}。"""
     buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode=f"w:gz") as archive:
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
         for name, payload in members.items():
             info = tarfile.TarInfo(name)
             info.size = len(payload)
@@ -27,7 +28,17 @@ def build_release_archive(members, compression="gz"):
     return buffer.getvalue()
 
 
+def build_zip_archive(members):
+    """构造内存 .zip 发布包;members 为 {相对路径: 字节}。"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in members.items():
+            archive.writestr(name, payload)
+    return buffer.getvalue()
+
+
 VALID_BINARY = b"#!/bin/sh\necho tectonic-fixture\n"
+VALID_WINDOWS_EXE = b"MZ\x90\x00tectonic-windows-fixture"
 
 
 def valid_payload():
@@ -41,12 +52,38 @@ class PlatformKeyTests(unittest.TestCase):
         self.assertEqual(tool_fetch.platform_key("darwin", "x86_64"), "darwin-x86_64")
         self.assertEqual(tool_fetch.platform_key("linux", "x86_64"), "linux-x86_64")
         self.assertEqual(tool_fetch.platform_key("linux", "aarch64"), "linux-aarch64")
-        self.assertIsNone(tool_fetch.platform_key("win32", "AMD64"), "未适配平台返回 None")
+        self.assertEqual(tool_fetch.platform_key("win32", "AMD64"), "win32-x86_64")
+        self.assertEqual(tool_fetch.platform_key("win32", "x86_64"), "win32-x86_64")
+        self.assertIsNone(tool_fetch.platform_key("win32", "ARM64"), "未适配架构返回 None")
+        self.assertIsNone(tool_fetch.platform_key("freebsd", "x86_64"), "未适配平台返回 None")
+
+    def test_pinned_windows_constants_and_binary_names(self):
+        self.assertEqual(
+            tool_fetch.TECTONIC_ASSETS.get("win32-x86_64"),
+            (
+                "tectonic-0.17.0-x86_64-pc-windows-msvc.zip",
+                "f61ce51f0b0ade1015b7de7ef368541c5424e9756ecbd0d7af97d6d48030845f",
+            ),
+        )
+        self.assertEqual(tool_fetch.POPPLER_WINDOWS_VERSION, "26.09.0-0")
+        self.assertEqual(
+            tool_fetch.POPPLER_WINDOWS_URL,
+            "https://github.com/oschwartz10612/poppler-windows/releases/download/v26.09.0-0/Release-26.09.0-0.zip",
+        )
+        self.assertEqual(
+            tool_fetch.POPPLER_WINDOWS_SHA256,
+            "7a6f256a0ddf7536182246a5733331bf4677cbcc34f4663774947ad34556c8d0",
+        )
+        self.assertEqual(tool_fetch.tectonic_binary_name("win32"), "tectonic.exe")
+        self.assertEqual(tool_fetch.tectonic_binary_name("darwin"), "tectonic")
+        self.assertEqual(tool_fetch.tectonic_binary_name("linux"), "tectonic")
 
     def test_download_url_is_pinned_release(self):
         url = tool_fetch.tectonic_download_url("darwin-arm64")
         self.assertIn(tool_fetch.RELEASE_TAG, url)
         self.assertIn("aarch64-apple-darwin", url)
+        win_url = tool_fetch.tectonic_download_url("win32-x86_64")
+        self.assertIn("x86_64-pc-windows-msvc.zip", win_url)
 
     def test_download_url_rejects_unsupported_platform(self):
         with self.assertRaises(tool_fetch.ToolFetchError):
@@ -82,13 +119,57 @@ class InstallTectonicTests(unittest.TestCase):
         self.assertEqual(calls, [tool_fetch.tectonic_download_url(key)])
         self.assertTrue(result["ok"])
         self.assertEqual(result["sha256"], digest)
-        installed = self.bin_dir / "tectonic"
+        binary_name = tool_fetch.tectonic_binary_name()
+        installed = self.bin_dir / binary_name
         self.assertEqual(installed.read_bytes(), VALID_BINARY)
         self.assertTrue(os.access(installed, os.X_OK), "安装后必须可执行")
-        self.assertEqual((self.bin_dir / "tectonic.version").read_text().strip(),
+        self.assertEqual((self.bin_dir / "tectonic.version").read_text(encoding="utf-8").strip(),
                          tool_fetch.TECTONIC_VERSION)
         self.assertTrue(progress_seen, "进度回调被调用")
-        self.assertFalse((self.bin_dir / ".tectonic.tmp").exists(), "临时文件已被原子替换")
+        self.assertFalse((self.bin_dir / f".{binary_name}.tmp").exists(), "临时文件已被原子替换")
+
+    def test_install_windows_zip_extracts_tectonic_exe_and_updates_status(self):
+        payload = build_zip_archive({
+            "tectonic-0.17.0/tectonic.exe": VALID_WINDOWS_EXE,
+            "tectonic-0.17.0/README.md": b"windows release notes",
+        })
+        digest = hashlib.sha256(payload).hexdigest()
+        with mock.patch.object(tool_fetch.sys, "platform", "win32"), \
+                mock.patch.object(tool_fetch.platform_module, "machine", return_value="AMD64"), \
+                mock.patch.object(tool_fetch.shutil, "which", return_value=None), \
+                mock.patch.dict(
+                    tool_fetch.TECTONIC_ASSETS,
+                    {"win32-x86_64": ("tectonic-0.17.0-x86_64-pc-windows-msvc.zip", digest)},
+                ):
+            fetch, calls = self.fetch_fixed(payload)
+            result = tool_fetch.install_tectonic(self.bin_dir, fetch=fetch)
+            status = tool_fetch.tectonic_status(self.bin_dir)
+
+        self.assertEqual(calls, [tool_fetch.tectonic_download_url("win32-x86_64")])
+        installed = self.bin_dir / "tectonic.exe"
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["path"], str(installed))
+        self.assertEqual(installed.read_bytes(), VALID_WINDOWS_EXE)
+        self.assertEqual(status["installed_path"], str(installed))
+        self.assertEqual(status["installed_version"], tool_fetch.TECTONIC_VERSION)
+
+    def test_install_windows_zip_rejects_missing_or_ambiguous_binary(self):
+        for members in (
+            {"README.txt": b"no exe"},
+            {"a/tectonic.exe": VALID_WINDOWS_EXE, "b/tectonic.exe": VALID_WINDOWS_EXE},
+        ):
+            payload = build_zip_archive(members)
+            digest = hashlib.sha256(payload).hexdigest()
+            with self.subTest(members=list(members)), \
+                    mock.patch.object(tool_fetch.sys, "platform", "win32"), \
+                    mock.patch.object(tool_fetch.platform_module, "machine", return_value="AMD64"), \
+                    mock.patch.dict(
+                        tool_fetch.TECTONIC_ASSETS,
+                        {"win32-x86_64": ("tectonic-0.17.0-x86_64-pc-windows-msvc.zip", digest)},
+                    ):
+                fetch, _ = self.fetch_fixed(payload)
+                with self.assertRaisesRegex(tool_fetch.ToolFetchError, "tectonic"):
+                    tool_fetch.install_tectonic(self.bin_dir, fetch=fetch)
 
     def test_install_rejects_digest_mismatch(self):
         payload = valid_payload()
@@ -99,7 +180,7 @@ class InstallTectonicTests(unittest.TestCase):
             fetch, _ = self.fetch_fixed(payload)
             with self.assertRaisesRegex(tool_fetch.ToolFetchError, "SHA256"):
                 tool_fetch.install_tectonic(self.bin_dir, fetch=fetch)
-        self.assertFalse((self.bin_dir / "tectonic").exists(), "校验失败不落盘")
+        self.assertFalse((self.bin_dir / tool_fetch.tectonic_binary_name()).exists(), "校验失败不落盘")
 
     def test_install_rejects_archive_without_binary(self):
         payload = build_release_archive({"tectonic-0.17.0/README.md": b"no binary"})
@@ -119,15 +200,21 @@ class InstallTectonicTests(unittest.TestCase):
     def test_status_reports_path_and_version(self):
         self.assertFalse(tool_fetch.tectonic_status(self.bin_dir)["installed_path"])
         self.bin_dir.mkdir(parents=True)
-        binary = self.bin_dir / "tectonic"
+        binary = self.bin_dir / tool_fetch.tectonic_binary_name()
         binary.write_bytes(VALID_BINARY)
-        (self.bin_dir / "tectonic.version").write_text("0.17.0\n")
+        (self.bin_dir / "tectonic.version").write_text("0.17.0\n", encoding="utf-8")
         status = tool_fetch.tectonic_status(self.bin_dir)
         self.assertEqual(status["installed_path"], str(binary))
         self.assertEqual(status["installed_version"], "0.17.0")
 
 
 class PopplerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "texada-home"
+        self.bin_dir = self.root / "bin"
+
     def test_status_reports_availability_and_brew(self):
         status = tool_fetch.poppler_status()
         self.assertIn("in_path", status)
@@ -169,6 +256,81 @@ class PopplerTests(unittest.TestCase):
         with mock.patch.object(tool_fetch.sys, "platform", "linux"):
             with self.assertRaisesRegex(tool_fetch.ToolFetchError, "macOS"):
                 tool_fetch.install_poppler(run=lambda argv, **kwargs: None)
+
+    def test_windows_install_poppler_verifies_sha256_and_extracts_bin_data_and_license(self):
+        payload = build_zip_archive({
+            "poppler-26.09.0/Library/bin/pdfinfo.exe": b"MZ-pdfinfo",
+            "poppler-26.09.0/Library/bin/pdftoppm.exe": b"MZ-pdftoppm",
+            "poppler-26.09.0/Library/bin/poppler.dll": b"MZ-poppler-dll",
+            "poppler-26.09.0/Library/share/poppler/cMap/Adobe-GB1/UniGB-UTF16-H": b"cmap-data",
+            "poppler-26.09.0/LICENSE": b"GPL-2.0-or-later license text\n",
+        })
+        digest = hashlib.sha256(payload).hexdigest()
+        seen_urls = []
+
+        def fetch(url, progress=None):
+            seen_urls.append(url)
+            if progress:
+                progress(len(payload), len(payload))
+            return payload
+
+        with mock.patch.object(tool_fetch, "POPPLER_WINDOWS_SHA256", digest):
+            result = tool_fetch.install_poppler(
+                bin_dir=self.bin_dir, fetch=fetch, platform_name="win32"
+            )
+
+        self.assertEqual(seen_urls, [tool_fetch.POPPLER_WINDOWS_URL])
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(result["tool"], "poppler")
+        self.assertEqual(result["method"], "github-release")
+        self.assertEqual(result["version"], "26.09.0-0")
+        self.assertEqual(Path(result["path"]), self.bin_dir.resolve())
+        self.assertEqual((self.bin_dir / "pdfinfo.exe").read_bytes(), b"MZ-pdfinfo")
+        self.assertEqual((self.bin_dir / "pdftoppm.exe").read_bytes(), b"MZ-pdftoppm")
+        self.assertEqual((self.bin_dir / "poppler.dll").read_bytes(), b"MZ-poppler-dll")
+        self.assertEqual(
+            (self.root / "share" / "poppler" / "cMap" / "Adobe-GB1" / "UniGB-UTF16-H").read_bytes(),
+            b"cmap-data",
+        )
+        license_dir = self.root / "licenses" / "poppler-windows"
+        self.assertEqual((license_dir / "LICENSE").read_bytes(), b"GPL-2.0-or-later license text\n")
+        self.assertTrue((license_dir / "NOTICE.txt").is_file())
+
+    def test_windows_install_poppler_rejects_sha256_mismatch(self):
+        payload = build_zip_archive({
+            "poppler-26.09.0/Library/bin/pdfinfo.exe": b"MZ-pdfinfo",
+            "poppler-26.09.0/Library/bin/pdftoppm.exe": b"MZ-pdftoppm",
+        })
+        with mock.patch.object(tool_fetch, "POPPLER_WINDOWS_SHA256", "0" * 64):
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "SHA256"):
+                tool_fetch.install_poppler(
+                    bin_dir=self.bin_dir, fetch=lambda url, progress=None: payload, platform_name="win32"
+                )
+        self.assertFalse(self.bin_dir.exists())
+
+    def test_windows_install_poppler_blocks_zip_slip_traversal(self):
+        outside_sentinel = Path(self.temp.name) / "escape.dll"
+        for malicious_member in (
+            "poppler-26.09.0/Library/bin/../../../escape.dll",
+            "../escape.dll",
+            "/abs/escape.dll",
+            "C:/Windows/escape.dll",
+        ):
+            payload = build_zip_archive({
+                "poppler-26.09.0/Library/bin/pdfinfo.exe": b"MZ-pdfinfo",
+                "poppler-26.09.0/Library/bin/pdftoppm.exe": b"MZ-pdftoppm",
+                malicious_member: b"evil",
+            })
+            digest = hashlib.sha256(payload).hexdigest()
+            with self.subTest(member=malicious_member), \
+                    mock.patch.object(tool_fetch, "POPPLER_WINDOWS_SHA256", digest):
+                with self.assertRaises(tool_fetch.ToolFetchError):
+                    tool_fetch.install_poppler(
+                        bin_dir=self.bin_dir,
+                        fetch=lambda url, progress=None: payload,
+                        platform_name="win32",
+                    )
+            self.assertFalse(outside_sentinel.exists(), "Zip-Slip 成员不得写出目录边界")
 
 
 if __name__ == "__main__":

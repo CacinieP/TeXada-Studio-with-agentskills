@@ -83,11 +83,12 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(argv[1:], [str(desktop_app.LAUNCHER), "--no-browser"])
 
     def test_argv_passes_port_and_custom_state_dir(self):
-        argv = desktop_app.launcher_argv(Path("/tmp/custom-state"), port=9001)
+        custom = Path("/tmp/custom-state")
+        argv = desktop_app.launcher_argv(custom, port=9001)
         self.assertIn("--port", argv)
         self.assertEqual(argv[argv.index("--port") + 1], "9001")
         self.assertIn("--state-dir", argv)
-        self.assertEqual(argv[argv.index("--state-dir") + 1], "/tmp/custom-state")
+        self.assertEqual(argv[argv.index("--state-dir") + 1], str(custom))
 
     def test_launcher_env_marks_orphan_exit_without_dropping_existing_values(self):
         env = desktop_app.launcher_env({"PATH": "/bin", "HOME": "/tmp"})
@@ -99,7 +100,7 @@ class LauncherTests(unittest.TestCase):
         first = desktop_app.prepend_dirs("/usr/bin", ["/a", "/b"])
         self.assertEqual(first, os.pathsep.join(["/a", "/b", "/usr/bin"]))
         self.assertEqual(desktop_app.prepend_dirs(first, ["/a", "/b"]), first, "重复前置不叠加")
-        self.assertEqual(desktop_app.prepend_dirs("", [Path("/x")]), "/x")
+        self.assertEqual(desktop_app.prepend_dirs("", [Path("/x")]), str(Path("/x")))
 
     def test_tool_bin_dirs_prepend_bundle_bin_when_bundled(self):
         import importlib
@@ -211,6 +212,7 @@ class BuildTests(unittest.TestCase):
             self.assertTrue(text.endswith("\n"))
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX wakeup pipe requires select() on pipe fd")
 class TerminateWatchdogTests(unittest.TestCase):
     """看门狗线程体:唤醒后有界等待,随后自行清理并强制退出。"""
 
@@ -593,7 +595,8 @@ class BundledBackendHygieneTests(unittest.TestCase):
 
         self.assertEqual(created_modes, [0o600], "_write_session 必须以 0o600 原子创建临时文件再替换")
         session_path = self.state / "session.json"
-        self.assertEqual(session_path.stat().st_mode & 0o777, 0o600)
+        if os.name == "posix":
+            self.assertEqual(session_path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(list(self.state.glob("*tmp*")), [])
 
         import socket
@@ -651,6 +654,7 @@ class StartupLifecycleTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertLess(elapsed, 0.5, "启动器子进程已退出时不应继续睡满 timeout")
 
+    @unittest.skipUnless(os.name == "posix", "POSIX SIGTERM subprocess delivery required")
     def test_sigterm_during_startup_wait_terminates_child_and_scrubs_session(self):
         repo = Path(__file__).resolve().parents[1]
         fake_launcher = Path(self.tmp.name) / "fake_launcher.py"
@@ -740,6 +744,7 @@ class StartupLifecycleTests(unittest.TestCase):
             proc.stdout.close()
             proc.stderr.close()
 
+    @unittest.skipUnless(os.name == "posix", "POSIX SIGTERM subprocess delivery required")
     def test_sigterm_during_bundled_wait_for_http_scrubs_session(self):
         import socket
 
@@ -1055,7 +1060,7 @@ class BundleAndIconHygieneTests(unittest.TestCase):
 
             with unittest.mock.patch.object(build_bundle.sys, "platform", "darwin"), \
                  unittest.mock.patch.object(Path, "exists", autospec=True,
-                                            side_effect=lambda self: True if str(self).endswith(".venv/bin/python")
+                                            side_effect=lambda self: True if self.as_posix().endswith(".venv/bin/python")
                                             else os.path.exists(self)), \
                  unittest.mock.patch.object(build_bundle.subprocess, "run", side_effect=fake_probe), \
                  unittest.mock.patch.object(build_bundle, "stage_resources", return_value={}), \
@@ -1088,7 +1093,10 @@ class BundleAndIconHygieneTests(unittest.TestCase):
             (cellar_poppler / "lib").mkdir(parents=True)
             brew_bin.mkdir(parents=True)
             opt_poppler.parent.mkdir(parents=True, exist_ok=True)
-            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+            opt_poppler.symlink_to(
+                os.path.relpath(cellar_poppler, opt_poppler.parent),
+                target_is_directory=True,
+            )
 
             real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
             real_pdfinfo.write_bytes(b"pdfinfo")
@@ -1145,7 +1153,10 @@ class BundleAndIconHygieneTests(unittest.TestCase):
             (cellar_llama / "libexec" / "bin").mkdir(parents=True)
             brew_bin.mkdir(parents=True)
             opt_poppler.parent.mkdir(parents=True, exist_ok=True)
-            opt_poppler.symlink_to(os.path.relpath(cellar_poppler, opt_poppler.parent))
+            opt_poppler.symlink_to(
+                os.path.relpath(cellar_poppler, opt_poppler.parent),
+                target_is_directory=True,
+            )
 
             real_pdfinfo = cellar_poppler / "bin" / "pdfinfo"
             real_pdfinfo.write_bytes(b"pdfinfo")
@@ -1227,6 +1238,337 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                     ("llama-server", "--version"),
                 ],
             )
+
+
+class WindowsDesktopAppTests(unittest.TestCase):
+    """Windows 进程存活探测、解释器路径、状态目录与 Tectonic 缓存目录契约。"""
+
+    def test_entry_alive_uses_win32_synchronize_without_os_kill(self):
+        import ctypes
+        import types
+
+        closed = []
+        fake_kernel32 = types.SimpleNamespace(
+            OpenProcess=unittest.mock.MagicMock(return_value=99),
+            WaitForSingleObject=unittest.mock.MagicMock(return_value=0x00000102),
+            CloseHandle=unittest.mock.MagicMock(side_effect=lambda h: closed.append(h) or 1),
+        )
+        fake_windll = types.SimpleNamespace(kernel32=fake_kernel32)
+        with unittest.mock.patch.object(desktop_app.os, "name", "nt"), \
+             unittest.mock.patch.object(desktop_app.os, "kill", side_effect=AssertionError("os.kill forbidden on Windows")), \
+             unittest.mock.patch.object(ctypes, "windll", fake_windll, create=True), \
+             unittest.mock.patch.object(ctypes, "get_last_error", return_value=0, create=True):
+            self.assertTrue(desktop_app.entry_alive({"pid": 4321, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+            fake_kernel32.OpenProcess.assert_called_once_with(0x00100000, False, 4321)
+            fake_kernel32.WaitForSingleObject.assert_called_once_with(99, 0)
+            self.assertEqual(closed, [99])
+
+            closed.clear()
+            fake_kernel32.WaitForSingleObject.return_value = 0
+            self.assertFalse(desktop_app.entry_alive({"pid": 4321, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+            self.assertEqual(closed, [99])
+
+            fake_kernel32.OpenProcess.return_value = 0
+            with unittest.mock.patch.object(ctypes, "get_last_error", return_value=5, create=True):
+                self.assertTrue(desktop_app.entry_alive({"pid": 7777, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+            with unittest.mock.patch.object(ctypes, "get_last_error", return_value=87, create=True):
+                self.assertFalse(desktop_app.entry_alive({"pid": 7777, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+            self.assertFalse(desktop_app.entry_alive({"pid": True, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+
+    def test_windows_and_linux_platform_paths(self):
+        fake_repo = Path("C:/repo")
+        fake_home = Path("C:/Profiles/tester")
+        self.assertEqual(
+            desktop_app._default_venv_python(fake_repo, os_name="nt"),
+            fake_repo / ".venv" / "Scripts" / "python.exe",
+        )
+        self.assertEqual(
+            desktop_app._default_venv_python(fake_repo, os_name="posix"),
+            fake_repo / ".venv" / "bin" / "python",
+        )
+        self.assertEqual(
+            desktop_app._default_state_dir(
+                platform_name="win32",
+                os_name="nt",
+                env={"LOCALAPPDATA": str(fake_home / "AppData" / "Local")},
+                home=fake_home,
+            ),
+            fake_home / "AppData" / "Local" / "TeXada Studio",
+        )
+        self.assertEqual(
+            desktop_app._default_state_dir(
+                platform_name="linux",
+                os_name="posix",
+                env={"XDG_DATA_HOME": "/var/tmp/xdg"},
+                home=Path("/home/tester"),
+            ),
+            Path("/var/tmp/xdg") / "texada-studio",
+        )
+        self.assertEqual(
+            desktop_app._default_tex_cache_target(
+                platform_name="win32",
+                os_name="nt",
+                env={"LOCALAPPDATA": str(fake_home / "AppData" / "Local")},
+                home=fake_home,
+            ),
+            fake_home / "AppData" / "Local" / "TectonicProject" / "Tectonic" / "Cache",
+        )
+
+
+class WindowsBundleBuilderTests(unittest.TestCase):
+    """离线单测:覆盖 ICO 生成、资源暂存、llama-server ZIP 校验/防越界、PyInstaller 外部目录隔离与冻结入口分发。"""
+
+    def _make_rgba_png(self, width: int, height: int) -> bytes:
+        import struct
+        import zlib
+
+        def chunk(tag: bytes, payload: bytes) -> bytes:
+            crc = zlib.crc32(tag + payload) & 0xFFFFFFFF
+            return struct.pack(">I4s", len(payload), tag) + payload + struct.pack(">I", crc)
+
+        raw = b"".join(b"\x00" + (b"\x10\x40\x90\xff" * width) for _ in range(height))
+        ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", zlib.compress(raw, 9))
+            + chunk(b"IEND", b"")
+        )
+
+    def _make_zip(self, members: dict[str, bytes]) -> bytes:
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for name, content in members.items():
+                zf.writestr(name, content)
+        return buf.getvalue()
+
+    def test_build_icon_generates_valid_vista_png_in_ico_from_master_and_small_png(self):
+        import struct
+        import build_windows_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            ico_path = build_windows_bundle.build_icon(workdir)
+            self.assertIsNotNone(ico_path)
+            raw = ico_path.read_bytes()
+            reserved, ico_type, count = struct.unpack("<HHH", raw[:6])
+            self.assertEqual((reserved, ico_type), (0, 1), "ICO 头部魔数必须为 00 00 01 00")
+            self.assertGreaterEqual(count, 1)
+            for idx in range(count):
+                entry = raw[6 + idx * 16: 6 + (idx + 1) * 16]
+                w_b, h_b, _cc, _res, planes, bpp, size, offset = struct.unpack("<BBBBHHII", entry)
+                self.assertEqual(planes, 1)
+                self.assertEqual(bpp, 32)
+                frame = raw[offset: offset + size]
+                self.assertEqual(frame[:8], b"\x89PNG\r\n\x1a\n", "ICO 帧必须内嵌合法 PNG")
+                png_w, png_h = struct.unpack(">II", frame[16:24])
+                self.assertLessEqual(png_w, 256, "Windows user32 图标帧不得超过 256px")
+                self.assertLessEqual(png_h, 256)
+                self.assertEqual(w_b, 0 if png_w == 256 else png_w)
+                self.assertEqual(h_b, 0 if png_h == 256 else png_h)
+
+            small_png = workdir / "small.png"
+            small_bytes = self._make_rgba_png(32, 32)
+            small_png.write_bytes(small_bytes)
+            small_ico = build_windows_bundle.build_icon(workdir / "small-out", source_png=small_png)
+            self.assertIsNotNone(small_ico)
+            small_raw = small_ico.read_bytes()
+            self.assertEqual(small_raw[:4], b"\x00\x00\x01\x00")
+            self.assertIn(small_bytes, small_raw)
+
+    def test_extract_llama_server_zip_verifies_sha256_extracts_dlls_and_blocks_zip_slip(self):
+        import hashlib
+        import build_windows_bundle
+
+        self.assertEqual(
+            build_windows_bundle.LLAMA_WINDOWS_SHA256,
+            "8b3639c62c6c41b8134797ea9beedd6b6c26caad6a1ed99a3d5a2802262923d7",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            lic_dir = root / "licenses"
+            payload = self._make_zip({
+                "build/bin/llama-server.exe": b"MZ-llama-server",
+                "build/bin/llama.dll": b"MZ-llama-dll",
+                "build/bin/mtmd.dll": b"MZ-mtmd-dll",
+                "build/LICENSE": b"MIT License - ggml-org/llama.cpp\n",
+            })
+            digest = hashlib.sha256(payload).hexdigest()
+
+            with self.assertRaises(ValueError):
+                build_windows_bundle.extract_llama_server_zip(
+                    payload, bin_dir, lic_dir, expected_sha256="0" * 64
+                )
+            self.assertFalse((bin_dir / "llama-server.exe").exists())
+
+            exe = build_windows_bundle.extract_llama_server_zip(
+                payload, bin_dir, lic_dir, expected_sha256=digest
+            )
+            self.assertEqual(exe, bin_dir / "llama-server.exe")
+            self.assertEqual((bin_dir / "llama-server.exe").read_bytes(), b"MZ-llama-server")
+            self.assertEqual((bin_dir / "llama.dll").read_bytes(), b"MZ-llama-dll")
+            self.assertEqual((bin_dir / "mtmd.dll").read_bytes(), b"MZ-mtmd-dll")
+            self.assertEqual(
+                (lic_dir / "llama.cpp-LICENSE.txt").read_text(encoding="utf-8"),
+                "MIT License - ggml-org/llama.cpp\n",
+            )
+
+            evil_zip = self._make_zip({
+                "llama-server.exe": b"MZ-llama",
+                "../../escape.dll": b"evil",
+            })
+            evil_digest = hashlib.sha256(evil_zip).hexdigest()
+            with self.assertRaises(ValueError):
+                build_windows_bundle.extract_llama_server_zip(
+                    evil_zip, root / "sub" / "bin", lic_dir, expected_sha256=evil_digest
+                )
+            self.assertFalse((root / "escape.dll").exists())
+
+    def test_stage_resources_and_main_isolate_pyinstaller_workdirs_outside_repo(self):
+        import hashlib
+        import build_windows_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_home = root / "home"
+            texada_bin = fake_home / ".texada" / "bin"
+            poppler_share = fake_home / ".texada" / "share" / "poppler" / "cMap"
+            poppler_lic = fake_home / ".texada" / "licenses" / "poppler-windows"
+            tex_cache = root / "tex-cache"
+            for d in (texada_bin, poppler_share, poppler_lic, tex_cache / "bundles"):
+                d.mkdir(parents=True)
+
+            (texada_bin / "tectonic.exe").write_bytes(b"MZ-tectonic")
+            (texada_bin / "pdfinfo.exe").write_bytes(b"MZ-pdfinfo")
+            (texada_bin / "pdftoppm.exe").write_bytes(b"MZ-pdftoppm")
+            (texada_bin / "poppler.dll").write_bytes(b"MZ-poppler-dll")
+            (poppler_share / "Identity-H").write_bytes(b"cmap")
+            (poppler_lic / "LICENSE").write_text("GPL-2.0-or-later\n", encoding="utf-8")
+            (tex_cache / "bundles" / "a.txt").write_bytes(b"cached-tex")
+
+            llama_zip_bytes = self._make_zip({
+                "llama-server.exe": b"MZ-llama-server",
+                "ggml.dll": b"MZ-ggml-dll",
+            })
+            llama_digest = hashlib.sha256(llama_zip_bytes).hexdigest()
+
+            staging = root / "staging"
+            staging.mkdir()
+            smoke_seen: list[tuple[str, str]] = []
+
+            def fake_run(argv, **kwargs):
+                cmd0 = Path(argv[0])
+                if len(argv) == 2 and cmd0.parent == staging / "bin":
+                    smoke_seen.append((cmd0.name, argv[1]))
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with unittest.mock.patch.object(build_windows_bundle, "TECTONIC", texada_bin / "tectonic.exe"), \
+                 unittest.mock.patch.object(build_windows_bundle, "POPPLER_BIN_DEFAULT", texada_bin), \
+                 unittest.mock.patch.object(build_windows_bundle, "_resolve_tex_cache", return_value=tex_cache), \
+                 unittest.mock.patch.object(build_windows_bundle, "LLAMA_WINDOWS_SHA256", llama_digest), \
+                 unittest.mock.patch.object(build_windows_bundle, "copy_tree",
+                                            side_effect=lambda src, dst, ignore=None: (
+                                                shutil.copytree(src, dst, ignore=ignore, dirs_exist_ok=True)
+                                                if src in (tex_cache, fake_home / ".texada" / "share" / "poppler")
+                                                else dst.mkdir(parents=True, exist_ok=True)
+                                            )), \
+                 unittest.mock.patch.object(build_windows_bundle, "run", side_effect=fake_run):
+                build_windows_bundle.stage_resources(
+                    staging,
+                    skip_poppler=False,
+                    with_llama_server=True,
+                    fetch=lambda _url: llama_zip_bytes,
+                )
+
+            self.assertEqual(
+                smoke_seen,
+                [
+                    ("tectonic.exe", "--version"),
+                    ("pdfinfo.exe", "-v"),
+                    ("pdftoppm.exe", "-v"),
+                    ("llama-server.exe", "--version"),
+                ],
+            )
+            self.assertTrue((staging / "bin" / "poppler.dll").is_file())
+            self.assertTrue((staging / "bin" / "ggml.dll").is_file())
+            self.assertTrue((staging / "share" / "poppler" / "cMap" / "Identity-H").is_file())
+            self.assertTrue((staging / "licenses" / "tex-cache-manifest.sha256").is_file())
+            self.assertTrue((staging / "licenses" / "llama.cpp-LICENSE.txt").is_file())
+            self.assertTrue((staging / "scripts" / "start-local-studio.bat").is_file())
+
+            out_dir = root / "dist-win"
+            pyi_calls: list[list[str]] = []
+
+            def fake_main_run(argv, **kwargs):
+                if "-m" in argv and "PyInstaller" in argv:
+                    pyi_calls.append([str(part) for part in argv])
+                    dist_idx = argv.index("--distpath") + 1
+                    produced = Path(argv[dist_idx]) / "TeXada Studio"
+                    (produced / "_internal").mkdir(parents=True)
+                    (produced / "TeXada Studio.exe").write_bytes(b"MZ-frozen-app")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with unittest.mock.patch.object(build_windows_bundle.sys, "platform", "win32"), \
+                 unittest.mock.patch.object(build_windows_bundle, "_resolve_build_python", return_value=Path(sys.executable)), \
+                 unittest.mock.patch.object(build_windows_bundle.subprocess, "run",
+                                            return_value=subprocess.CompletedProcess([], 0, "", "")), \
+                 unittest.mock.patch.object(build_windows_bundle, "stage_resources",
+                                            side_effect=lambda stg, **_kw: (stg / "webui").mkdir(parents=True) or {}), \
+                 unittest.mock.patch.object(build_windows_bundle, "run", side_effect=fake_main_run):
+                rc = build_windows_bundle.main(["--output", str(out_dir), "--skip-poppler"])
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(pyi_calls), 1)
+            cmd = pyi_calls[0]
+            for flag in ("--noconfirm", "--onedir", "--windowed", "--distpath", "--workpath", "--specpath"):
+                self.assertIn(flag, cmd)
+            work_root = str((out_dir.resolve() / ".bundle-work"))
+            for path_flag in ("--distpath", "--workpath", "--specpath", "--icon"):
+                val = cmd[cmd.index(path_flag) + 1]
+                self.assertTrue(val.startswith(work_root), f"{path_flag}={val} 必须位于外部 .bundle-work 内")
+            self.assertTrue((out_dir / "TeXada Studio" / "TeXada Studio.exe").is_file())
+            self.assertTrue((out_dir / "TeXada Studio" / "Resources" / "webui").is_dir())
+            self.assertFalse((out_dir / ".bundle-work").exists(), "构建完成后应清理临时目录")
+            self.assertFalse((build_windows_bundle.DESKTOP / "build").exists())
+
+    def test_windows_entry_resolves_bundle_dir_and_dispatches_python_scripts(self):
+        import windows_entry
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle_app = Path(tmp) / "TeXada Studio"
+            res = bundle_app / "Resources"
+            (res / "desktop").mkdir(parents=True)
+            (res / "desktop" / "app.py").write_text(
+                "def main(argv=None):\n    return 0\n",
+                encoding="utf-8",
+            )
+            fake_exe = bundle_app / "TeXada Studio.exe"
+            fake_exe.write_bytes(b"MZ")
+            self.assertEqual(windows_entry.resolve_bundle_dir(executable=fake_exe), res.resolve())
+
+            probe_script = Path(tmp) / "verify_probe.py"
+            out_file = Path(tmp) / "probe_out.txt"
+            probe_script.write_text(
+                "import sys\nfrom pathlib import Path\n"
+                f"Path({str(out_file)!r}).write_text('|'.join(sys.argv[1:]), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            saved_env = dict(os.environ)
+            saved_argv = list(sys.argv)
+            try:
+                os.environ.pop("TEXADA_BUNDLE_DIR", None)
+                rc = windows_entry.run_entry([str(fake_exe), str(probe_script), "x^2+1"], executable=fake_exe)
+                self.assertEqual(rc, 0)
+                self.assertEqual(out_file.read_text(encoding="utf-8"), "x^2+1")
+                self.assertEqual(os.environ.get("TEXADA_BUNDLE_DIR"), str(res.resolve()))
+            finally:
+                os.environ.clear()
+                os.environ.update(saved_env)
+                sys.argv[:] = saved_argv
 
 
 if __name__ == "__main__":

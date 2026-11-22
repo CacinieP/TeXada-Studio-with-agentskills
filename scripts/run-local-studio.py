@@ -24,15 +24,19 @@ sys.path.insert(0, str(ROOT / "webui"))
 from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, LocalRuntime, LocalRuntimeError, _model_name, validate_base_url
 
 
-def default_state_dir():
-    override = os.environ.get("TEXADA_STUDIO_STATE_DIR")
+def default_state_dir(*, platform_name=None, os_name=None, env=None, home=None):
+    source_env = os.environ if env is None else env
+    override = source_env.get("TEXADA_STUDIO_STATE_DIR")
     if override:
         return Path(override).expanduser()
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "TeXada Studio"
-    if os.name == "nt":
-        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "TeXada Studio"
-    return Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "texada-studio"
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Application Support" / "TeXada Studio"
+    if effective_os == "nt":
+        return Path(source_env.get("LOCALAPPDATA", str(user_home / "AppData" / "Local"))) / "TeXada Studio"
+    return Path(source_env.get("XDG_DATA_HOME", str(user_home / ".local" / "share"))) / "texada-studio"
 
 
 MODEL_PROFILES = {
@@ -126,9 +130,37 @@ def private_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
+def _win32_pid_alive(pid: int) -> bool:
+    import ctypes
+
+    windll = getattr(ctypes, "windll", None)
+    if isinstance(windll, ctypes.LibraryLoader) and hasattr(ctypes, "WinDLL"):
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+    elif windll is not None:
+        kernel32 = windll.kernel32
+    else:
+        return False
+
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == 5
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 0x00000102
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _alive(pid):
     if type(pid) is not int or pid < 1:
         return False
+    if os.name == "nt":
+        return _win32_pid_alive(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -157,17 +189,32 @@ def acquire_lock(state):
     raise RuntimeError("无法取得本地启动锁。")
 
 
-def find_model_files(args):
+def find_model_files(args, *, os_name=None):
     profile = model_profile(args) or MODEL_PROFILES["35b-q4"]
-    models = Path.home() / ".texada" / "models" / profile["directory"]
+    home = Path.home()
+    models = home / ".texada" / "models" / profile["directory"]
     gguf = args.gguf.expanduser() if args.gguf else models / profile["gguf"]
     mmproj = args.mmproj.expanduser() if args.mmproj else models / "mmproj-model-f16.gguf"
-    executable = shutil.which("llama-server")
+    effective_os = os_name if os_name is not None else os.name
+    names = ("llama-server.exe", "llama-server") if effective_os == "nt" else ("llama-server", "llama-server.exe")
+    executable = None
+    bundle_dir = os.environ.get("TEXADA_BUNDLE_DIR", "").strip()
+    if bundle_dir:
+        for name in names:
+            bundled = Path(bundle_dir).resolve() / "bin" / name
+            if bundled.is_file() and os.access(bundled, os.X_OK):
+                executable = str(bundled)
+                break
     if not executable:
-        for candidate in (Path.home() / ".texada" / "bin" / "llama-server",
-                          Path.home() / ".texada" / "runtime" / "llama-server"):
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                executable = str(candidate)
+        executable = next((shutil.which(name) for name in names if shutil.which(name)), None)
+    if not executable:
+        for base in (home / ".texada" / "bin", home / ".texada" / "runtime"):
+            for name in names:
+                candidate = base / name
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    executable = str(candidate)
+                    break
+            if executable:
                 break
     return executable, gguf, mmproj
 
