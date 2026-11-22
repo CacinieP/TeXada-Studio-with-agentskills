@@ -297,7 +297,7 @@ class PopplerTests(unittest.TestCase):
             "poppler-26.09.0/Library/bin/pdfinfo.exe": b"MZ-pdfinfo",
             "poppler-26.09.0/Library/bin/pdftoppm.exe": b"MZ-pdftoppm",
             "poppler-26.09.0/Library/bin/poppler.dll": b"MZ-poppler-dll",
-            "poppler-26.09.0/Library/share/poppler/cMap/Adobe-GB1/UniGB-UTF16-H": b"cmap-data",
+            "poppler-26.09.0/share/poppler/cMap/Adobe-GB1/UniGB-UTF16-H": b"cmap-data",
             "poppler-26.09.0/LICENSE": b"GPL-2.0-or-later license text\n",
         })
         digest = hashlib.sha256(payload).hexdigest()
@@ -330,6 +330,19 @@ class PopplerTests(unittest.TestCase):
         license_dir = self.root / "licenses" / "poppler-windows"
         self.assertEqual((license_dir / "LICENSE").read_bytes(), b"GPL-2.0-or-later license text\n")
         self.assertTrue((license_dir / "NOTICE.txt").is_file())
+
+    def test_windows_install_poppler_rejects_archive_missing_share_poppler_maps(self):
+        payload = build_zip_archive({
+            "poppler-26.09.0/Library/bin/pdfinfo.exe": b"MZ-pdfinfo",
+            "poppler-26.09.0/Library/bin/pdftoppm.exe": b"MZ-pdftoppm",
+        })
+        digest = hashlib.sha256(payload).hexdigest()
+        with mock.patch.object(tool_fetch, "POPPLER_WINDOWS_SHA256", digest):
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "share/poppler"):
+                tool_fetch.install_poppler(
+                    bin_dir=self.bin_dir, fetch=lambda url, progress=None: payload, platform_name="win32"
+                )
+        self.assertFalse(self.bin_dir.exists())
 
     def test_windows_install_poppler_rejects_sha256_mismatch(self):
         payload = build_zip_archive({

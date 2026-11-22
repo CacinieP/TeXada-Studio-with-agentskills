@@ -543,25 +543,31 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
 
     信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的 socketpair,读到非空字节即知
     收到了信号。未收到真实唤醒字节前的任何 OSError/EOF(如平台不支持或正常退出关闭
-    socket)直接返回,绝不误杀进程;收到首个信号后至多再等 deadline 秒让主线程正常收尾,
-    期间再来第二个信号则立即执行清理并强制退出。
+    socket)直接返回,绝不误杀进程;若主线程已完成正常窗口收尾进入 finally 关闭看门狗
+    (closing 标志或对端关闭产生 EOF),同样直接返回让 main() 正常返回。
     """
     exiter = os._exit if exiter is None else exiter
     woken = False
     try:
         readable, _, _ = select.select([read_channel], [], [])
-        if not readable:
+        if not readable or state.get("closing"):
             return
         first = _read_wakeup_bytes(read_channel)
-        if not first:
+        if not first or state.get("closing"):
             return
         woken = True
         readable2, _, _ = select.select([read_channel], [], [], deadline)
+        if state.get("closing"):
+            return
         if readable2:
             try:
-                _read_wakeup_bytes(read_channel)
+                second = _read_wakeup_bytes(read_channel)
             except OSError:
-                pass
+                if state.get("closing"):
+                    return
+                second = b"\x01"
+            if not second or state.get("closing"):
+                return
         shutdown = state.get("shutdown")
         if callable(shutdown):
             try:
@@ -570,7 +576,7 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
                 pass  # 清理失败也必须退出,保证有界
         exiter(0)
     except Exception:
-        if not woken:
+        if not woken or state.get("closing"):
             return
         shutdown = state.get("shutdown")
         if callable(shutdown):
@@ -582,7 +588,8 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
 
 
 def _close_terminate_watchdog(state) -> None:
-    """复位 set_wakeup_fd 并关闭保存的唤醒 socketpair。"""
+    """标记正常收尾、复位 set_wakeup_fd 并关闭保存的唤醒 socketpair。"""
+    state["closing"] = True
     sockets = state.pop("wakeup_sockets", None)
     if not sockets:
         return
@@ -600,6 +607,7 @@ def _close_terminate_watchdog(state) -> None:
 def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
     """安装跨平台 socketpair 唤醒通道与看门狗线程;失败时返回 False。"""
     _close_terminate_watchdog(state)
+    state["closing"] = False
     read_sock = write_sock = None
     try:
         read_sock, write_sock = socket.socketpair()

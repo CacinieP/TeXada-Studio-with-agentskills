@@ -313,6 +313,32 @@ class TerminateWatchdogTests(unittest.TestCase):
         write_sock.close()
         thread.join(timeout=2)
         read_sock.close()
+        self.assertEqual(cleaned, [])
+        self.assertEqual(exited, [])
+
+    def test_post_wakeup_normal_teardown_eof_does_not_preempt_main_return(self):
+        import socket
+
+        read_sock, write_sock = socket.socketpair()
+        read_sock.setblocking(False)
+        write_sock.setblocking(False)
+        cleaned = []
+        exited = []
+        state = {"shutdown": lambda: cleaned.append(True), "wakeup_sockets": (read_sock, write_sock)}
+        thread = threading.Thread(
+            target=desktop_app._terminate_watchdog,
+            args=(read_sock, state),
+            kwargs={"deadline": 10.0, "exiter": lambda code: exited.append(code)},
+            daemon=True,
+        )
+        thread.start()
+        write_sock.sendall(b"\x0f")
+        time.sleep(0.05)
+        desktop_app._close_terminate_watchdog(state)
+        thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(cleaned, [], "主线程已完成清理进入 finally 关闭看门狗时严禁重复 shutdown")
+        self.assertEqual(exited, [], "主线程正常返回关闭唤醒通道时严禁调用 os._exit(0) 抢跑")
         self.assertFalse(thread.is_alive())
         self.assertEqual(cleaned, [], "正常关闭唤醒 socket 产生 EOF 时不应触发异常退出")
         self.assertEqual(exited, [])

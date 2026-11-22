@@ -252,6 +252,10 @@ def _install_poppler_windows(*, bin_dir=None, fetch=None, progress=None):
                     bin_entries.append((parts[2:], archive.read(info)))
                 elif len(parts) > 3 and parts[1:3] == ["Library", "bin"]:
                     bin_entries.append((parts[3:], archive.read(info)))
+                elif parts[:2] == ["share", "poppler"] and len(parts) > 2:
+                    share_entries.append((parts[2:], archive.read(info)))
+                elif len(parts) > 3 and parts[1:3] == ["share", "poppler"]:
+                    share_entries.append((parts[3:], archive.read(info)))
                 elif parts[:3] == ["Library", "share", "poppler"] and len(parts) > 3:
                     share_entries.append((parts[3:], archive.read(info)))
                 elif len(parts) > 4 and parts[1:4] == ["Library", "share", "poppler"]:
@@ -266,6 +270,8 @@ def _install_poppler_windows(*, bin_dir=None, fetch=None, progress=None):
     bin_names = {parts[-1].lower() for parts, _ in bin_entries if len(parts) == 1}
     if not {"pdfinfo.exe", "pdftoppm.exe"}.issubset(bin_names):
         raise ToolFetchError("Poppler 压缩包内未找到 pdfinfo.exe 与 pdftoppm.exe。")
+    if not share_entries:
+        raise ToolFetchError("Poppler 压缩包内未找到 share/poppler 字符映射数据。")
 
     for rel_parts, data in bin_entries:
         _write_confined(target_bin, rel_parts, data)
