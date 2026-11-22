@@ -10,7 +10,7 @@ Studio is a local workspace opened in your browser. Documents and run records st
 
 Current UI, using the repository's synthetic `welcome.tex` sample; November 4, 2026.
 
-This is a local, single-user workspace; see the [v0.1.0 release notes](docs/releases/v0.1.0.md) (Chinese) for the current release. Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
+This is a local, single-user workspace; see the [v0.1.1 release notes](docs/releases/v0.1.1.md) (Chinese) for the current release (shipping both macOS Apple Silicon notarized DMG and Windows x64 self-contained portable ZIP). Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
 
 ## What you can do
 
@@ -40,9 +40,9 @@ python3.13 -m venv .venv
 ./scripts/start-local-studio.command
 ```
 
-On macOS, you can double-click `scripts/start-local-studio.command` after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
+On macOS, double-click `scripts/start-local-studio.command`; on Windows, double-click `scripts/start-local-studio.bat` (with `.venv\Scripts\python.exe`) after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
 
-macOS can also generate a desktop app: a **self-contained bundle** (embedding Python, Tectonic, the TeX resource cache and Poppler — no repo, brew or network needed at runtime, via `desktop/build_bundle.py`) or a lightweight shell (`desktop/build_app.py`). See the [desktop guide](desktop/README.md) and the [bundling license audit](desktop/licenses-audit.md) (Chinese).
+macOS and Windows also support **self-contained desktop bundles** (embedding Python, Tectonic, the TeX resource cache, Poppler, and `llama-server` — no repo, package manager, or network needed at runtime: `desktop/build_bundle.py` on macOS, `desktop/build_windows_bundle.py` on Windows x64; macOS also offers a lightweight shell via `desktop/build_app.py`). See the [desktop guide](desktop/README.md) and the [bundling license audit](desktop/licenses-audit.md) (Chinese).
 
 ## Configuration
 
@@ -50,7 +50,7 @@ macOS can also generate a desktop app: a **self-contained bundle** (embedding Py
 
 Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/completions`) on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and never falls back to a cloud model. Three ways to connect:
 
-1. **In the UI (or Studio-managed models)**: status bar "local model" can save an existing endpoint and model name and run an explicit connection check, or explicitly download and launch SHA-256-verified MiniCPM-V 4.7 1B or 35B-A3B Q4_K_M weights (requires `llama-server`, bundled in the self-contained macOS app). Connection details stay in the user data directory.
+1. **In the UI (or Studio-managed models)**: status bar "local model" can save an existing endpoint and model name and run an explicit connection check, or explicitly download and launch SHA-256-verified MiniCPM-V 4.7 1B or 35B-A3B Q4_K_M weights (requires `llama-server`, bundled in both macOS and Windows self-contained desktop releases). Connection details stay in the user data directory.
 2. **Reuse an existing service at launch** (for example an Ollama instance already running locally):
 
    ```bash
@@ -75,7 +75,7 @@ The default is **35B-A3B Q4_K_M** (`minicpm-v4.7-35b-a3b-q4`) at `http://127.0.0
 | PDF import | Poppler's `pdfinfo` and `pdftoppm` |
 | PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
 
-Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. On macOS, the adjacent "Install Poppler" button drives `brew install poppler` explicitly; other platforms should use their system package manager (see the [troubleshooting guide](docs/troubleshooting.md)).
+Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. The adjacent "Install Poppler" button drives `brew install poppler` on macOS and downloads a pinned SHA256-verified Poppler archive on Windows; Linux users should use their system package manager (see the [troubleshooting guide](docs/troubleshooting.md)).
 
 Studio compiles only against cached TeX resources and never downloads packages while processing documents. First-time preparation:
 

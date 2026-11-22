@@ -33,8 +33,8 @@ INFO_PLIST = f"""<?xml version="1.0" encoding="UTF-8"?>
     <key>CFBundleName</key><string>{APP_NAME}</string>
     <key>CFBundleDisplayName</key><string>{APP_NAME}</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>5</string>
+    <key>CFBundleShortVersionString</key><string>0.1.1</string>
+    <key>CFBundleVersion</key><string>6</string>
     <key>LSMinimumSystemVersion</key><string>11.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>

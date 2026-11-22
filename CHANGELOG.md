@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.1 — 2026-11-22
+
+### Added
+
+- Land the source-preserving AgentSkills repair execution pipeline across `doc-formula-verify` (`1.4.0`), `doc-table-audit`, and `latex-cleanup` (`0.2.3`): deficit-gated order-preserving structural delimiter insertion in `assess_candidate`, Studio model-assisted table repair (`repair_table`) for incomplete total rows, and `latex-cleanup` catalog/planner integration (`check-cleanup` → `cleanup-document`) for zero-width noise removal and unclosed non-math command/environment repairs (#76, #78).
+- Add Windows x64 full-stack runtime bootstrap, dual-OS CI matrix (`ubuntu-latest` + `windows-latest`), `scripts/start-local-studio.bat`, and self-contained Windows portable desktop bundle (`desktop/build_windows_bundle.py`, `desktop/windows_entry.py`, and `.github/workflows/windows-bundle.yml`) shipping PyInstaller + Edge WebView2 + pinned `tectonic.exe` (`0.17.0`), prewarmed `tex-cache`, Poppler Windows (`26.09.0-0` with `Library/bin` and `share/poppler` CJK maps), and `llama-server.exe` (`b12631`) (#77, #79).
+
+### Fixed
+
+- Block math-meaning tampering in structural delimiter insertion (digit/decimal literal splitting, operator precedence inversion after `\cdot`/`*`, interior boundary guessing across juxtaposed atoms, and mismatched `\left`/`\right` pairs), enforce single-line non-math command closures with `mask_opaque` tabular range isolation in `tex_cleanup`, and dynamically scale `max_tokens` for table and full-document cleanup completions (#78).
+- Replace Windows-unsafe `os.kill(pid, 0)` and static `os.getppid()` orphan checks with Win32 `OpenProcess(SYNCHRONIZE)` + `WaitForSingleObject`, use Winsock `socket.socketpair()` for the Windows desktop termination watchdog while keeping `os.pipe()` on POSIX, reject NTFS reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9`) and `st_ino == 0` false alias matches in `document_store`, and suppress console flashes (`CREATE_NO_WINDOW`) for Windows background tool invocations (#79).
+
+### Changed
+
+- Bump desktop bundle metadata to `0.1.1` (macOS `CFBundleShortVersionString` `0.1.1`, build `6`; Windows `0.1.1.0`) and update Studio's Poppler install controls and documentation for both macOS and Windows.
+
 ## 0.1.0 — 2026-11-22
 
 ### Fixed

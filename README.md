@@ -10,7 +10,7 @@
 
 当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
 
-当前面向本地单用户，最新发行版见 [v0.1.0 发布说明](docs/releases/v0.1.0.md)。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
+当前面向本地单用户，最新发行版见 [v0.1.1 发布说明](docs/releases/v0.1.1.md)（同时提供 macOS Apple Silicon 公证安装包与 Windows x64 自包含便携包）。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
 
 ## 这版可以做什么
 
@@ -39,7 +39,7 @@ python3.13 -m venv .venv
 .venv/bin/python scripts/run-local-studio.py --check
 ```
 
-macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行：
+macOS 可双击 `scripts/start-local-studio.command`，Windows 可双击 `scripts/start-local-studio.bat`（虚拟环境路径为 `.venv\Scripts\python.exe`），或在项目目录运行：
 
 ```bash
 ./scripts/start-local-studio.command
@@ -47,7 +47,7 @@ macOS 可双击 `scripts/start-local-studio.command`，或在项目目录运行�
 
 启动器打开本机浏览器，文档和模型处理都在本地。编辑器资源已随源码提供，无需前端构建。首次安装依赖、模型与 TeX 资源需要联网准备，完整步骤见[首次准备与离线使用](docs/local-studio.md#首次准备与离线使用)。
 
-macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic、TeX 资源与 Poppler，产物不依赖仓库/brew/网络，`desktop/build_bundle.py`）或轻量薄壳（`desktop/build_app.py`），详见[桌面端说明](desktop/README.md)与[捆绑许可审计](desktop/licenses-audit.md)。
+macOS 与 Windows 还可以直接下载或自行构建**自包含桌面应用**（内嵌 Python、Tectonic、TeX 资源、Poppler 及 `llama-server`，产物不依赖仓库、包管理器或网络：macOS 用 `desktop/build_bundle.py`，Windows x64 用 `desktop/build_windows_bundle.py`；macOS 另有轻量薄壳 `desktop/build_app.py`），详见[桌面端说明](desktop/README.md)与[捆绑许可审计](desktop/licenses-audit.md)。
 
 ## 配置
 
@@ -55,7 +55,7 @@ macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic�
 
 本地模式仅接受 `http://localhost`、`127.0.0.1` 或 `[::1]` 上的 OpenAI 兼容端点（`/v1/models` 与 `/v1/chat/completions`），无需 API Key，也不会自动改用云模型。三种接法：
 
-1. **在界面里配置或启动受管模型**：状态栏「本地模型」可保存已有服务地址与模型名称并显式「检查连接」，也可在「Studio 管理的模型」中按需下载并启动经 SHA-256 校验的 MiniCPM-V 4.7 1B 或 35B-A3B Q4_K_M（需 `llama-server`，macOS 自包含包已内置）。连接信息保存在用户数据目录。
+1. **在界面里配置或启动受管模型**：状态栏「本地模型」可保存已有服务地址与模型名称并显式「检查连接」，也可在「Studio 管理的模型」中按需下载并启动经 SHA-256 校验的 MiniCPM-V 4.7 1B 或 35B-A3B Q4_K_M（需 `llama-server`，macOS 与 Windows 自包含桌面包均已内置）。连接信息保存在用户数据目录。
 2. **启动时复用已有服务**（例如已在本机运行的 Ollama）：
 
    ```bash
@@ -80,7 +80,7 @@ macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic�
 | PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
 | PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
 
-Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。macOS 旁的「安装 Poppler」按钮显式走 brew；其他平台用系统包管理器，见[排错说明](docs/troubleshooting.md)。
+Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。旁的「安装 Poppler」按钮在 macOS 显式走 Homebrew、在 Windows 下载固定版本便携包并校验 SHA256；Linux 请使用系统包管理器，见[排错说明](docs/troubleshooting.md)。
 
 Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中悄悄下载。首次准备：
 
