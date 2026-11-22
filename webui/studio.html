@@ -943,7 +943,7 @@ function showManagedModelError(error) {
 }
 function scheduleManagedModelRefresh() {
   clearTimeout(managedModelTimer);
-  if (managedModelStatus.job?.state === "running" && $("settingsDialog").open) {
+  if (managedModelStatus?.job?.state === "running" && ($("settingsDialog").open || managedModelStatus.job.action === "start")) {
     managedModelTimer = setTimeout(() => refreshManagedModels().catch(showManagedModelError), 700);
   }
 }

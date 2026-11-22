@@ -69,12 +69,13 @@ PROFILES = {
 
 
 def _clean_model_environment(source):
-    """Strip cloud API credentials, UI tokens, and proxy overrides for local llama-server."""
+    """Strip cloud API credentials, UI tokens, llama.cpp arg overrides, and proxies."""
     return {
         key: value
         for key, value in source.items()
         if "API_KEY" not in key.upper()
         and not key.upper().endswith(("_TOKEN", "_SECRET"))
+        and not key.upper().startswith("LLAMA_ARG_")
         and key.upper() not in _BLOCKED_MODEL_ENV
     }
 
@@ -291,9 +292,12 @@ class ManagedModels:
             self._terminate()
             self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
             log_path = self.state / "model-server.log"
-            fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(log_path, flags, 0o600)
             try:
-                if os.name == "posix":
+                if hasattr(os, "fchmod"):
+                    os.fchmod(fd, 0o600)
+                elif os.name == "posix":
                     os.chmod(log_path, 0o600)
                 log_stream = os.fdopen(fd, "ab")
             except Exception:

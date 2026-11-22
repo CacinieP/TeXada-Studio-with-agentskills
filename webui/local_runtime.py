@@ -388,7 +388,7 @@ class LocalRuntime:
             raise LocalRuntimeError("invalid_pdf", "PDF 文件头或结尾无效。")
         dimensions = None if mime == "application/pdf" else validate_image(data, mime)
         with self._lock:
-            settings = self._settings()
+            settings = dict(self._active_model) if self._active_model else self._settings()
         import_id = uuid.uuid4().hex
         extensions = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "application/pdf": ".pdf"}
         extension = extensions[mime]

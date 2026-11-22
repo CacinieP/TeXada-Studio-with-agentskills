@@ -89,6 +89,8 @@ class ManagedDownloadTests(unittest.TestCase):
             "https_proxy": "http://127.0.0.1:8080",
             "ALL_PROXY": "socks5://127.0.0.1:1080",
             "no_proxy": "localhost",
+            "LLAMA_ARG_HOST": "0.0.0.0",
+            "llama_arg_port": "9999",
         }
         cleaned = clean_fn(dirty_env)
         self.assertEqual(cleaned, {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
@@ -151,6 +153,21 @@ class ManagedDownloadTests(unittest.TestCase):
             manager3._start(self.profile, paths)
         self.assertEqual(fresh_state.stat().st_mode & 0o777, 0o700)
         self.assertEqual((fresh_state / "model-server.log").stat().st_mode & 0o777, 0o600)
+
+        if hasattr(os, "O_NOFOLLOW"):
+            symlink_state = self.root / "symlink-state"
+            symlink_state.mkdir(mode=0o700)
+            victim = self.root / "victim.txt"
+            victim.write_bytes(b"keep-mode\n")
+            os.chmod(victim, 0o644)
+            (symlink_state / "model-server.log").symlink_to(victim)
+            manager4 = ManagedModels(symlink_state)
+            with patch("managed_models.find_llama_server", return_value="/usr/bin/llama-server"), \
+                    patch("managed_models.subprocess.run",
+                          return_value=SimpleNamespace(stdout="version: 12000\n", stderr="")), \
+                    self.assertRaises(OSError):
+                manager4._start(self.profile, paths)
+            self.assertEqual(victim.stat().st_mode & 0o777, 0o644)
 
     def test_https_redirect_handler_allows_https_cdn_and_blocks_scheme_downgrade(self):
         handler_cls = getattr(managed_models, "_HttpsOnlyRedirectHandler", None)

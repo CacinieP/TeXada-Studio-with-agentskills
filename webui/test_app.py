@@ -403,6 +403,34 @@ class AppTest(unittest.TestCase):
             self.assertEqual(info["repair_model"], active_conn["model"])
             self.assertEqual(info["ocr_model"], active_conn["model"])
 
+    def test_studio_import_route_uses_active_managed_model_endpoint(self):
+        from test_local_runtime import FakeModel, PNG
+        import base64
+
+        with FakeModel() as managed_server:
+            manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+            manager.active = {"base_url": managed_server.base, "model": "minicpm-v4.7-1b-q4_k_m"}
+            manager.process = SimpleNamespace(poll=lambda: None)
+            Path(studio.STUDIO_STATE).mkdir(parents=True, exist_ok=True)
+            (Path(studio.STUDIO_STATE) / "local-runtime.json").write_text(
+                '{"base_url":"http://127.0.0.1:1/v1","model":"offline-saved-model"}', encoding="utf-8"
+            )
+            with patch.object(studio, "managed_models", manager):
+                response = self.client.post(
+                    "/api/studio/import",
+                    params=self.auth,
+                    json={
+                        "name": "scan.png",
+                        "mime_type": "image/png",
+                        "data_base64": base64.b64encode(PNG).decode("ascii"),
+                    },
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()
+            self.assertEqual(payload["model"], "minicpm-v4.7-1b-q4_k_m")
+            self.assertEqual(len(managed_server.requests), 1)
+            self.assertEqual(managed_server.requests[0]["path"], "/v1/chat/completions")
+
     def test_studio_config_succeeds_when_local_mode_disabled_with_https_endpoint(self):
         with patch.multiple(studio, VLM_BASE_URL="https://api.modelbest.cn/v1", REPAIR_MODEL="MiniCPM-V-4.7-1B"), \
                 patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "0", "VLM_BASE_URL": "https://api.modelbest.cn/v1"}):
@@ -826,7 +854,11 @@ class StudioTableAuditTest(unittest.TestCase):
             [r"\left(\frac{u+1}{u-1}", r"\left(\frac{u+1}{u-1}\right)"],
             "Fallback must skip already-ok and already-attempted formulas",
         )
-        self.assertIn("f-003-3", out_summary.get("deterministic_resolved", []))
+        self.assertEqual(
+            out_summary.get("deterministic_resolved"),
+            ["f-003-3"],
+            "deterministic_resolved must store only the canonical pre-edit formula ID",
+        )
         remaining = studio._planned_problems(out_summary, fixed)
         self.assertEqual(len(remaining), 1, remaining)
         self.assertEqual(remaining[0]["id"], "f-004-4")

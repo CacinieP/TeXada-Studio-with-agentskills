@@ -1162,7 +1162,6 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
         def emit_fallback(action, **fields):
             node_id = fields.get("node_id", "")
             if action == "CANDIDATE_EDIT" and isinstance(node_id, str) and node_id.startswith("f-"):
-                resolved.add(node_id)
                 resolved.add(mid_to_pre.get(node_id, node_id))
             emit(action, **fields)
 

@@ -1148,6 +1148,62 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('preview').children[0].alt, '修复候选 PDF 预览');
   assert.match(get('preview').children[0].src, /^\/api\/studio\/preview\/tok\.tex\/after-1\?page=1&token=/);
 
+  // scheduleManagedModelRefresh continues polling in background when job.action === 'start'
+  // even after settingsDialog is closed, so loadConfig(true) updates #localBadge on startup completion.
+  {
+    const scheduled = [];
+    const origSetTimeout = context.setTimeout;
+    const origJ = run('j');
+    try {
+      context.setTimeout = (fn, ms) => { scheduled.push({ fn, ms }); return scheduled.length; };
+      get('settingsDialog').open = false;
+      run(`modelDraftEdited = false; studioConfig = { local_mode: true, base_url: 'http://127.0.0.1:18147/v1', model: 'old-model' };`);
+      run(`managedModelStatus = {
+        runtime_available: true, active: null,
+        job: { profile: '1b', action: 'start', state: 'running', bytes: 0, total: 1 },
+        profiles: [{ id: '1b', name: '1B', model: 'minicpm-v4.7-1b-q4_k_m', size: 1000, downloaded: true }]
+      };`);
+      run('scheduleManagedModelRefresh()');
+      assert.equal(scheduled.length, 1, 'start job must continue polling even when settingsDialog is closed');
+      let probedAfterStart = false;
+      context.managedWire = async (url) => {
+        if (String(url).startsWith('/api/studio/models')) {
+          return {
+            runtime_available: true,
+            active: { base_url: 'http://127.0.0.1:43210/v1', model: 'minicpm-v4.7-1b-q4_k_m' },
+            job: { profile: '1b', action: 'start', state: 'done', bytes: 1, total: 1 },
+            profiles: [{ id: '1b', name: '1B', model: 'minicpm-v4.7-1b-q4_k_m', size: 1000, downloaded: true }],
+          };
+        }
+        if (String(url).includes('/api/studio/config') && String(url).includes('probe=true')) {
+          probedAfterStart = true;
+          return {
+            local_mode: true, offline: true, model_available: true,
+            base_url: 'http://127.0.0.1:43210/v1', model: 'minicpm-v4.7-1b-q4_k_m',
+            tools: { tectonic: true, pdftoppm: true, pdfinfo: true },
+          };
+        }
+        return {};
+      };
+      run('j = managedWire');
+      scheduled.shift().fn();
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+      assert.equal(probedAfterStart, true, 'completing background start job must trigger loadConfig(true)');
+      assert.equal(get('localBadge').textContent, '本地模型已连接');
+      assert.equal(get('modelName').value, 'minicpm-v4.7-1b-q4_k_m');
+
+      // By contrast, a download job does not need background polling when settingsDialog is closed.
+      scheduled.length = 0;
+      run(`managedModelStatus.job = { profile: '1b', action: 'download', state: 'running', bytes: 0, total: 1 };`);
+      run('scheduleManagedModelRefresh()');
+      assert.equal(scheduled.length, 0, 'download job stops UI polling while settingsDialog is closed');
+    } finally {
+      context.setTimeout = origSetTimeout;
+      context.origJ = origJ;
+      run('j = origJ');
+    }
+  }
+
   // formulaAtSelection skips $$...$$ display math, comments/\verb, and handles TeX \\ before $.
   for (const [doc, target, shouldRejectAt] of [
     ['$$a=1$$ and $x+y$', 'x+y', 'a=1'],
