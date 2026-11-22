@@ -367,6 +367,20 @@ def _on_terminate(signum, _frame):
     _terminate_action(signum, _terminate_state)
 
 
+def _close_shown_windows(windows) -> bool:
+    """仅对已完成原生 shown 的窗口调用 destroy();未就绪窗口直接回退 shutdown 避免主线程死锁。"""
+    ready = [
+        window for window in windows
+        if getattr(getattr(window, "events", None), "shown", None) is None
+        or window.events.shown.is_set()
+    ]
+    if not ready:
+        return False
+    for window in ready:
+        window.destroy()
+    return True
+
+
 def _terminate_action(signum, state, exiter=None):
     """终止动作核心(可注入 exiter 供测试)。
 
@@ -378,8 +392,8 @@ def _terminate_action(signum, state, exiter=None):
     closer = state.get("window_closer")
     if closer:
         try:
-            closer()
-            return
+            if closer() is not False:
+                return
         except Exception:
             pass
     shutdown = state.get("shutdown")
@@ -550,7 +564,7 @@ def main(argv=None) -> int:
             return 1
 
         webview.create_window("TeXada Studio", entry["url"], width=1440, height=900, min_size=(1024, 640))
-        _terminate_state["window_closer"] = lambda: [window.destroy() for window in webview.windows]
+        _terminate_state["window_closer"] = lambda: _close_shown_windows(webview.windows)
         _terminate_state["shutdown"] = _cleanup
         _install_signal_pump()
         _install_terminate_watchdog(_terminate_state)

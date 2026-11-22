@@ -298,6 +298,47 @@ class TerminateFallbackTests(unittest.TestCase):
             signal.SIGTERM, state, exiter=lambda code: calls.append(("exit", code)))
         self.assertEqual(calls, ["closer"], "窗口路径不强制退出，主循环走正常收尾")
 
+    def test_close_shown_windows_skips_unshown_window_and_falls_back_to_shutdown(self):
+        import types
+
+        unshown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=threading.Event()),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned: list[str] = []
+        exits: list[int] = []
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([unshown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        unshown.destroy.assert_not_called()
+        self.assertEqual(cleaned, ["shutdown"])
+        self.assertEqual(exits, [0])
+
+        shown_event = threading.Event()
+        shown_event.set()
+        shown = types.SimpleNamespace(
+            events=types.SimpleNamespace(shown=shown_event),
+            destroy=unittest.mock.MagicMock(),
+        )
+        cleaned.clear()
+        exits.clear()
+        desktop_app._terminate_action(
+            signal.SIGTERM,
+            {
+                "window_closer": lambda: desktop_app._close_shown_windows([shown]),
+                "shutdown": lambda: cleaned.append("shutdown"),
+            },
+            exiter=exits.append,
+        )
+        shown.destroy.assert_called_once()
+        self.assertEqual(cleaned, [])
+        self.assertEqual(exits, [])
+
 
 class NativeTerminateIntegrationTests(unittest.TestCase):
     """原生集成验证:真实 Cocoa 事件循环中 SIGTERM 必须有界退出(#50)。
@@ -338,11 +379,15 @@ class NativeTerminateIntegrationTests(unittest.TestCase):
             "    'model': '', 'owned_model_pid': None,\n"
             "    'created_at': time.time(), 'running': True}))\n"
             "import webview\n"
-            "orig = webview.start\n"
-            "def start(*args, **kwargs):\n"
-            "    print('IN_RUNLOOP', flush=True)\n"
-            "    return orig(*args, **kwargs)\n"
-            "webview.start = start\n"
+            "orig_create = webview.create_window\n"
+            "def create_window(*args, **kwargs):\n"
+            "    win = orig_create(*args, **kwargs)\n"
+            "    def on_shown():\n"
+            "        from PyObjCTools import AppHelper\n"
+            "        AppHelper.callAfter(lambda: print('IN_RUNLOOP', flush=True))\n"
+            "    win.events.shown += on_shown\n"
+            "    return win\n"
+            "webview.create_window = create_window\n"
             "spec = importlib.util.spec_from_file_location(\n"
             "    'texada_desktop_app', os.path.join(repo, 'desktop', 'app.py'))\n"
             "mod = importlib.util.module_from_spec(spec)\n"
