@@ -10,7 +10,7 @@ Studio is a local workspace opened in your browser. Documents and run records st
 
 Current UI, using the repository's synthetic `welcome.tex` sample; November 4, 2026.
 
-This remains a local, single-user development candidate, with no formal release for this revision. See the [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
+This is a local, single-user workspace; see the [v0.1.0 release notes](docs/releases/v0.1.0.md) (Chinese) for the current release. Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
 
 ## What you can do
 
@@ -50,7 +50,7 @@ macOS can also generate a desktop app: a **self-contained bundle** (embedding Py
 
 Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/completions`) on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and never falls back to a cloud model. Three ways to connect:
 
-1. **In the UI**: status bar "local model" → save the endpoint and model name → run the explicit connection check. The connection details are kept in the user data directory.
+1. **In the UI (or Studio-managed models)**: status bar "local model" can save an existing endpoint and model name and run an explicit connection check, or explicitly download and launch SHA-256-verified MiniCPM-V 4.7 1B or 35B-A3B Q4_K_M weights (requires `llama-server`, bundled in the self-contained macOS app). Connection details stay in the user data directory.
 2. **Reuse an existing service at launch** (for example an Ollama instance already running locally):
 
    ```bash

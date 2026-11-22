@@ -10,7 +10,7 @@
 
 当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
 
-当前面向本地单用户，仍是开发候选，尚无本次正式 Release。已验证范围见[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
+当前面向本地单用户，最新发行版见 [v0.1.0 发布说明](docs/releases/v0.1.0.md)。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
 
 ## 这版可以做什么
 
@@ -55,7 +55,7 @@ macOS 还可以生成桌面应用：**自包含包**（内嵌 Python、Tectonic�
 
 本地模式仅接受 `http://localhost`、`127.0.0.1` 或 `[::1]` 上的 OpenAI 兼容端点（`/v1/models` 与 `/v1/chat/completions`），无需 API Key，也不会自动改用云模型。三种接法：
 
-1. **在界面里配置**：状态栏「本地模型」→ 保存服务地址与模型名称 → 显式「检查连接」。连接信息保存在用户数据目录。
+1. **在界面里配置或启动受管模型**：状态栏「本地模型」可保存已有服务地址与模型名称并显式「检查连接」，也可在「Studio 管理的模型」中按需下载并启动经 SHA-256 校验的 MiniCPM-V 4.7 1B 或 35B-A3B Q4_K_M（需 `llama-server`，macOS 自包含包已内置）。连接信息保存在用户数据目录。
 2. **启动时复用已有服务**（例如已在本机运行的 Ollama）：
 
    ```bash

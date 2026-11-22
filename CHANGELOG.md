@@ -1,27 +1,25 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- Download and launch Studio-managed MiniCPM-V 4.7 1B or 35B-A3B models in Local Models. Both use the pinned OpenBMB Q4_K_M weights and matching F16 vision projector. Keep the existing loopback endpoint available when the managed model stops.
-
-## 0.1.0
+## 0.1.0 — 2026-11-22
 
 ### Fixed
 
+- Bundle a Poppler C++ page renderer and `poppler-data` character maps in the self-contained macOS app so Chinese and CJK PDF previews render without external Homebrew data (#61, #62), and combine Poppler and optional `llama-server` dylib relocation in a single signing pass.
+- Tighten formula, matrix, and scanner checks (`\left`/`\right` pairing, duplicate scripts, matrix/`cases` outer and cell syntax, nested `$` inside `\text{...}`, one-sided limit superscripts `0^+`/`0^-`, immediate stop on model abstention, and anchor-guard exit codes) and align post-planner deterministic fallback node IDs and line numbers after multi-line edits (#63, #71, #73).
+- Match table-total row labels (`合计` / `总计` / `total`) exactly without substring false positives, preserve comment-masked table edits, fix multi-row Monaco LaTeX snippet backslash escaping, normalize macOS APFS/NFD filenames, and isolate per-document Studio build directories (#64, #65).
+- Harden macOS desktop and managed-model process hygiene: preflight loopback port availability, capture `SystemExit`, write `0o600` `session.json` and `model-server.log`, scrub credentials/proxies from spawned `llama-server` environments, route active managed models in image/PDF imports, and skip `destroy()` on unshown `pywebview` windows during early `SIGTERM` (#66, #73, #74).
 - Studio PDF imports now save selected pages as one batch when splitting. A filename conflict leaves the current review and every existing document intact. Saving advances the next import to the following source page.
-- Show the relevant TeX error and source location when compilation fails, and keep the complete log available. Select a diagnostic to jump to its source line.
-- Keep the editor open when Agent repair makes no changes. Show the actual check result and keep the report available for export.
+- Show the relevant TeX error and source location when compilation fails, and keep the complete log available. Select a diagnostic to jump to its source line (#57, #58).
+- Keep the editor open when Agent repair makes no changes. Show the actual check result and keep the report available for export (#55, #56).
 - Stabilize model settings when discovery requests finish out of order, and bundle loader-relative native library dependencies with the macOS tools.
-
 - Studio's repair line now honors `REPAIR_MODEL` with priority over `VLM_MODEL`, matching the harness CLI routing contract, and `/api/nodeinfo` exposes the resolved `repair_model` and `ocr_model` so CLI and Studio report the same per-task models (issue #23).
 - Exit within a bounded time when the macOS app receives SIGTERM/SIGINT while its Cocoa event loop is running. Python-level signal handlers only run when the main thread executes Python bytecode, so `webview.start()` could swallow the signal and leave the process alive after termination (#50). An NSTimer signal pump now lets `_on_terminate` close the window through the normal cleanup path, and a `signal.set_wakeup_fd` watchdog cleans up and force-exits as a fallback.
 - SIGTERM during app startup (after the backend answers but before the window registers its closer) used to re-raise the signal and exit with code -15, breaking the bounded `returncode == 0` termination contract; the termination action now runs the cleanup hook and exits 0 for SIGTERM at any point after handlers are installed, while SIGINT keeps its default semantics.
 
 ### Added
 
-- Undo and redo editor changes and adopted Agent repairs from the editor toolbar, the command palette, or keyboard shortcuts. History changes invalidate the previous PDF preview.
+- Download and launch Studio-managed MiniCPM-V 4.7 1B or 35B-A3B models in Local Models. Both use the pinned OpenBMB Q4_K_M weights and matching F16 vision projector. Keep the existing loopback endpoint available when the managed model stops (#60, #74).
+- Undo and redo editor changes and adopted Agent repairs from the editor toolbar, the command palette, or keyboard shortcuts. History changes invalidate the previous PDF preview (#54, #56).
 
 - E2E release acceptance driver `scripts/e2e_release_check.py`: preflight (venv Python, LaTeX toolchain, served model names must match the contract names exactly), E2E-1 compile scenario (real tectonic build + PDF fetch), E2E-2 repair scenario (deterministic delimiter correction, unchanged missing script, zero model calls), and evidence records under `docs/evaluation-results/e2e-release-01/`.
 - Model-routing contract tests: `OCR_MODEL` environment routing and the `--model` CLI default in doc-ocr-extract, `REPAIR_MODEL` priority through the Studio provider/pipeline surface, and default-literal consistency across the repair, Studio and OCR lines.
