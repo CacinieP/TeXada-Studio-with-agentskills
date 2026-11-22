@@ -323,15 +323,19 @@ def existing_session_url(state, port):
 
 
 LOCAL_TOOL_BIN = Path.home() / ".texada" / "bin"
+LOCAL_POPPLER_BIN = Path.home() / ".texada" / "Library" / "bin"
 
 
 def prepend_local_bin(path_value):
-    """把 ~/.texada/bin(install_local_tools.py 的安装位置)放到 PATH 最前。"""
+    """把 ~/.texada/bin(及 Windows 下 ~/.texada/Library/bin)放到 PATH 最前。"""
     entries = [entry for entry in (path_value or "").split(os.pathsep) if entry]
-    local = str(LOCAL_TOOL_BIN)
-    if local in entries:
+    candidates = [str(LOCAL_TOOL_BIN)]
+    if os.name == "nt":
+        candidates.append(str(LOCAL_POPPLER_BIN))
+    additions = [item for item in candidates if item not in entries]
+    if not additions:
         return path_value
-    return os.pathsep.join([local, *entries])
+    return os.pathsep.join([*additions, *entries])
 
 
 def watch_parent_exit(server):

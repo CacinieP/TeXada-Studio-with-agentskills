@@ -75,14 +75,14 @@ jobs:
       - name: Prepare TeX resource cache
         shell: bash
         run: |
-          export PATH="$(cygpath -u "$USERPROFILE")/.texada/bin:$PATH"
+          export PATH="$(cygpath -u "$USERPROFILE")/.texada/bin:$(cygpath -u "$USERPROFILE")/.texada/Library/bin:$PATH"
           export TECTONIC_CACHE_DIR="$LOCALAPPDATA/TectonicProject/Tectonic/Cache"
           .venv/Scripts/python.exe scripts/prepare-local-tex.py --download-resources
 
       - name: Build self-contained Windows bundle
         shell: bash
         run: |
-          export PATH="$(cygpath -u "$USERPROFILE")/.texada/bin:$PATH"
+          export PATH="$(cygpath -u "$USERPROFILE")/.texada/bin:$(cygpath -u "$USERPROFILE")/.texada/Library/bin:$PATH"
           export TECTONIC_CACHE_DIR="$LOCALAPPDATA/TectonicProject/Tectonic/Cache"
           .venv/Scripts/python.exe desktop/build_windows_bundle.py --output dist-win --with-llama-server
 
@@ -136,20 +136,20 @@ jobs:
               "PYTHONUTF8": "1",
           }
 
-          for exe_name, flag in (
-              ("tectonic.exe", "--version"),
-              ("pdfinfo.exe", "-v"),
-              ("pdftoppm.exe", "-v"),
-              ("llama-server.exe", "--version"),
+          for exe_rel, flag in (
+              (res_dir / "bin" / "tectonic.exe", "--version"),
+              (res_dir / "Library" / "bin" / "pdfinfo.exe", "-v"),
+              (res_dir / "Library" / "bin" / "pdftoppm.exe", "-v"),
+              (res_dir / "bin" / "llama-server.exe", "--version"),
           ):
               out = subprocess.run(
-                  [str(res_dir / "bin" / exe_name), flag],
+                  [str(exe_rel), flag],
                   env=iso_env,
                   capture_output=True,
                   text=True,
                   check=True,
               )
-              print(exe_name, (out.stdout + out.stderr).strip().splitlines()[0])
+              print(exe_rel.name, (out.stdout + out.stderr).strip().splitlines()[0])
 
           verify_out = subprocess.run(
               [
@@ -195,7 +195,7 @@ jobs:
               )
               subprocess.run(
                   [
-                      str(res_dir / "bin" / "pdftoppm.exe"),
+                      str(res_dir / "Library" / "bin" / "pdftoppm.exe"),
                       "-f", "1", "-l", "1", "-png", "-r", "100", "-singlefile",
                       str(out_dir / f"{variant}.pdf"),
                       str(out_dir / variant),

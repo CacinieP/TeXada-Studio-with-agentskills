@@ -345,7 +345,7 @@ class TerminateWatchdogTests(unittest.TestCase):
 
     def test_install_and_close_terminate_watchdog_uses_socketpair(self):
         state = {}
-        installed = desktop_app._install_terminate_watchdog(state, deadline=0.1)
+        installed = desktop_app._install_terminate_watchdog(state, deadline=0.1, os_name="nt")
         try:
             self.assertTrue(installed)
             self.assertIn("wakeup_sockets", state)
@@ -1557,7 +1557,7 @@ class WindowsBundleBuilderTests(unittest.TestCase):
 
             def fake_run(argv, **kwargs):
                 cmd0 = Path(argv[0])
-                if len(argv) == 2 and cmd0.parent == staging / "bin":
+                if len(argv) == 2 and cmd0.parent in (staging / "bin", staging / "Library" / "bin"):
                     smoke_seen.append((cmd0.name, argv[1]))
                 return subprocess.CompletedProcess(argv, 0, "", "")
 
@@ -1588,7 +1588,7 @@ class WindowsBundleBuilderTests(unittest.TestCase):
                     ("llama-server.exe", "--version"),
                 ],
             )
-            self.assertTrue((staging / "bin" / "poppler.dll").is_file())
+            self.assertTrue((staging / "Library" / "bin" / "poppler.dll").is_file())
             self.assertTrue((staging / "bin" / "ggml.dll").is_file())
             self.assertTrue((staging / "share" / "poppler" / "cMap" / "Identity-H").is_file())
             self.assertTrue((staging / "licenses" / "tex-cache-manifest.sha256").is_file())

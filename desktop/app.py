@@ -90,10 +90,15 @@ TEX_CACHE_TARGET = _default_tex_cache_target()
 
 
 def tool_bin_dirs():
-    """PATH 前置目录:捆绑 bin(自包含包)与 ~/.texada/bin(一键安装位置)。"""
+    """PATH 前置目录:捆绑 bin(自包含包)与 ~/.texada/bin(含 Windows Library/bin)。"""
     dirs = [Path.home() / ".texada" / "bin"]
+    if os.name == "nt":
+        dirs.append(Path.home() / ".texada" / "Library" / "bin")
     if BUNDLE_DIR is not None:
-        dirs.insert(0, BUNDLE_DIR / "bin")
+        bundled = [BUNDLE_DIR / "bin"]
+        if os.name == "nt":
+            bundled.append(BUNDLE_DIR / "Library" / "bin")
+        dirs = [*bundled, *dirs]
     return dirs
 
 
@@ -604,10 +609,24 @@ def _close_terminate_watchdog(state) -> None:
             pass
 
 
-def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
-    """安装跨平台 socketpair 唤醒通道与看门狗线程;失败时返回 False。"""
+def _install_terminate_watchdog(state, deadline=_watchdog_deadline, *, os_name=None):
+    """安装唤醒通道与看门狗线程:POSIX 用原生 os.pipe,Windows 用 Winsock socketpair。"""
+    effective_os = os_name if os_name is not None else os.name
     _close_terminate_watchdog(state)
     state["closing"] = False
+    if effective_os != "nt":
+        try:
+            read_fd, write_fd = os.pipe()
+            os.set_blocking(write_fd, False)
+            signal.set_wakeup_fd(write_fd)
+        except (OSError, ValueError):
+            return False
+        threading.Thread(
+            target=_terminate_watchdog, args=(read_fd, state),
+            kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
+        ).start()
+        return True
+
     read_sock = write_sock = None
     try:
         read_sock, write_sock = socket.socketpair()

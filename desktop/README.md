@@ -21,7 +21,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r desktop\requirements.txt pyinstaller
 .venv\Scripts\python.exe scripts\install_local_tools.py
 .venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'webui'); import tool_fetch; print(tool_fetch.install_poppler())"
-$env:PATH = "$HOME\.texada\bin;$env:PATH"
+$env:PATH = "$HOME\.texada\bin;$HOME\.texada\Library\bin;$env:PATH"
 $env:TECTONIC_CACHE_DIR = "$env:LOCALAPPDATA\TectonicProject\Tectonic\Cache"
 .venv\Scripts\python.exe scripts\prepare-local-tex.py --download-resources
 ```

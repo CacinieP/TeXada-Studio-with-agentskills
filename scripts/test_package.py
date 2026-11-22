@@ -15,6 +15,26 @@ import zipfile
 SCRIPT = Path(__file__).resolve().with_name("package.sh")
 
 
+def _bash_executable() -> str:
+    if os.name != "nt":
+        return "bash"
+    git_exe = shutil.which("git")
+    candidates: list[Path] = []
+    if git_exe:
+        git_path = Path(git_exe).resolve()
+        for parent in git_path.parents[:3]:
+            candidates.append(parent / "bin" / "bash.exe")
+            candidates.append(parent / "usr" / "bin" / "bash.exe")
+    for env_key in ("ProgramFiles", "ProgramW6432"):
+        root = os.environ.get(env_key)
+        if root:
+            candidates.append(Path(root) / "Git" / "bin" / "bash.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "bash"
+
+
 class SourcePackageTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="texada package test ")
@@ -50,10 +70,10 @@ class SourcePackageTests(unittest.TestCase):
         self.git("commit", "-q", "-m", "Synthetic source snapshot")
 
     def package(self):
-        return subprocess.run(["bash", str(self.repo / "scripts/package.sh")],
+        return subprocess.run([_bash_executable(), str(self.repo / "scripts/package.sh")],
                               cwd=self.temporary.name,
                               env={**os.environ, "TEXADA_PACKAGE_PYTHON": sys.executable},
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     def output_files(self):
         return sorted((self.repo / "dist").glob("*"))

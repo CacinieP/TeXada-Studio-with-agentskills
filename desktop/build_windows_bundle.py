@@ -31,7 +31,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic.exe"
-POPPLER_BIN_DEFAULT = Path.home() / ".texada" / "bin"
+POPPLER_BIN_DEFAULT = Path.home() / ".texada" / "Library" / "bin"
 
 APP_VERSION = "0.1.1"
 FILE_VERSION_TUPLE = (0, 1, 1, 0)
@@ -392,8 +392,11 @@ def stage_llama_server(staging: Path, *, fetch=None, archive_path: Path | None =
 def stage_poppler_windows(staging: Path, *, poppler_bin: Path | None = None) -> None:
     bin_source = poppler_bin
     if bin_source is None:
+        fallback_flat = Path.home() / ".texada" / "bin"
         if (POPPLER_BIN_DEFAULT / "pdfinfo.exe").is_file() and (POPPLER_BIN_DEFAULT / "pdftoppm.exe").is_file():
             bin_source = POPPLER_BIN_DEFAULT
+        elif (fallback_flat / "pdfinfo.exe").is_file() and (fallback_flat / "pdftoppm.exe").is_file():
+            bin_source = fallback_flat
         else:
             found = shutil.which("pdfinfo.exe") or shutil.which("pdfinfo")
             require(found is not None, "未找到 Poppler Windows(pdfinfo.exe);请先调用 tool_fetch.install_poppler()")
@@ -403,9 +406,13 @@ def stage_poppler_windows(staging: Path, *, poppler_bin: Path | None = None) -> 
         (bin_source / "pdfinfo.exe").is_file() and (bin_source / "pdftoppm.exe").is_file(),
         f"Poppler 目录缺少 pdfinfo.exe 或 pdftoppm.exe:{bin_source}",
     )
+    # Conda-forge win64 poppler.dll resolves CJK maps at <dll_dir>\..\..\share\poppler,
+    # so stage Poppler into Resources/Library/bin paired with Resources/share/poppler.
+    poppler_target_bin = staging / "Library" / "bin"
+    poppler_target_bin.mkdir(parents=True, exist_ok=True)
     for item in bin_source.iterdir():
         if item.is_file() and item.suffix.lower() in {".exe", ".dll"} and item.name.lower() != "tectonic.exe":
-            shutil.copy2(item, staging / "bin" / item.name)
+            shutil.copy2(item, poppler_target_bin / item.name)
 
     share_candidates = (
         bin_source.parent / "share" / "poppler",
@@ -417,8 +424,12 @@ def stage_poppler_windows(staging: Path, *, poppler_bin: Path | None = None) -> 
 
     lic_target = staging / "licenses" / "poppler-windows"
     lic_target.mkdir(parents=True, exist_ok=True)
-    lic_src = bin_source.parent / "licenses" / "poppler-windows"
-    if lic_src.is_dir():
+    lic_src = next(
+        (cand for cand in (bin_source.parent / "licenses" / "poppler-windows",
+                           bin_source.parent.parent / "licenses" / "poppler-windows") if cand.is_dir()),
+        None,
+    )
+    if lic_src is not None:
         for item in lic_src.iterdir():
             if item.is_file():
                 shutil.copy2(item, lic_target / item.name)
@@ -507,20 +518,23 @@ def stage_resources(
     require(tectonic_src.is_file(), "Tectonic 未安装;先运行 scripts/install_local_tools.py")
     shutil.copy2(tectonic_src, staging / "bin" / "tectonic.exe")
 
-    smoke: list[tuple[str, str]] = [("tectonic.exe", "--version")]
+    smoke: list[tuple[Path, str]] = [(staging / "bin" / "tectonic.exe", "--version")]
     if not skip_poppler:
         stage_poppler_windows(staging)
-        smoke.extend((("pdfinfo.exe", "-v"), ("pdftoppm.exe", "-v")))
+        smoke.extend((
+            (staging / "Library" / "bin" / "pdfinfo.exe", "-v"),
+            (staging / "Library" / "bin" / "pdftoppm.exe", "-v"),
+        ))
     if with_llama_server:
         try:
             stage_llama_server(staging, fetch=fetch, archive_path=llama_zip)
         except ValueError as exc:
             require(False, str(exc))
-        smoke.append(("llama-server.exe", "--version"))
+        smoke.append((staging / "bin" / "llama-server.exe", "--version"))
 
     smoke_env = minimal_smoke_env()
-    for name, flag in smoke:
-        run([str(staging / "bin" / name), flag], env=smoke_env, capture_output=True)
+    for exe_path, flag in smoke:
+        run([str(exe_path), flag], env=smoke_env, capture_output=True)
 
     tex_cache = _resolve_tex_cache()
     require(tex_cache.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
@@ -533,7 +547,7 @@ def stage_resources(
         tex_cache_manifest(staging / "tex-cache"),
         encoding="utf-8",
     )
-    for area in ("webui", "tex-cache", "bin", "share"):
+    for area in ("webui", "tex-cache", "bin", "Library", "share"):
         path = staging / area
         if path.exists():
             sizes[area] = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())

@@ -319,12 +319,14 @@ class PopplerTests(unittest.TestCase):
         self.assertEqual(result["tool"], "poppler")
         self.assertEqual(result["method"], "github-release")
         self.assertEqual(result["version"], "26.09.0-0")
-        self.assertEqual(Path(result["path"]), self.bin_dir.resolve())
-        self.assertEqual((self.bin_dir / "pdfinfo.exe").read_bytes(), b"MZ-pdfinfo")
-        self.assertEqual((self.bin_dir / "pdftoppm.exe").read_bytes(), b"MZ-pdftoppm")
-        self.assertEqual((self.bin_dir / "poppler.dll").read_bytes(), b"MZ-poppler-dll")
+        poppler_bin = (self.root / "Library" / "bin").resolve()
+        self.assertEqual(Path(result["path"]), poppler_bin)
+        self.assertEqual((poppler_bin / "pdfinfo.exe").read_bytes(), b"MZ-pdfinfo")
+        self.assertEqual((poppler_bin / "pdftoppm.exe").read_bytes(), b"MZ-pdftoppm")
+        self.assertEqual((poppler_bin / "poppler.dll").read_bytes(), b"MZ-poppler-dll")
+        # poppler.dll (conda-forge win64) resolves CJK maps at <dll_dir>\..\..\share\poppler
         self.assertEqual(
-            (self.root / "share" / "poppler" / "cMap" / "Adobe-GB1" / "UniGB-UTF16-H").read_bytes(),
+            (poppler_bin.parent.parent / "share" / "poppler" / "cMap" / "Adobe-GB1" / "UniGB-UTF16-H").read_bytes(),
             b"cmap-data",
         )
         license_dir = self.root / "licenses" / "poppler-windows"

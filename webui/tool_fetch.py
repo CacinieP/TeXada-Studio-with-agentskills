@@ -228,8 +228,11 @@ def _write_confined(root: Path, relative_parts: list[str], data: bytes) -> Path:
 
 
 def _install_poppler_windows(*, bin_dir=None, fetch=None, progress=None):
-    target_bin = (Path(bin_dir) if bin_dir else DEFAULT_BIN_DIR).resolve()
-    prefix_root = target_bin.parent.resolve()
+    base_bin = (Path(bin_dir) if bin_dir else DEFAULT_BIN_DIR).resolve()
+    prefix_root = base_bin.parent.resolve()
+    # poppler.dll (conda-forge win64) resolves CJK maps at <dll_dir>\..\..\share\poppler,
+    # so keeping binaries in <prefix>/Library/bin and data in <prefix>/share/poppler matches upstream.
+    target_bin = prefix_root / "Library" / "bin"
     share_poppler = prefix_root / "share" / "poppler"
     license_dir = prefix_root / "licenses" / "poppler-windows"
 
