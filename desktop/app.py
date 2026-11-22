@@ -134,6 +134,8 @@ def read_entry(state_dir: Path):
 
 
 def _win32_pid_alive(pid: int) -> bool:
+    if type(pid) is not int or pid <= 0 or pid > 0xFFFFFFFF:
+        return False
     import ctypes
 
     windll = getattr(ctypes, "windll", None)
@@ -530,20 +532,36 @@ def _install_signal_pump(interval=0.2):
         return False
 
 
-def _terminate_watchdog(read_fd, state, deadline=_watchdog_deadline, exiter=None):
+def _read_wakeup_bytes(channel) -> bytes:
+    if hasattr(channel, "recv"):
+        return channel.recv(64)
+    return os.read(channel, 64)
+
+
+def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter=None):
     """看门狗线程体:收到唤醒字节后有界等待,随后自行清理并强制退出。
 
-    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的管道,读到字节即知收到了
-    信号。第一个字节后至多再等 deadline 秒让主线程走正常退出;期间再来第二个信号
-    则立即强制。随后执行清理钩子(标记会话停止、停止后端)并退出,保证有界退出。
+    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的 socketpair,读到非空字节即知
+    收到了信号。未收到真实唤醒字节前的任何 OSError/EOF(如平台不支持或正常退出关闭
+    socket)直接返回,绝不误杀进程;收到首个信号后至多再等 deadline 秒让主线程正常收尾,
+    期间再来第二个信号则立即执行清理并强制退出。
     """
     exiter = os._exit if exiter is None else exiter
+    woken = False
     try:
-        select.select([read_fd], [], [])  # 阻塞等待第一个唤醒字节
-        os.read(read_fd, 64)
-        readable, _, _ = select.select([read_fd], [], [], deadline)
-        if readable:
-            os.read(read_fd, 64)
+        readable, _, _ = select.select([read_channel], [], [])
+        if not readable:
+            return
+        first = _read_wakeup_bytes(read_channel)
+        if not first:
+            return
+        woken = True
+        readable2, _, _ = select.select([read_channel], [], [], deadline)
+        if readable2:
+            try:
+                _read_wakeup_bytes(read_channel)
+            except OSError:
+                pass
         shutdown = state.get("shutdown")
         if callable(shutdown):
             try:
@@ -552,19 +570,53 @@ def _terminate_watchdog(read_fd, state, deadline=_watchdog_deadline, exiter=None
                 pass  # 清理失败也必须退出,保证有界
         exiter(0)
     except Exception:
+        if not woken:
+            return
+        shutdown = state.get("shutdown")
+        if callable(shutdown):
+            try:
+                shutdown()
+            except Exception:
+                pass
         exiter(0)
 
 
-def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
-    """安装 set_wakeup_fd 管道与看门狗线程;失败时返回 False。"""
+def _close_terminate_watchdog(state) -> None:
+    """复位 set_wakeup_fd 并关闭保存的唤醒 socketpair。"""
+    sockets = state.pop("wakeup_sockets", None)
+    if not sockets:
+        return
     try:
-        read_fd, write_fd = os.pipe()
-        os.set_blocking(write_fd, False)
-        signal.set_wakeup_fd(write_fd)
+        signal.set_wakeup_fd(-1)
     except (OSError, ValueError):
+        pass
+    for sock in reversed(sockets):
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
+def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
+    """安装跨平台 socketpair 唤醒通道与看门狗线程;失败时返回 False。"""
+    _close_terminate_watchdog(state)
+    read_sock = write_sock = None
+    try:
+        read_sock, write_sock = socket.socketpair()
+        read_sock.setblocking(False)
+        write_sock.setblocking(False)
+        signal.set_wakeup_fd(write_sock.fileno(), warn_on_full_buffer=False)
+    except (OSError, ValueError):
+        for sock in (write_sock, read_sock):
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
         return False
+    state["wakeup_sockets"] = (read_sock, write_sock)
     threading.Thread(
-        target=_terminate_watchdog, args=(read_fd, state),
+        target=_terminate_watchdog, args=(read_sock, state),
         kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
     ).start()
     return True
@@ -665,6 +717,7 @@ def main(argv=None) -> int:
         _cleanup()
         return 0
     finally:
+        _close_terminate_watchdog(_terminate_state)
         _terminate_state["window_closer"] = None
         _terminate_state["shutdown"] = None
 

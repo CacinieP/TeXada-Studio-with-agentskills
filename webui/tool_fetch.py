@@ -16,6 +16,7 @@ import inspect
 import io
 import os
 import platform as platform_module
+import secrets
 import shutil
 import subprocess
 import sys
@@ -181,16 +182,49 @@ def _safe_zip_parts(raw_name: str) -> list[str]:
     return parts
 
 
+def _atomic_replace_file(target: Path, data: bytes, *, mode: int | None = None) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{secrets.token_hex(6)}.tmp")
+    try:
+        temporary.write_bytes(data)
+        if mode is not None:
+            temporary.chmod(mode)
+        try:
+            os.replace(temporary, target)
+        except PermissionError as error:
+            if not target.exists():
+                raise ToolFetchError("目标工具文件正被占用，请等待当前编译/预览结束后重试。") from error
+            backup = target.with_name(f".{target.name}.old-{secrets.token_hex(4)}")
+            try:
+                os.replace(target, backup)
+                os.replace(temporary, target)
+            except OSError as retry_error:
+                if backup.exists() and not target.exists():
+                    try:
+                        os.replace(backup, target)
+                    except OSError:
+                        pass
+                raise ToolFetchError("目标工具文件正被占用，请等待当前编译/预览结束后重试。") from retry_error
+            try:
+                backup.unlink(missing_ok=True)
+            except OSError:
+                pass
+        except OSError as error:
+            raise ToolFetchError(f"无法写入工具文件 {target.name}:{error}") from error
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return target
+
+
 def _write_confined(root: Path, relative_parts: list[str], data: bytes) -> Path:
     resolved_root = root.resolve()
     destination = (resolved_root / Path(*relative_parts)).resolve()
     if destination == resolved_root or not destination.is_relative_to(resolved_root):
         raise ToolFetchError("压缩包成员超出目标目录边界。")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.name}.tmp")
-    temporary.write_bytes(data)
-    os.replace(temporary, destination)
-    return destination
+    return _atomic_replace_file(destination, data)
 
 
 def _install_poppler_windows(*, bin_dir=None, fetch=None, progress=None):
@@ -301,12 +335,8 @@ def install_tectonic(bin_dir=None, fetch=None, progress=None, *, platform_name=N
     if digest != asset[1]:
         raise ToolFetchError(f"SHA256 校验失败(得到 {digest});不会安装未校验的文件。")
     binary = _extract_tectonic(payload)
-    bin_dir.mkdir(parents=True, exist_ok=True)
     binary_name = tectonic_binary_name(platform_name)
     target = bin_dir / binary_name
-    temporary = target.with_name(f".{binary_name}.tmp")
-    temporary.write_bytes(binary)
-    temporary.chmod(0o755)
-    os.replace(temporary, target)
+    _atomic_replace_file(target, binary, mode=0o755)
     (bin_dir / "tectonic.version").write_text(TECTONIC_VERSION + "\n", encoding="utf-8")
     return {"ok": True, "path": str(target), "version": TECTONIC_VERSION, "sha256": digest}

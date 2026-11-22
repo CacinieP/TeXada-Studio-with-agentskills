@@ -301,8 +301,15 @@ class LocalRuntime:
             raise LocalRuntimeError("pdf_tools_unavailable", "PDF 导入需要本机 Poppler（pdfinfo 和 pdftoppm）。", 503)
         source = directory / "source.pdf"
         source.write_bytes(data)
+        win_kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {}
         try:
-            info = subprocess.run(["pdfinfo", str(source)], capture_output=True, text=True, timeout=20)
+            info = subprocess.run(
+                ["pdfinfo", str(source)],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                **win_kwargs,
+            )
             if info.returncode:
                 raise LocalRuntimeError("invalid_pdf", "PDF 无法读取，或需要密码。")
             match = re.search(r"^Pages:\s*(\d+)\s*$", info.stdout, re.M)
@@ -315,9 +322,13 @@ class LocalRuntime:
             images = []
             for page in range(page_start, final_page + 1):
                 prefix = directory / f"page-{page}"
-                result = subprocess.run(["pdftoppm", "-f", str(page), "-l", str(page), "-r", "120", "-scale-to", "2200",
-                                         "-png", "-singlefile", str(source), str(prefix)],
-                                        capture_output=True, timeout=45)
+                result = subprocess.run(
+                    ["pdftoppm", "-f", str(page), "-l", str(page), "-r", "120", "-scale-to", "2200",
+                     "-png", "-singlefile", str(source), str(prefix)],
+                    capture_output=True,
+                    timeout=45,
+                    **win_kwargs,
+                )
                 path = prefix.with_suffix(".png")
                 if result.returncode or not path.is_file() or path.stat().st_size > MAX_FILE_BYTES:
                     raise LocalRuntimeError("pdf_render_failed", f"PDF 第 {page} 页无法转换为图片。", 422)

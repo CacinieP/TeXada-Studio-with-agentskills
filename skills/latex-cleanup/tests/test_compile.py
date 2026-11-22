@@ -1,9 +1,11 @@
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import compile_tex as compiler
@@ -21,6 +23,12 @@ class CompileTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def fake_compiler(self, body):
+        if os.name == "nt":
+            py_script = self.base / "fake-tectonic.py"
+            py_script.write_text("import sys\nfrom pathlib import Path\n" + body, encoding="utf-8")
+            cmd_path = self.base / "fake-tectonic.cmd"
+            cmd_path.write_text(f'@"{sys.executable}" "{py_script}" %*\r\n', encoding="utf-8")
+            return patch.object(compiler.shutil, "which", return_value=str(cmd_path))
         executable = self.base / "fake-tectonic"
         executable.write_text("#!" + sys.executable + "\nimport sys\nfrom pathlib import Path\n" + body, encoding="utf-8")
         executable.chmod(0o755)
@@ -99,6 +107,31 @@ class CompileTests(unittest.TestCase):
     def test_non_tectonic_offline_does_not_pretend_supported(self):
         result = compiler.compile_document(self.root, "xelatex", self.outdir, offline=True)
         self.assertEqual(result["status"], "not_run")
+
+    def test_windows_timeout_kills_process_tree_before_communicate(self):
+        fake_proc = MagicMock()
+        fake_proc.pid = 8765
+        fake_proc.returncode = 1
+        fake_proc.communicate.side_effect = [
+            subprocess.TimeoutExpired(cmd=["fake.cmd"], timeout=1),
+            (b"partial", b""),
+        ]
+        with patch.object(compiler.os, "name", "nt"), \
+                patch.object(compiler.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(compiler.subprocess, "Popen", return_value=fake_proc), \
+                patch.object(compiler.subprocess, "run") as run_mock:
+            code, output, timed_out, _ = compiler.run_process(["fake.cmd"], self.base, timeout=1)
+
+        self.assertTrue(timed_out)
+        self.assertEqual(code, 1)
+        self.assertEqual(output, b"partial")
+        run_mock.assert_called_once_with(
+            ["taskkill", "/F", "/T", "/PID", "8765"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=0x08000000,
+        )
+        fake_proc.kill.assert_called_once()
 
 
 if __name__ == "__main__":

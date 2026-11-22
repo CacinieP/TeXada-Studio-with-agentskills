@@ -41,8 +41,28 @@ def _ensure_bundle_sys_path(bundle_dir: Path) -> None:
             sys.path.insert(0, entry)
 
 
+def _prepare_stdio_and_utf8() -> None:
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    elif callable(getattr(sys.stdout, "reconfigure", None)):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, AttributeError):
+            pass
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    elif callable(getattr(sys.stderr, "reconfigure", None)):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
 def run_entry(argv: list[str] | None = None, *, executable: Path | None = None) -> int:
     multiprocessing.freeze_support()
+    _prepare_stdio_and_utf8()
     effective_argv = list(sys.argv if argv is None else argv)
     bundle_dir = resolve_bundle_dir(executable=executable)
     os.environ.setdefault("TEXADA_BUNDLE_DIR", str(bundle_dir))
@@ -83,11 +103,6 @@ def run_entry(argv: list[str] | None = None, *, executable: Path | None = None) 
         except SystemExit as exc:
             return _exit_code_from_system_exit(exc)
         return 0
-
-    if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
-    if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
     desktop_script = bundle_dir / "desktop" / "app.py"
     spec = importlib.util.spec_from_file_location("texada_desktop_app", str(desktop_script))

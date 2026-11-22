@@ -130,7 +130,7 @@ def private_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
-def _win32_pid_alive(pid: int) -> bool:
+def _get_win32_kernel32():
     import ctypes
 
     windll = getattr(ctypes, "windll", None)
@@ -142,9 +142,19 @@ def _win32_pid_alive(pid: int) -> bool:
         kernel32.WaitForSingleObject.restype = ctypes.c_uint32
         kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
         kernel32.CloseHandle.restype = ctypes.c_int
-    elif windll is not None:
-        kernel32 = windll.kernel32
-    else:
+        return kernel32
+    if windll is not None:
+        return windll.kernel32
+    return None
+
+
+def _win32_pid_alive(pid: int) -> bool:
+    if type(pid) is not int or pid <= 0 or pid > 0xFFFFFFFF:
+        return False
+    import ctypes
+
+    kernel32 = _get_win32_kernel32()
+    if kernel32 is None:
         return False
 
     handle = kernel32.OpenProcess(0x00100000, False, pid)
@@ -329,15 +339,36 @@ def watch_parent_exit(server):
     if os.environ.get("TEXADA_EXIT_WHEN_ORPHANED") != "1":
         return None
     parent = os.getppid()
+    win_kernel32 = None
+    parent_handle = None
+    if os.name == "nt" and type(parent) is int and 0 < parent <= 0xFFFFFFFF:
+        win_kernel32 = _get_win32_kernel32()
+        if win_kernel32 is not None:
+            opened = win_kernel32.OpenProcess(0x00100000, False, parent)
+            if opened:
+                parent_handle = opened
+
     def watch():
-        while True:
-            time.sleep(2)
-            try:
-                if os.getppid() != parent:
-                    server.should_exit = True
+        try:
+            while not getattr(server, "should_exit", False):
+                time.sleep(2)
+                try:
+                    if parent_handle is not None:
+                        if win_kernel32.WaitForSingleObject(parent_handle, 0) != 0x00000102:
+                            server.should_exit = True
+                            return
+                    elif os.getppid() != parent or not _alive(parent):
+                        server.should_exit = True
+                        return
+                except OSError:
                     return
-            except OSError:
-                return
+        finally:
+            if parent_handle is not None and win_kernel32 is not None:
+                try:
+                    win_kernel32.CloseHandle(parent_handle)
+                except Exception:
+                    pass
+
     import threading
     thread = threading.Thread(target=watch, daemon=True, name="parent-watch")
     thread.start()

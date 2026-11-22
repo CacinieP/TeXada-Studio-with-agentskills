@@ -212,28 +212,32 @@ class BuildTests(unittest.TestCase):
             self.assertTrue(text.endswith("\n"))
 
 
-@unittest.skipUnless(os.name == "posix", "POSIX wakeup pipe requires select() on pipe fd")
 class TerminateWatchdogTests(unittest.TestCase):
-    """看门狗线程体:唤醒后有界等待,随后自行清理并强制退出。"""
+    """看门狗线程体:跨平台 socketpair 唤醒后有界等待,随后自行清理并强制退出。"""
 
     def run_watchdog(self, write_bytes, deadline=0.2):
-        read_fd, write_fd = os.pipe()
-        os.set_blocking(write_fd, False)
+        import socket
+
+        read_sock, write_sock = socket.socketpair()
+        read_sock.setblocking(False)
+        write_sock.setblocking(False)
         cleaned = []
         exited = []
         state = {"shutdown": lambda: cleaned.append(True)}
         thread = threading.Thread(
             target=desktop_app._terminate_watchdog,
-            args=(read_fd, state),
+            args=(read_sock, state),
             kwargs={"deadline": deadline, "exiter": lambda code: exited.append(code)},
             daemon=True)
         thread.start()
-        for payload in write_bytes:
-            os.write(write_fd, payload)
-            time.sleep(0.02)
-        thread.join(timeout=5)
-        os.close(read_fd)
-        os.close(write_fd)
+        try:
+            for payload in write_bytes:
+                write_sock.sendall(payload)
+                time.sleep(0.02)
+            thread.join(timeout=5)
+        finally:
+            read_sock.close()
+            write_sock.close()
         self.assertFalse(thread.is_alive(), "看门狗处理完应退出线程体")
         return cleaned, exited
 
@@ -250,20 +254,79 @@ class TerminateWatchdogTests(unittest.TestCase):
         self.assertEqual(exited, [0])
 
     def test_missing_shutdown_hook_still_exits(self):
-        read_fd, write_fd = os.pipe()
-        os.set_blocking(write_fd, False)
+        import socket
+
+        read_sock, write_sock = socket.socketpair()
+        read_sock.setblocking(False)
+        write_sock.setblocking(False)
         exited = []
         thread = threading.Thread(
             target=desktop_app._terminate_watchdog,
-            args=(read_fd, {}),
+            args=(read_sock, {}),
             kwargs={"deadline": 0.1, "exiter": lambda code: exited.append(code)},
             daemon=True)
         thread.start()
-        os.write(write_fd, b"\x0f")
-        thread.join(timeout=5)
-        os.close(read_fd)
-        os.close(write_fd)
+        try:
+            write_sock.sendall(b"\x0f")
+            thread.join(timeout=5)
+        finally:
+            read_sock.close()
+            write_sock.close()
         self.assertEqual(exited, [0], "无清理钩子也不能卡死")
+
+    def test_pre_wakeup_select_oserror_returns_without_shutdown_or_exit(self):
+        import socket
+
+        read_sock, write_sock = socket.socketpair()
+        cleaned = []
+        exited = []
+        state = {"shutdown": lambda: cleaned.append(True)}
+        try:
+            with unittest.mock.patch.object(
+                desktop_app.select,
+                "select",
+                side_effect=OSError(10038, "An operation was attempted on something that is not a socket"),
+            ):
+                desktop_app._terminate_watchdog(
+                    read_sock, state, deadline=0.1, exiter=lambda code: exited.append(code)
+                )
+        finally:
+            read_sock.close()
+            write_sock.close()
+        self.assertEqual(cleaned, [], "未收到唤醒字节前的 select 错误严禁触发 shutdown")
+        self.assertEqual(exited, [], "未收到唤醒字节前的 select 错误严禁触发 os._exit(0)")
+
+    def test_closed_wakeup_socket_eof_returns_without_shutdown_or_exit(self):
+        import socket
+
+        read_sock, write_sock = socket.socketpair()
+        cleaned = []
+        exited = []
+        state = {"shutdown": lambda: cleaned.append(True)}
+        thread = threading.Thread(
+            target=desktop_app._terminate_watchdog,
+            args=(read_sock, state),
+            kwargs={"deadline": 0.1, "exiter": lambda code: exited.append(code)},
+            daemon=True,
+        )
+        thread.start()
+        write_sock.close()
+        thread.join(timeout=2)
+        read_sock.close()
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(cleaned, [], "正常关闭唤醒 socket 产生 EOF 时不应触发异常退出")
+        self.assertEqual(exited, [])
+
+    def test_install_and_close_terminate_watchdog_uses_socketpair(self):
+        state = {}
+        installed = desktop_app._install_terminate_watchdog(state, deadline=0.1)
+        try:
+            self.assertTrue(installed)
+            self.assertIn("wakeup_sockets", state)
+            self.assertEqual(len(state["wakeup_sockets"]), 2)
+        finally:
+            desktop_app._close_terminate_watchdog(state)
+        self.assertNotIn("wakeup_sockets", state)
 
 
 class TerminateFallbackTests(unittest.TestCase):
@@ -1274,6 +1337,12 @@ class WindowsDesktopAppTests(unittest.TestCase):
             with unittest.mock.patch.object(ctypes, "get_last_error", return_value=87, create=True):
                 self.assertFalse(desktop_app.entry_alive({"pid": 7777, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
             self.assertFalse(desktop_app.entry_alive({"pid": True, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}))
+            fake_kernel32.OpenProcess.reset_mock()
+            self.assertFalse(
+                desktop_app.entry_alive({"pid": (1 << 32) + 4321, "running": True, "url": "http://127.0.0.1:8888/studio?token=a"}),
+                "超过 32 位无符号范围的 PID 必须直接拒绝,不得经 c_uint32 回绕",
+            )
+            fake_kernel32.OpenProcess.assert_not_called()
 
     def test_windows_and_linux_platform_paths(self):
         fake_repo = Path("C:/repo")
@@ -1559,13 +1628,36 @@ class WindowsBundleBuilderTests(unittest.TestCase):
             )
             saved_env = dict(os.environ)
             saved_argv = list(sys.argv)
+            saved_stdout, saved_stderr = sys.stdout, sys.stderr
             try:
                 os.environ.pop("TEXADA_BUNDLE_DIR", None)
+                os.environ.pop("PYTHONUTF8", None)
+                os.environ.pop("PYTHONIOENCODING", None)
                 rc = windows_entry.run_entry([str(fake_exe), str(probe_script), "x^2+1"], executable=fake_exe)
                 self.assertEqual(rc, 0)
                 self.assertEqual(out_file.read_text(encoding="utf-8"), "x^2+1")
                 self.assertEqual(os.environ.get("TEXADA_BUNDLE_DIR"), str(res.resolve()))
+                self.assertEqual(os.environ.get("PYTHONUTF8"), "1")
+                self.assertEqual(os.environ.get("PYTHONIOENCODING"), "utf-8")
+
+                os.environ.pop("PYTHONUTF8", None)
+                sys.stdout = None
+                sys.stderr = None
+                rc_dash_c = windows_entry.run_entry(
+                    [str(fake_exe), "-c", "import os, sys; sys.stdout.write('ok'); assert os.environ['PYTHONUTF8'] == '1'"],
+                    executable=fake_exe,
+                )
+                self.assertEqual(rc_dash_c, 0)
+                self.assertIsNotNone(sys.stdout)
+                self.assertIsNotNone(sys.stderr)
             finally:
+                for stream, orig in ((sys.stdout, saved_stdout), (sys.stderr, saved_stderr)):
+                    if stream is not None and stream is not orig:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                sys.stdout, sys.stderr = saved_stdout, saved_stderr
                 os.environ.clear()
                 os.environ.update(saved_env)
                 sys.argv[:] = saved_argv

@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -30,7 +31,8 @@ class SourceEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence['data'],PNG)
         self.assertEqual(evidence['sha256'],hashlib.sha256(PNG).hexdigest())
         self.assertTrue(result['requires_review'])
-        self.assertEqual((directory/'source.png').stat().st_mode & 0o777,0o600)
+        if os.name == 'posix':
+            self.assertEqual((directory/'source.png').stat().st_mode & 0o777,0o600)
 
     def test_pdf_pages_survive_their_temporary_directory(self):
         temporary_directories=[]

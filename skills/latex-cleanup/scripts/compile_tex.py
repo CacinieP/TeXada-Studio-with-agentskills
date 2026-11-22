@@ -37,6 +37,15 @@ def run_process(command, cwd, timeout):
         if os.name == "posix":
             os.killpg(proc.pid, signal.SIGKILL)
         else:
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            except OSError:
+                pass
             proc.kill()
         output, _ = proc.communicate()
     return proc.returncode, output, timed_out, round(time.monotonic() - started, 3)

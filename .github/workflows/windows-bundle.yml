@@ -33,7 +33,9 @@ jobs:
     steps:
       - name: Preserve committed LF line endings before checkout
         shell: bash
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
 
       - uses: actions/checkout@v7
 

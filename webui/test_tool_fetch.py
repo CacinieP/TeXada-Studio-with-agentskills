@@ -207,6 +207,41 @@ class InstallTectonicTests(unittest.TestCase):
         self.assertEqual(status["installed_path"], str(binary))
         self.assertEqual(status["installed_version"], "0.17.0")
 
+    def test_install_recovers_locked_target_via_rename_and_maps_persistent_lock_to_tool_fetch_error(self):
+        payload = valid_payload()
+        key = tool_fetch.platform_key()
+        original = tool_fetch.TECTONIC_ASSETS.get(key)
+        digest = hashlib.sha256(payload).hexdigest()
+        binary_name = tool_fetch.tectonic_binary_name()
+        target = self.bin_dir / binary_name
+        self.bin_dir.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"old-binary")
+
+        real_replace = os.replace
+        attempts = []
+
+        def locked_direct_replace(src, dst):
+            attempts.append((Path(src).name, Path(dst).name))
+            if Path(dst) == target and target.exists():
+                raise PermissionError(13, "WinError 5: Access is denied")
+            return real_replace(src, dst)
+
+        with mock.patch.dict(tool_fetch.TECTONIC_ASSETS, {key: (original[0], digest)}), \
+                mock.patch.object(tool_fetch.os, "replace", side_effect=locked_direct_replace):
+            fetch, _ = self.fetch_fixed(payload)
+            result = tool_fetch.install_tectonic(self.bin_dir, fetch=fetch)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(target.read_bytes(), VALID_BINARY)
+        self.assertEqual(list(self.bin_dir.glob("*.tmp")), [])
+
+        with mock.patch.dict(tool_fetch.TECTONIC_ASSETS, {key: (original[0], digest)}), \
+                mock.patch.object(tool_fetch.os, "replace", side_effect=PermissionError(13, "locked")):
+            fetch, _ = self.fetch_fixed(payload)
+            with self.assertRaisesRegex(tool_fetch.ToolFetchError, "占用"):
+                tool_fetch.install_tectonic(self.bin_dir, fetch=fetch)
+        self.assertEqual(list(self.bin_dir.glob("*.tmp")), [], "失败后必须清理随机临时文件")
+
 
 class PopplerTests(unittest.TestCase):
     def setUp(self):

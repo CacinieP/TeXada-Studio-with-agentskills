@@ -111,7 +111,8 @@ class LocalRuntimeTest(unittest.TestCase):
         self.assertEqual(restored["base_url"], "http://127.0.0.1:9000/v1")
         stored = json.loads(runtime.settings_path.read_text())
         self.assertEqual(set(stored), {"base_url", "model"})
-        self.assertEqual(runtime.settings_path.stat().st_mode & 0o777, 0o600)
+        if os.name == "posix":
+            self.assertEqual(runtime.settings_path.stat().st_mode & 0o777, 0o600)
         for body in ({"base_url": "http://localhost", "model": "x", "api_key": "not-accepted"},
                      {"base_url": "http://remote.test", "model": "x"}):
             with self.assertRaises(LocalRuntimeError):
@@ -405,6 +406,31 @@ class LocalRuntimeTest(unittest.TestCase):
             result2 = runtime.import_document(self.image_body())
             self.assertEqual(result2["model"], "minicpm-v4.7-1b-q4_k_m")
             self.assertEqual(len(managed_server.requests), 2)
+
+    def test_render_pdf_passes_create_no_window_on_windows(self):
+        import local_runtime as lr
+
+        runtime = LocalRuntime(self.root)
+        work = self.root / "pdf-work"
+        work.mkdir()
+
+        def fake_run(argv, **kwargs):
+            if argv[0] == "pdfinfo":
+                return SimpleNamespace(returncode=0, stdout="Pages: 1\n", stderr="")
+            (work / "page-1.png").write_bytes(PNG)
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+        with patch.object(lr.os, "name", "nt"), \
+                patch.object(lr.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(lr.shutil, "which", return_value="C:/poppler/bin/tool.exe"), \
+                patch.object(lr.subprocess, "run", side_effect=fake_run) as run_mock:
+            pages, total = runtime._render_pdf(b"%PDF-1.4\n%%EOF", 1, 1, work)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(len(run_mock.call_args_list), 2)
+        for call in run_mock.call_args_list:
+            self.assertEqual(call.kwargs.get("creationflags"), 0x08000000)
 
 
 if __name__ == "__main__":

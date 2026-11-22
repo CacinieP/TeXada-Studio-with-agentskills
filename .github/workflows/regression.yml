@@ -29,7 +29,9 @@ jobs:
     steps:
       - name: Preserve committed LF line endings on Windows
         shell: bash
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:

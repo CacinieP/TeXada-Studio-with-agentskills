@@ -351,8 +351,52 @@ class LocalLauncherTest(unittest.TestCase):
             with patch.object(ctypes, "get_last_error", return_value=87, create=True):
                 self.assertFalse(launcher._alive(5678), "ERROR_INVALID_PARAMETER means dead/missing")
 
-            for bad in (0, -5, True, "123", None):
+            for bad in (0, -5, True, "123", None, (1 << 32) + 1234):
+                fake_kernel32.OpenProcess.reset_mock()
                 self.assertFalse(launcher._alive(bad))
+                fake_kernel32.OpenProcess.assert_not_called()
+
+    def test_watch_parent_exit_detects_terminated_windows_parent_even_when_getppid_is_frozen(self):
+        import ctypes
+
+        closed_handles = []
+        fake_kernel32 = SimpleNamespace(
+            OpenProcess=Mock(return_value=77),
+            WaitForSingleObject=Mock(return_value=0),
+            CloseHandle=Mock(side_effect=lambda h: closed_handles.append(h) or 1),
+        )
+        fake_windll = SimpleNamespace(kernel32=fake_kernel32)
+        server = SimpleNamespace(should_exit=False)
+        with patch.dict(os.environ, {"TEXADA_EXIT_WHEN_ORPHANED": "1"}), \
+                patch.object(launcher.os, "name", "nt"), \
+                patch.object(launcher.os, "getppid", return_value=4242), \
+                patch.object(launcher.time, "sleep", return_value=None), \
+                patch.object(ctypes, "windll", fake_windll, create=True):
+            thread = launcher.watch_parent_exit(server)
+            self.assertIsNotNone(thread)
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(server.should_exit, "父进程句柄变为 signaled 时必须置 server.should_exit=True")
+        self.assertEqual(closed_handles, [77])
+
+        # Fallback when OpenProcess returns 0 (cannot open handle): must fall back to _alive(parent)
+        fake_kernel32_denied = SimpleNamespace(
+            OpenProcess=Mock(return_value=0),
+            WaitForSingleObject=Mock(),
+            CloseHandle=Mock(),
+        )
+        server2 = SimpleNamespace(should_exit=False)
+        with patch.dict(os.environ, {"TEXADA_EXIT_WHEN_ORPHANED": "1"}), \
+                patch.object(launcher.os, "name", "nt"), \
+                patch.object(launcher.os, "getppid", return_value=4242), \
+                patch.object(launcher, "_alive", return_value=False), \
+                patch.object(launcher.time, "sleep", return_value=None), \
+                patch.object(ctypes, "windll", SimpleNamespace(kernel32=fake_kernel32_denied), create=True):
+            thread2 = launcher.watch_parent_exit(server2)
+            self.assertIsNotNone(thread2)
+            thread2.join(timeout=2)
+        self.assertFalse(thread2.is_alive())
+        self.assertTrue(server2.should_exit, "无法打开句柄但 _alive(parent) 为 False 时也必须退出")
 
     def test_find_model_files_detects_llama_server_exe(self):
         home_exe = self.directory / ".texada" / "bin" / "llama-server.exe"

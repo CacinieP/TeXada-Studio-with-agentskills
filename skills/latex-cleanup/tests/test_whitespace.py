@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import stat
 import subprocess
@@ -195,7 +196,8 @@ class WriteTests(unittest.TestCase):
             self.assertEqual(Path(entry["backup"]).read_bytes(), source)
             self.assertTrue(entry["written"])
             self.assertEqual(path.read_bytes(), b"\xef\xbb\xbfText.\r\n% TODO preserve   \r\n")
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
+            if os.name == "posix":
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
             _, second = self.invoke(str(path))
             self.assertEqual(second["files"][0]["changed_lines"], [])
 
