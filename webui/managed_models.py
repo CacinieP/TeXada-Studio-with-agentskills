@@ -10,11 +10,24 @@ import socket
 import subprocess
 import threading
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import NamedTuple
 
 from local_runtime import LocalRuntimeError, local_json_request
+
+_STDLIB_URLOPEN = urllib.request.urlopen
+_BLOCKED_MODEL_ENV = {
+    "DEMO_TOKEN",
+    "VLM_BASE_URL",
+    "VLM_MODEL",
+    "TEXADA_OPENAI_BASE_URL",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+}
 
 
 class ModelFile(NamedTuple):
@@ -55,7 +68,24 @@ PROFILES = {
 }
 
 
+def _clean_model_environment(source):
+    """Strip cloud API credentials, UI tokens, llama.cpp arg overrides, and proxies."""
+    return {
+        key: value
+        for key, value in source.items()
+        if "API_KEY" not in key.upper()
+        and not key.upper().endswith(("_TOKEN", "_SECRET"))
+        and not key.upper().startswith("LLAMA_ARG_")
+        and key.upper() not in _BLOCKED_MODEL_ENV
+    }
+
+
 def find_llama_server():
+    bundle_dir = os.environ.get("TEXADA_BUNDLE_DIR", "").strip()
+    if bundle_dir:
+        bundled = Path(bundle_dir).resolve() / "bin" / "llama-server"
+        if bundled.is_file() and os.access(bundled, os.X_OK):
+            return str(bundled)
     candidates = (
         Path.home() / ".texada/bin/llama-server",
         Path.home() / ".texada/runtime/llama-server",
@@ -99,16 +129,44 @@ def _reuse_weight(key, file, path):
     return False
 
 
+class _HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urllib.parse.urlsplit(newurl)
+        if parsed.scheme != "https" or not parsed.hostname:
+            if fp is not None:
+                fp.close()
+            raise ValueError("下载重定向必须保持 HTTPS。")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_https_only(req, timeout=30):
+    parsed_req = urllib.parse.urlsplit(req.full_url)
+    if parsed_req.scheme != "https" or not parsed_req.hostname:
+        raise ValueError("下载重定向必须保持 HTTPS。")
+    if urllib.request.urlopen is not _STDLIB_URLOPEN:
+        response = urllib.request.urlopen(req, timeout=timeout)
+        final_url = getattr(response, "url", None)
+        if isinstance(final_url, str):
+            parsed = urllib.parse.urlsplit(final_url)
+            if parsed.scheme != "https" or not parsed.hostname:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
+                raise ValueError("下载重定向必须保持 HTTPS。")
+        return response
+    return urllib.request.build_opener(_HttpsOnlyRedirectHandler()).open(req, timeout=timeout)
+
+
 def _download(profile, file, path, progress, closed):
     part = path.with_suffix(f".gguf.{file.sha256}.part")
     offset = _size(part)
     if offset > file.size or (offset == file.size and not _matches(part, file)):
-        part.unlink()
+        part.unlink(missing_ok=True)
         offset = 0
     if offset < file.size:
         headers = {"Range": f"bytes={offset}-"} if offset else {}
         url = f"https://huggingface.co/{profile.repo}/resolve/{profile.revision}/{file.name}"
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
+        with _open_https_only(urllib.request.Request(url, headers=headers), timeout=30) as response:
             if response.status == 206:
                 if response.headers.get("Content-Range") != f"bytes {offset}-{file.size - 1}/{file.size}":
                     raise ValueError("下载服务返回了不匹配的文件范围。")
@@ -128,7 +186,7 @@ def _download(profile, file, path, progress, closed):
     progress(file.size)
     if not _matches(part, file):
         if _size(part) >= file.size:
-            part.unlink()
+            part.unlink(missing_ok=True)
         raise ValueError("模型文件未完整下载或 SHA-256 不匹配，请重试。")
     part.replace(path)
 
@@ -162,7 +220,12 @@ class ManagedModels:
 
     def connection(self):
         with self.lock:
-            return self.active.copy() if self.active and self.process.poll() is None else None
+            if self.active and self.process is not None and self.process.poll() is None:
+                return self.active.copy()
+            self.active = None
+            if self.process is not None and self.process.poll() is not None:
+                self.process = None
+            return None
 
     def _job(self, **fields):
         with self.lock:
@@ -187,7 +250,7 @@ class ManagedModels:
         paths = self._paths(key)
         try:
             if action == "download":
-                paths[0].parent.mkdir(parents=True, exist_ok=True)
+                paths[0].parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 done = 0
                 for file, path in zip(profile.files, paths):
                     if not _matches(path, file) and not _reuse_weight(key, file, path):
@@ -212,7 +275,10 @@ class ManagedModels:
         if active and active["model"] == profile.model:
             return
         executable = find_llama_server()
-        version = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=10, check=True)
+        clean_env = _clean_model_environment(os.environ)
+        version = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True, timeout=10, check=True, env=clean_env
+        )
         output = version.stdout + version.stderr
         build = re.search(r"build (\d+)", output) or re.search(r"version: (\d+)(?:\s|$)", output)
         if build and int(build.group(1)) < 11609:
@@ -224,13 +290,26 @@ class ManagedModels:
             if self.closed.is_set():
                 return
             self._terminate()
-            with (self.state / "model-server.log").open("ab") as log:
+            self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
+            log_path = self.state / "model-server.log"
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(log_path, flags, 0o600)
+            try:
+                if hasattr(os, "fchmod"):
+                    os.fchmod(fd, 0o600)
+                elif os.name == "posix":
+                    os.chmod(log_path, 0o600)
+                log_stream = os.fdopen(fd, "ab")
+            except Exception:
+                os.close(fd)
+                raise
+            with log_stream as log:
                 self.process = process = subprocess.Popen([
                     executable, "-m", str(paths[0]), "--mmproj", str(paths[1]),
                     "--alias", profile.model, "--host", "127.0.0.1", "--port", str(port),
                     "--ctx-size", "8192", "--parallel", "1", "-ngl", "99",
                     "--jinja", "--reasoning", "off", "--no-webui",
-                ], stdout=log, stderr=subprocess.STDOUT)
+                ], stdout=log, stderr=subprocess.STDOUT, env=clean_env)
         base = f"http://127.0.0.1:{port}/v1"
         deadline = time.monotonic() + 180
         try:

@@ -248,7 +248,7 @@ class AppTest(unittest.TestCase):
         self.assertNotIn("UnicodeDecodeError", "\n".join(loaded["log"]))
 
     def test_missing_preview_converter_is_reported(self):
-        output = Path(studio.STUDIO_STATE) / "example" / "test"
+        output = Path(studio.STUDIO_STATE) / "builds" / "example" / "test"
         output.mkdir(parents=True)
         (output / "main.pdf").write_bytes(b"%PDF-synthetic")
         def run(command, **kwargs):
@@ -328,6 +328,281 @@ class AppTest(unittest.TestCase):
         self.assertEqual(request.full_url, base + "/chat/completions")
         self.assertEqual(request.get_header("Authorization"), "Bearer " + key)
         self.assertEqual(json.loads(request.data)["chat_template_kwargs"], {"enable_thinking": False})
+
+    def test_dynamic_studio_state_isolates_managed_models_and_preserves_explicit_override(self):
+        getter = getattr(studio, "_managed_models", None)
+        self.assertTrue(callable(getter), "_managed_models() helper must exist")
+        state_a = self.base / "isolated-a"
+        state_b = self.base / "isolated-b"
+        with patch.object(studio, "STUDIO_STATE", str(state_a)):
+            manager_a = getter()
+            self.assertEqual(manager_a.state, state_a)
+            self.assertIsNot(manager_a, studio.managed_models)
+        with patch.object(studio, "STUDIO_STATE", str(state_b)):
+            manager_b = getter()
+            self.assertEqual(manager_b.state, state_b)
+            self.assertIsNot(manager_b, manager_a)
+        explicit = studio.ManagedModels(self.base / "explicit-override")
+        with patch.object(studio, "managed_models", explicit), \
+                patch.object(studio, "STUDIO_STATE", str(state_a)):
+            self.assertIs(getter(), explicit)
+
+    def test_settings_post_is_idempotent_under_normalization_when_managed_model_active(self):
+        active_conn = {"base_url": "http://127.0.0.1:43210/v1", "model": "minicpm-v4.7-1b-q4_k_m"}
+        fake_proc = SimpleNamespace(poll=lambda: None, terminate=lambda: None, wait=lambda timeout=None: 0)
+        manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+        manager.active = active_conn.copy()
+        manager.process = fake_proc
+        stop_calls = []
+        original_stop = manager.stop
+
+        def record_stop():
+            stop_calls.append(True)
+            original_stop()
+
+        manager.stop = record_stop
+        with patch.object(studio, "managed_models", manager):
+            same = self.client.post(
+                "/api/studio/settings",
+                params=self.auth,
+                json={"base_url": "  http://127.0.0.1:43210/  ", "model": " minicpm-v4.7-1b-q4_k_m "},
+            )
+            self.assertEqual(same.status_code, 200, same.text)
+            payload = same.json()
+            self.assertEqual(payload["base_url"], active_conn["base_url"])
+            self.assertEqual(payload["model"], active_conn["model"])
+            self.assertEqual(set(payload["tools"]), {"tectonic", "pdftoppm", "pdfinfo"})
+            self.assertFalse((Path(studio.STUDIO_STATE) / "local-runtime.json").exists())
+            self.assertEqual(stop_calls, [])
+            self.assertEqual(manager.connection(), active_conn)
+
+            changed = self.client.post(
+                "/api/studio/settings",
+                params=self.auth,
+                json={"base_url": "http://127.0.0.1:18147/v1", "model": "custom-local-model"},
+            )
+            self.assertEqual(changed.status_code, 200, changed.text)
+            self.assertTrue((Path(studio.STUDIO_STATE) / "local-runtime.json").is_file())
+            self.assertEqual(len(stop_calls), 1)
+            self.assertIsNone(manager.connection())
+
+    def test_nodeinfo_reports_active_managed_model_consistently_across_all_model_fields(self):
+        active_conn = {"base_url": "http://127.0.0.1:43210/v1", "model": "minicpm-v4.7-1b-q4_k_m"}
+        manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+        manager.active = active_conn.copy()
+        manager.process = SimpleNamespace(poll=lambda: None)
+        for local_flag in ("1", "0"):
+            with self.subTest(local_mode=local_flag), \
+                    patch.dict(os.environ, {"TEXADA_LOCAL_MODE": local_flag}), \
+                    patch.object(studio, "managed_models", manager):
+                response = self.client.get("/api/nodeinfo", params=self.auth)
+            self.assertEqual(response.status_code, 200)
+            info = response.json()
+            self.assertEqual(info["configured_model"], active_conn["model"])
+            self.assertEqual(info["model"], active_conn["model"])
+            self.assertEqual(info["repair_model"], active_conn["model"])
+            self.assertEqual(info["ocr_model"], active_conn["model"])
+
+    def test_studio_import_route_uses_active_managed_model_endpoint(self):
+        from test_local_runtime import FakeModel, PNG
+        import base64
+
+        with FakeModel() as managed_server:
+            manager = studio.ManagedModels(Path(studio.STUDIO_STATE))
+            manager.active = {"base_url": managed_server.base, "model": "minicpm-v4.7-1b-q4_k_m"}
+            manager.process = SimpleNamespace(poll=lambda: None)
+            Path(studio.STUDIO_STATE).mkdir(parents=True, exist_ok=True)
+            (Path(studio.STUDIO_STATE) / "local-runtime.json").write_text(
+                '{"base_url":"http://127.0.0.1:1/v1","model":"offline-saved-model"}', encoding="utf-8"
+            )
+            with patch.object(studio, "managed_models", manager):
+                response = self.client.post(
+                    "/api/studio/import",
+                    params=self.auth,
+                    json={
+                        "name": "scan.png",
+                        "mime_type": "image/png",
+                        "data_base64": base64.b64encode(PNG).decode("ascii"),
+                    },
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()
+            self.assertEqual(payload["model"], "minicpm-v4.7-1b-q4_k_m")
+            self.assertEqual(len(managed_server.requests), 1)
+            self.assertEqual(managed_server.requests[0]["path"], "/v1/chat/completions")
+
+    def test_studio_config_succeeds_when_local_mode_disabled_with_https_endpoint(self):
+        with patch.multiple(studio, VLM_BASE_URL="https://api.modelbest.cn/v1", REPAIR_MODEL="MiniCPM-V-4.7-1B"), \
+                patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "0", "VLM_BASE_URL": "https://api.modelbest.cn/v1"}):
+            for extra in ({}, {"probe": "true"}):
+                response = self.client.get("/api/studio/config", params={**self.auth, **extra})
+                self.assertEqual(response.status_code, 200, response.text)
+                data = response.json()
+                self.assertFalse(data["local_mode"])
+                self.assertEqual(data["base_url"], "https://api.modelbest.cn/v1")
+                self.assertEqual(data["model"], "MiniCPM-V-4.7-1B")
+                self.assertIn("tectonic", data["tools"])
+
+    def test_csrf_guard_blocks_cross_origin_mutating_requests_and_allows_cli_and_loopback(self):
+        body = {"name": "csrf.tex", "content": "safe"}
+        for headers in (
+            {"Sec-Fetch-Site": "cross-site"},
+            {"Origin": "https://evil.example"},
+            {"Origin": "http://127.0.0.1.evil.example:8888"},
+            {"Origin": "null"},
+        ):
+            with self.subTest(headers=headers):
+                blocked = self.client.post("/api/studio/create", params=self.auth, json=body, headers=headers)
+                self.assertEqual(blocked.status_code, 403, blocked.text)
+        self.assertFalse((self.uploads / "csrf.tex").exists())
+
+        for index, headers in enumerate((
+            {},
+            {"Origin": "http://127.0.0.1:8888", "Sec-Fetch-Site": "same-origin"},
+            {"Origin": "http://localhost:8888"},
+            {"Origin": "http://[::1]:8888"},
+        )):
+            with self.subTest(allowed=headers):
+                ok = self.client.post("/api/studio/create", params=self.auth,
+                                      json={"name": f"ok-{index}.tex", "content": "safe"}, headers=headers)
+                self.assertEqual(ok.status_code, 200, ok.text)
+
+        # Navigating to GET /studio from an external bookmark/link remains allowed.
+        nav = self.client.get("/studio", params=self.auth, headers={"Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(nav.status_code, 200)
+
+    def test_csrf_guard_allows_exact_same_origin_behind_reverse_proxy_only_when_local_mode_disabled(self):
+        with TestClient(studio.app, base_url="https://studio.example.com") as proxy_client:
+            # In local mode, non-loopback Origin is blocked even if matching request host.
+            with patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "1"}):
+                blocked_local = proxy_client.post(
+                    "/api/studio/create", params=self.auth,
+                    json={"name": "proxy-local.tex", "content": "x"},
+                    headers={"Origin": "https://studio.example.com", "Sec-Fetch-Site": "same-origin"},
+                )
+                self.assertEqual(blocked_local.status_code, 403, blocked_local.text)
+
+            with patch.object(studio, "LOCAL_MODE", False):
+                ok_attr = proxy_client.post(
+                    "/api/studio/create", params=self.auth,
+                    json={"name": "proxy-attr.tex", "content": "x"},
+                    headers={"Origin": "https://studio.example.com", "Sec-Fetch-Site": "same-origin"},
+                )
+                self.assertEqual(ok_attr.status_code, 200, ok_attr.text)
+
+            with patch.dict(os.environ, {"TEXADA_LOCAL_MODE": "0"}):
+                for idx, origin in enumerate(("https://studio.example.com", "https://studio.example.com:443")):
+                    ok = proxy_client.post(
+                        "/api/studio/create", params=self.auth,
+                        json={"name": f"proxy-ok-{idx}.tex", "content": "x"},
+                        headers={"Origin": origin, "Sec-Fetch-Site": "same-origin"},
+                    )
+                    self.assertEqual(ok.status_code, 200, ok.text)
+
+                for bad_headers in (
+                    {"Origin": "https://evil.example", "Sec-Fetch-Site": "cross-site"},
+                    {"Origin": "https://evil.example"},
+                    {"Origin": "http://studio.example.com"},
+                    {"Origin": "https://studio.example.com:8443"},
+                    {"Origin": "null"},
+                    {"Origin": "https://studio.example.com", "Sec-Fetch-Site": "cross-site"},
+                ):
+                    with self.subTest(bad_headers=bad_headers):
+                        denied = proxy_client.post(
+                            "/api/studio/create", params=self.auth,
+                            json={"name": "proxy-denied.tex", "content": "x"},
+                            headers=bad_headers,
+                        )
+                        self.assertEqual(denied.status_code, 403, denied.text)
+
+    def test_compile_latex_uses_sandbox_flags_handles_pdftoppm_errors_and_cleans_tmp(self):
+        render_dir = self.base / "render-test"
+        seen_commands = []
+
+        def fake_run(cmd, **kwargs):
+            seen_commands.append((cmd, kwargs))
+            if cmd[0] == studio._tectonic_command():
+                out_dir = Path(cmd[cmd.index("-o") + 1])
+                (out_dir / "f.pdf").write_bytes(b"%PDF-1.4\n")
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if cmd[0] == "pdftoppm":
+                self.assertEqual(kwargs.get("timeout"), 30)
+                raise FileNotFoundError("pdftoppm missing")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch.object(studio, "RENDER", str(render_dir)), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            result = studio._compile_latex("x^2", "node-1", "rep")
+        self.assertIsNone(result)
+        tectonic_cmd = seen_commands[0][0]
+        self.assertIn("--untrusted", tectonic_cmd)
+        self.assertIn("--only-cached", tectonic_cmd)
+        self.assertEqual([p.name for p in render_dir.iterdir() if p.name.startswith("tmp-")], [])
+
+    def test_planned_fixes_preserve_lexical_math_boundary_diagnostics_and_respect_abstention(self):
+        for source in ("Prefix $x + 1\n", "\\begin{equation}\nx + 1\n"):
+            with self.subTest(source=source), \
+                    patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}), \
+                    patch.object(studio, "_verify_formula", side_effect=AssertionError("unclosed math must not run checker")):
+                for flags in ({"planner_mode": True, "skill_selection": False},
+                              {"planner_mode": False, "skill_selection": True}):
+                    job_id = "a" * 31 + ("1" if flags["planner_mode"] else "2")
+                    provider = SimpleNamespace(
+                        name="fixture", model="fixture-model", last_trace={"model_calls": 0},
+                        fingerprint=lambda: {"kind": "fixture"},
+                    )
+                    with patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None, **flags}}, clear=True), \
+                            patch.object(studio, "_new_provider", return_value=provider):
+                        studio._studio_job("unclosed.tex", source, job_id)
+                        problems = studio._jobs[job_id]["result"]["problems_after"]
+                    self.assertEqual(len(problems), 1, problems)
+                    self.assertEqual(problems[0]["id"], "math-boundary-0")
+                    self.assertEqual(problems[0]["type"], "formula")
+                    self.assertEqual(problems[0]["status"], "NEEDS_HUMAN")
+                    self.assertIn("unclosed_math", problems[0]["reason"])
+
+        # Explicit model abstention (assess_candidate(...).get("method") == "unchanged") stops retry immediately.
+        for planned in (False, True):
+            for trailing, mock_unchanged in (("  ", False), (r"\ ", True)):
+                calls = []
+
+                class AbstainingProvider:
+                    name = "abstaining"
+                    last_trace = {"model_calls": 1, "reason": "ok"}
+
+                    def fingerprint(self):
+                        return {"kind": "abstaining"}
+
+                    def repair_formula(self, node, **kwargs):
+                        calls.append(node["data"]["latex"])
+                        return "  " + node["data"]["latex"] + trailing
+
+                checks = []
+
+                def fake_verify(expr):
+                    checks.append(expr)
+                    return {"status": "RETRY", "reason": "unclosed_brace"}
+
+                assess_ctx = (
+                    patch.object(studio, "assess_candidate",
+                                 side_effect=lambda orig, cand: {"allowed": True, "reason": "unchanged_source", "method": "unchanged"})
+                    if mock_unchanged else patch.dict(os.environ, {})
+                )
+                with self.subTest(planned=planned, mock_unchanged=mock_unchanged), \
+                        patch.object(studio, "deterministic_candidate", return_value=None), \
+                        assess_ctx, \
+                        patch.object(studio, "_verify_formula", side_effect=fake_verify):
+                    if planned:
+                        fixed, edits, _ = studio._apply_planned_fixes(
+                            r"$\frac{a}{b$", [], provider=AbstainingProvider(),
+                            emit=lambda *a, **k: None, use_model_planner=False)
+                    else:
+                        fixed, edits = studio._apply_fixes(
+                            r"$\frac{a}{b$", [], provider=AbstainingProvider())
+                self.assertEqual(fixed, r"$\frac{a}{b$")
+                self.assertEqual(edits, [])
+                self.assertEqual(len(calls), 1, "abstention must stop without a second VLM attempt")
+                self.assertEqual(checks, [r"\frac{a}{b"], "abstained original must not be re-verified")
 
 
 class MiniCPMProfileTest(unittest.TestCase):
@@ -527,6 +802,75 @@ class StudioTableAuditTest(unittest.TestCase):
                 self.assertEqual(fixed, expected)
                 self.assertEqual([edit["skill"] for edit in edits], ["doc-formula-verify", "doc-table-audit"])
 
+    def test_planned_fallback_aligns_shifted_formula_ordinals_and_skips_attempted_nodes(self):
+        lines = [
+            "$x+$",
+            r"$\left(a+b\right)$",
+            r"$\left(\frac{u+1}{u-1}$",
+            r"$\left(c+d$",
+        ]
+        content = "\n".join(lines) + "\n"
+        nodes = studio.extract_math(content)
+        multiline_edit = {
+            "line": 1,
+            "before": "x+",
+            "after": "x\n+1",
+            "skill": "doc-formula-verify",
+            "start": nodes[0]["body_start"],
+            "end": nodes[0]["body_end"],
+        }
+        summary = {
+            "executed": 3,
+            "rejected": 0,
+            "nodes": [
+                {"id": "f-001-1", "kind": "formula", "line": 1, "state": "candidate", "attempts": 1},
+                {"id": "f-002-2", "kind": "formula", "line": 2, "state": "ok", "attempts": 0},
+                {"id": "f-003-3", "kind": "formula", "line": 3, "state": "human", "attempts": 0,
+                 "human_reason": "model_deferred"},
+                {"id": "f-004-4", "kind": "formula", "line": 4, "state": "needs_human", "attempts": 1,
+                 "human_reason": "repair_rejected"},
+            ],
+        }
+        verified = []
+
+        def fake_verify(latex):
+            verified.append(latex)
+            if latex == r"\left(\frac{u+1}{u-1}\right)":
+                return {"status": "OK"}
+            return {"status": "RETRY"}
+
+        provider = SimpleNamespace(repair_formula=lambda *a, **k: self.fail("Fallback must not call model"))
+        with patch.object(studio, "ConstrainedPlanner") as planner_cls, \
+                patch.object(studio, "_verify_formula", side_effect=fake_verify):
+            planner_cls.return_value.run.return_value = ([multiline_edit], summary)
+            planner_cls.return_value.remaining_seconds.return_value = 30
+            fixed, edits, out_summary = studio._apply_planned_fixes(
+                content, [], provider=provider, emit=lambda *a, **k: None
+            )
+
+        self.assertIn(r"$\left(\frac{u+1}{u-1}\right)$", fixed)
+        self.assertEqual(
+            verified,
+            [r"\left(\frac{u+1}{u-1}", r"\left(\frac{u+1}{u-1}\right)"],
+            "Fallback must skip already-ok and already-attempted formulas",
+        )
+        self.assertEqual(
+            out_summary.get("deterministic_resolved"),
+            ["f-003-3"],
+            "deterministic_resolved must store only the canonical pre-edit formula ID",
+        )
+        remaining = studio._planned_problems(out_summary, fixed)
+        self.assertEqual(len(remaining), 1, remaining)
+        self.assertEqual(remaining[0]["id"], "f-004-4")
+        self.assertEqual(remaining[0]["line"], 5, "Shifted post-edit line number must be reported")
+
+        synthetic = studio._planned_problems({"nodes": [
+            {"state": "human"},
+            {"id": "table-document", "kind": "table", "line": 9, "state": "human"},
+        ]})
+        self.assertEqual(len(synthetic), 2)
+        self.assertEqual(synthetic[1]["type"], "table_total")
+
     def assert_manual_unchanged(self, content):
         problems = studio._table_problems(content)
         self.assertTrue(problems)
@@ -595,6 +939,61 @@ class StudioTableAuditTest(unittest.TestCase):
                     fixed, edits = studio._apply_fixes(content, [])
                 self.assertEqual(fixed, content)
                 self.assertEqual(edits, [])
+
+    def test_formfeed_and_unicode_line_separators_in_comments_never_break_table_audit(self):
+        prefix = "% comment with \f and \v and \u2028 and \u2029\n\\begin{verbatim}\nrow\f\u2028\u2029\n\\end{verbatim}\n"
+        table = self.table([("A", "10"), ("B", "20")], "0")
+        content = prefix + table
+        problems = studio._table_problems(content)
+        self.assertEqual(len(problems), 1)
+        self.assertEqual(problems[0]["status"], "RETRY")
+        self.assertEqual(problems[0]["right"], "30")
+        self.assertEqual(problems[0]["line"], 10)
+        with patch.object(studio, "_formula_problems", return_value=[]):
+            fixed, edits = studio._apply_fixes(content, [])
+        self.assertEqual(fixed, prefix + self.table([("A", "10"), ("B", "20")], "30"))
+        self.assertEqual(len(edits), 1)
+        provider = SimpleNamespace(name="fixture", last_trace={}, fingerprint=lambda: {})
+        planned_fixed, planned_edits, _ = studio._apply_planned_fixes(
+            content, [], provider=provider, emit=lambda *a, **k: None, use_model_planner=False)
+        self.assertEqual(planned_fixed, fixed)
+        self.assertEqual(planned_edits, edits)
+
+    def test_comments_and_escaped_ampersands_in_tables_are_parsed_and_replaced_safely(self):
+        content = "\n".join([
+            r"\begin{tabular}{lr} % budget & summary",
+            r"部门 & 金额 \\ % header & note",
+            r"\hline % rule",
+            r"R\&D & 40 \\ % R&D dept",
+            r"Operations & 60 \\ % ops",
+            r"合计 & 99 \\ % stale & check",
+            r"\end{tabular} % end table",
+        ]) + "\n"
+        problems = studio._table_problems(content)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(problems[0]["status"], "RETRY")
+        self.assertEqual(problems[0]["right"], "100")
+        with patch.object(studio, "_formula_problems", return_value=[]):
+            fixed, edits = studio._apply_fixes(content, [])
+        expected = content.replace("合计 & 99 \\\\ % stale & check", "合计 & 100 \\\\ % stale & check")
+        self.assertEqual(fixed, expected)
+        self.assertEqual(edits, [{"line": 6, "before": "99", "after": "100", "skill": "doc-table-audit"}])
+        provider = SimpleNamespace(name="fixture", last_trace={}, fingerprint=lambda: {})
+        planned_fixed, planned_edits, _ = studio._apply_planned_fixes(
+            content, [], provider=provider, emit=lambda *a, **k: None, use_model_planner=False)
+        self.assertEqual(planned_fixed, expected)
+        self.assertEqual(planned_edits, edits)
+
+        # Mid-row % comment hides \\ and any commented & 500 \\: must be NEEDS_HUMAN and never add fake cells.
+        mid_comment = "\n".join([
+            r"\begin{tabular}{lr}",
+            r"项目 & 金额 \\",
+            r"A & 40 % & 500 \\",
+            r"B & 60 \\",
+            r"合计 & 100 \\",
+            r"\end{tabular}",
+        ]) + "\n"
+        self.assert_manual_unchanged(mid_comment)
 
 
 class RealVerifierTest(unittest.TestCase):

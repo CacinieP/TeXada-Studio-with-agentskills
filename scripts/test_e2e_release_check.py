@@ -2,12 +2,16 @@
 import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
+import e2e_release_check
 from e2e_release_check import (
     PreflightError,
     make_call,
@@ -355,6 +359,22 @@ class E2E3OcrTests(unittest.TestCase):
         self.assertFalse(out["criteria"]["ocr_status_ok"])
         self.assertFalse(out["criteria"]["layout_emitted"])
 
+    def test_default_workdir_is_cleaned_up_after_ocr_run(self):
+        runner, _ = self._fake(self.RECORD)
+        created = []
+        real_mkdtemp = tempfile.mkdtemp
+
+        def tracking_mkdtemp(*args, **kwargs):
+            path = real_mkdtemp(*args, **kwargs)
+            created.append(Path(path))
+            return path
+
+        with patch.object(e2e_release_check.tempfile, "mkdtemp", side_effect=tracking_mkdtemp):
+            out = run_e2e3_ocr(Path(__file__).resolve().parent.parent / "samples/ocr", run_ocr=runner)
+        self.assertTrue(out["passed"], out)
+        self.assertEqual(len(created), 1)
+        self.assertFalse(created[0].exists(), f"temporary workdir leaked: {created[0]}")
+
 
 class E2E4PersistenceTests(unittest.TestCase):
     """E2E-4 持久化：写过 → 新后端读回 → 哈希一致。
@@ -408,14 +428,20 @@ class E2E5AppSmokeTests(unittest.TestCase):
     popen 假件 + ready_probe 注入（慢/外部替代）；session.json 发现走真逻辑。
     """
 
-    def _run(self, *, returncode=0, hang=False, ready=True):
-        state = Path(tempfile.mkdtemp(prefix="e2e5-test-"))
+    def _run(self, *, returncode=0, hang=False, ready=True, scrub_session=True, use_default_state=False):
+        state = None if use_default_state else Path(tempfile.mkdtemp(prefix="e2e5-test-"))
+        if state is not None:
+            self.addCleanup(shutil.rmtree, state, True)
         procs = []
+        observed_states = []
 
         class FakeProc:
             returncode = None
             sent = None
             killed = False
+
+            def __init__(self, target_state):
+                self.target_state = target_state
 
             def send_signal(self, sig):
                 self.sent = sig
@@ -424,16 +450,22 @@ class E2E5AppSmokeTests(unittest.TestCase):
                 if hang:
                     raise subprocess.TimeoutExpired("app", timeout)
                 self.returncode = returncode
+                if returncode == 0 and scrub_session:
+                    (self.target_state / "session.json").write_text(json.dumps({
+                        "base_url": "http://127.0.0.1:18199", "running": False, "url": None}))
                 return returncode
 
             def kill(self):
                 self.killed = True
 
         def factory(argv, **kwargs):
-            (state / "session.json").write_text(json.dumps({
+            idx = argv.index("--state-dir")
+            target_state = Path(argv[idx + 1])
+            observed_states.append(target_state)
+            (target_state / "session.json").write_text(json.dumps({
                 "url": "http://127.0.0.1:18199/studio?token=tok",
                 "base_url": "http://127.0.0.1:18199", "running": True}))
-            proc = FakeProc()
+            proc = FakeProc(target_state)
             procs.append(proc)
             return proc
 
@@ -441,32 +473,69 @@ class E2E5AppSmokeTests(unittest.TestCase):
                         popen_factory=factory,
                         ready_probe=lambda base, token: ready,
                         state_dir=state)
-        return out, procs
+        return out, procs, observed_states
 
     def test_sigterm_bounded_graceful_exit_passes(self):
-        out, procs = self._run()
+        out, procs, _ = self._run()
         self.assertTrue(out["passed"], out)
         for name in ("app_launched", "nodeinfo_ready", "sigterm_bounded_exit", "graceful_exit_code"):
             self.assertTrue(out["criteria"][name], (name, out))
         self.assertIsNotNone(procs[0].sent)  # 必须真的发过 SIGTERM
 
     def test_hang_after_sigterm_fails(self):
-        out, procs = self._run(hang=True)
+        out, procs, _ = self._run(hang=True)
         self.assertFalse(out["passed"])
         self.assertFalse(out["criteria"]["sigterm_bounded_exit"])
         self.assertFalse(out["criteria"]["graceful_exit_code"])
         self.assertTrue(procs[0].killed)  # 超时后必须杀掉，不留悬挂进程
 
     def test_nonzero_exit_fails(self):
-        out, _ = self._run(returncode=1)
+        out, _, _ = self._run(returncode=1)
         self.assertFalse(out["passed"])
         self.assertTrue(out["criteria"]["sigterm_bounded_exit"])
         self.assertFalse(out["criteria"]["graceful_exit_code"])
 
     def test_nodeinfo_not_ready_fails(self):
-        out, _ = self._run(ready=False)
+        out, _, _ = self._run(ready=False)
         self.assertFalse(out["passed"])
         self.assertFalse(out["criteria"]["nodeinfo_ready"])
+
+    def test_stale_running_session_after_sigterm_fails(self):
+        out, _, _ = self._run(scrub_session=False)
+        self.assertFalse(out["passed"], out)
+
+    def test_default_state_dir_is_cleaned_up_after_smoke(self):
+        out, _, observed_states = self._run(use_default_state=True)
+        self.assertTrue(out["passed"], out)
+        self.assertEqual(len(observed_states), 1)
+        self.assertFalse(observed_states[0].exists(), f"temporary state_dir leaked: {observed_states[0]}")
+
+
+class RepoRootResolutionTests(unittest.TestCase):
+    def test_default_paths_resolve_against_repo_root_outside_repo_cwd(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        self.assertEqual(Path(probe_python.__defaults__[0]).resolve(),
+                         (repo_root / ".venv/bin/python").resolve())
+        with tempfile.TemporaryDirectory() as outside:
+            previous_cwd = Path.cwd()
+            os.chdir(outside)
+            try:
+                captured = {}
+
+                def fake_ocr(image_dir, **_kwargs):
+                    captured["image_dir"] = Path(image_dir)
+                    return {"id": "E2E-3", "passed": True, "detail": "ok", "elapsed_seconds": 0.1}
+
+                args = e2e_release_check.argparse.Namespace(
+                    only=["E2E-3"], evidence_dir=str(Path(outside) / "ev"),
+                    models_base=DEAD, ocr_model="minicpm-ocr:latest",
+                )
+                with patch.object(e2e_release_check, "run_e2e3_ocr", side_effect=fake_ocr):
+                    rc = e2e_release_check._run_scenarios(args, "repair-m", outside)
+                self.assertEqual(rc, 0)
+                self.assertEqual(captured["image_dir"].resolve(), (repo_root / "samples/ocr").resolve())
+            finally:
+                os.chdir(previous_cwd)
 
 
 if __name__ == "__main__":

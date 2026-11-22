@@ -384,6 +384,28 @@ class LocalRuntimeTest(unittest.TestCase):
                     self.assertRaises(LocalRuntimeError):
                 local_json_request(url)
 
+    def test_import_document_uses_active_managed_model_when_saved_settings_absent_or_corrupt(self):
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        offline_port = sock.getsockname()[1]
+        sock.close()
+        offline_base = f"http://127.0.0.1:{offline_port}/v1"
+
+        with FakeModel() as managed_server:
+            active = {"base_url": managed_server.base, "model": "minicpm-v4.7-1b-q4_k_m"}
+            runtime = LocalRuntime(self.root, base_url=offline_base, model="unused-default", active_model=active)
+            result = runtime.import_document(self.image_body())
+            self.assertEqual(result["model"], "minicpm-v4.7-1b-q4_k_m")
+            self.assertEqual(len(managed_server.requests), 1)
+            self.assertEqual(managed_server.requests[0]["path"], "/v1/chat/completions")
+            self.assertEqual(managed_server.requests[0]["body"]["model"], "minicpm-v4.7-1b-q4_k_m")
+
+            # Even if local-runtime.json on disk is corrupt, active managed model takes precedence.
+            runtime.settings_path.write_text('{"base_url":"https://corrupt.example.invalid"}', encoding="utf-8")
+            result2 = runtime.import_document(self.image_body())
+            self.assertEqual(result2["model"], "minicpm-v4.7-1b-q4_k_m")
+            self.assertEqual(len(managed_server.requests), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

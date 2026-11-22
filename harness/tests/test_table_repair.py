@@ -11,7 +11,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from docforensics import pipeline, state, vlm  # noqa: E402
 from docforensics.__main__ import write_report  # noqa: E402
-from docforensics.table_repair import assess_table_candidate  # noqa: E402
+from docforensics.skill_selection import load_catalog, load_selected_skill  # noqa: E402
+from docforensics.skills_runtime import load_table_skill  # noqa: E402
+from docforensics.table_repair import assess_table_candidate, is_total_row  # noqa: E402
 
 
 class TableScopeGuardTest(unittest.TestCase):
@@ -62,6 +64,83 @@ class TableScopeGuardTest(unittest.TestCase):
         bad_append = [*non_total_append, ["3月", "220"]]
         self.assertEqual(assess_table_candidate(non_total_append, bad_append, {"n_rows": 4, "n_cols": 2})["reason"],
                          "table_scope_violation")
+
+    def test_exact_total_row_labels_reject_substring_false_positives(self):
+        for label in ("合计", " 总计 ", "total", "Total", " TOTAL "):
+            self.assertTrue(is_total_row([label, "10"]), msg=label)
+        for non_total, old_val, new_val in (
+            ("Total Cholesterol", "185", "165"),
+            ("Subtotal", "100", "165"),
+            ("非合计项", "10", "165"),
+        ):
+            with self.subTest(label=non_total):
+                self.assertFalse(is_total_row([non_total, old_val]))
+                original = [["Metric", "Value"], ["HDL", "55"], ["LDL", "110"], [non_total, old_val]]
+                candidate = [["Metric", "Value"], ["HDL", "55"], ["LDL", "110"], [non_total, new_val]]
+                verdict = assess_table_candidate(original, candidate, {"n_rows": 4, "n_cols": 2})
+                self.assertFalse(verdict["allowed"])
+                self.assertEqual(verdict["reason"], "table_data_modified")
+                self.assertEqual(verdict["row_index"], 3)
+                self.assertEqual(verdict["col_index"], 1)
+        # Appending a non-exact total label such as "Subtotal" is also out of scope
+        base = [["Item", "Amount"], ["A", "60"], ["B", "40"]]
+        subtotal_append = [*base, ["Subtotal", "100"]]
+        self.assertEqual(
+            assess_table_candidate(base, subtotal_append, {"n_rows": 4, "n_cols": 2})["reason"],
+            "table_scope_violation",
+        )
+
+    def test_rejects_truncating_extra_cells_in_existing_total_row(self):
+        original = [["item", "amount"], ["A", "1.5"], ["B", "2.5"], ["total", "4.0", "extra"]]
+        candidate = [["item", "amount"], ["A", "1.5"], ["B", "2.5"], ["total", "4.0"]]
+        verdict = assess_table_candidate(original, candidate, {"n_rows": 4, "n_cols": 2})
+        self.assertFalse(verdict["allowed"])
+        self.assertEqual(verdict["reason"], "table_scope_violation")
+        self.assertEqual(verdict["row_index"], 3)
+
+    def test_preserves_scalar_int_and_float_cells_serialized_as_strings(self):
+        original = [["item", 2024], [1, 2.5], [2, 0.00001], ["total", 9.9]]
+        candidate = [["item", "2024"], ["1", "2.5"], ["2", "0.00001"], ["total", "2.50001"]]
+        verdict = assess_table_candidate(original, candidate, {"n_rows": 4, "n_cols": 2})
+        self.assertTrue(verdict["allowed"])
+        self.assertEqual(verdict["method"], "recompute_total_row")
+
+        # Unchanged scalar table serialized to strings without any actual edit is unchanged_candidate
+        same_as_strings = [["item", "2024"], ["1", "2.5"], ["2", "0.00001"], ["total", "9.9"]]
+        self.assertEqual(assess_table_candidate(original, same_as_strings)["reason"], "unchanged_candidate")
+
+        # Actual value or formatting changes remain rejected as table_data_modified
+        rejected_pairs = [
+            (1, "2"),
+            (1, 1.0),
+            (1.0, 1),
+            (1, "1.0"),
+            (1.0, "1"),
+            (1, " 1 "),
+            ("1", "1.0"),
+            (" 1 ", "1"),
+            (2.5, "2.50"),
+            (0.00001, "0.00002"),
+            (0.00001, "1e-05"),
+        ]
+        for orig_cell, cand_cell in rejected_pairs:
+            with self.subTest(orig_cell=orig_cell, cand_cell=cand_cell):
+                orig_grid = [["item", "amount"], ["A", orig_cell], ["total", "9"]]
+                cand_grid = [["item", "amount"], ["A", cand_cell], ["total", "1"]]
+                verdict = assess_table_candidate(orig_grid, cand_grid)
+                self.assertFalse(verdict["allowed"])
+                self.assertEqual(verdict["reason"], "table_data_modified")
+                self.assertEqual(verdict["row_index"], 1)
+                self.assertEqual(verdict["col_index"], 1)
+
+    def test_rejects_non_finite_floats_in_original_or_candidate_grids(self):
+        valid = [["item", "amount"], ["A", "1"], ["total", "1"]]
+        for bad_float in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(bad_float=bad_float):
+                bad_orig = [["item", "amount"], ["A", bad_float], ["total", "1"]]
+                self.assertEqual(assess_table_candidate(bad_orig, valid)["reason"], "bad_original")
+                bad_cand = [["item", "amount"], ["A", "1"], ["total", bad_float]]
+                self.assertEqual(assess_table_candidate(valid, bad_cand)["reason"], "bad_candidate_type")
 
 
 class TablePipelineThreePathsTest(unittest.TestCase):
@@ -147,6 +226,35 @@ class TablePipelineThreePathsTest(unittest.TestCase):
         self.assertFalse(terminal["resumable"])
         self.assertEqual(terminal["model_calls"], 2)
         self.assertEqual(node["data"]["rows"], original)
+
+    def test_scalar_numeric_grid_repairs_end_to_end_with_string_candidate_cells(self):
+        original = [["item", "amount"], ["A", 1], ["B", 0.00001], ["total", 2]]
+        repaired = [["item", "amount"], ["A", "1"], ["B", "0.00001"], ["total", "1.00001"]]
+        node = {"id": "t-scalar", "type": "table", "data": {"rows": original, "expected": {"n_rows": 4, "n_cols": 2}}}
+        provider = vlm.OpenAICompatibleProvider(skill_mode="on")
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                provider, "_chat", return_value={"choices": [{"message": {"content": json.dumps({"rows": repaired})}}]}):
+            provider.last_trace = {"model_calls": 1, "model_called": True}
+            status = pipeline.process_table(directory, "doc", node, provider, run_id="r-scalar")
+            events = state.load_events(directory)
+        self.assertEqual(status, "OK")
+        self.assertTrue(events[-1]["repaired"])
+        self.assertEqual(events[-1]["candidate_rows"], repaired)
+
+
+class TableSkillContractAlignmentTest(unittest.TestCase):
+    def test_table_skill_loads_in_runtime_and_selection_without_obsolete_claims(self):
+        runtime_skill = load_table_skill()
+        catalog = load_catalog()
+        self.assertEqual(catalog["doc-table-audit"].version, "1.0.0")
+        selected_skill = load_selected_skill(catalog["doc-table-audit"])
+        self.assertEqual(runtime_skill.sha256, selected_skill.sha256)
+        self.assertNotIn("not_supported", runtime_skill.instructions)
+        self.assertNotIn(
+            "Table body loading does not turn deterministic arithmetic into a model-generated repair",
+            runtime_skill.instructions,
+        )
+        self.assertNotIn("first cell contains", runtime_skill.instructions.lower())
 
 
 if __name__ == "__main__":

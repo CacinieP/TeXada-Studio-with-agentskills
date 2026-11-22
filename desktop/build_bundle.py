@@ -22,12 +22,16 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic"
 TEX_CACHE = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
+POPPLER_DATA_VERSION = "0.4.12"
+POPPLER_DATA_SHA256 = "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
 BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 
 PY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "test_*.py", "tests", "*.bak*")
@@ -47,17 +51,28 @@ def copy_tree(source: Path, target: Path, ignore=PY_IGNORE) -> None:
     shutil.copytree(source, target, ignore=ignore, dirs_exist_ok=True)
 
 
+ICONSET_SPECS = (
+    (16, "icon_16x16.png"),
+    (32, "icon_16x16@2x.png"),
+    (32, "icon_32x32.png"),
+    (64, "icon_32x32@2x.png"),
+    (128, "icon_128x128.png"),
+    (256, "icon_128x128@2x.png"),
+    (256, "icon_256x256.png"),
+    (512, "icon_256x256@2x.png"),
+    (512, "icon_512x512.png"),
+    (1024, "icon_512x512@2x.png"),
+)
+
+
 def build_icon(workdir: Path) -> Path | None:
     iconset, icns = workdir / "AppIcon.iconset", workdir / "AppIcon.icns"
     if shutil.which("sips") is None or shutil.which("iconutil") is None or not BRAND_SOURCE.exists():
         return None
     iconset.mkdir(parents=True, exist_ok=True)
-    for points in (16, 32, 128, 256, 512):
-        for scale, suffix in ((1, ""), (2, "@2x")):
-            pixels = str(points * scale)
-            target = iconset / f"icon_{points}x{points}{suffix}.png"
-            run(["sips", "-z", pixels, pixels, str(BRAND_SOURCE), "--out", str(target)],
-                capture_output=True)
+    for size, filename in ICONSET_SPECS:
+        run(["sips", "-z", str(size), str(size), str(BRAND_SOURCE), "--out", str(iconset / filename)],
+            capture_output=True)
     run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], capture_output=True)
     shutil.rmtree(iconset, ignore_errors=True)
     return icns if icns.exists() else None
@@ -112,32 +127,43 @@ def _load_commands(binary: Path):
     return dependencies, rpaths
 
 
+def _resolve_dep(
+    entry: str,
+    owner_source_dir: Path,
+    rpaths: list | None = None,
+    bin_dir: Path | None = None,
+) -> str | None:
+    owner_dir = Path(owner_source_dir)
+    if entry.startswith("@rpath/"):
+        rel = entry.removeprefix("@rpath/")
+        for rpath in rpaths or ():
+            expanded = rpath.replace("@loader_path", str(owner_dir))
+            if bin_dir is not None:
+                expanded = expanded.replace("@executable_path", str(bin_dir))
+            candidate = (Path(expanded) / rel).resolve()
+            if candidate.exists():
+                return str(candidate)
+        return None
+    if entry.startswith("@loader_path/"):
+        candidate = (owner_dir / entry.removeprefix("@loader_path/")).resolve()
+        return str(candidate) if candidate.exists() else None
+    if entry.startswith(("@executable_path", "@loader_path")):
+        return None
+    candidate = Path(entry)
+    return str(candidate.resolve()) if candidate.exists() else None
+
+
 def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -> int:
     """递归收集非系统动态库到 lib_dir,并把引用重写为 @executable_path/../<lib_dir 名>。
 
     替代 dylibbundler(其对 Homebrew rpath 链会死循环):otool 发现 + install_name_tool 重写。
-    @rpath 按**原始二进制**的 rpath 展开(@executable_path 按捆绑 bin,@loader_path 按原文件目录);
+    @rpath 与 @loader_path 按**原始二进制**目录展开(@executable_path 按捆绑 bin);
     originals 提供 {staging 副本: 原始路径},缺省用副本自身位置。
     """
     lib_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"@executable_path/../{lib_dir.name}/"
     originals = originals or {}
     relocated: dict[str, Path] = {}
-
-    def resolve(entry: str, rpaths: list, loader_dir: Path) -> str | None:
-        if entry.startswith("@rpath/"):
-            for rpath in rpaths:
-                expanded = rpath.replace("@executable_path", str(bin_dir)).replace("@loader_path", str(loader_dir))
-                candidate = Path(expanded) / entry[len("@rpath/"):]
-                if candidate.exists():
-                    return str(candidate)
-            return None
-        if entry.startswith("@loader_path/"):
-            candidate = loader_dir / entry.removeprefix("@loader_path/")
-            return str(candidate) if candidate.is_file() else None
-        if entry.startswith("@executable_path/"):
-            return None  # @executable_path is relative to the root binary.
-        return entry if Path(entry).exists() else None
 
     def is_system(path: str) -> bool:
         return path.startswith(SYSTEM_PREFIXES)
@@ -147,9 +173,10 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
         subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(binary)],
                        check=True, capture_output=True)
 
-    queue = [(item, Path(originals.get(str(item), str(item))).parent) for item in bin_dir.iterdir()
+    queue = [(item, Path(originals.get(str(item), str(item))).resolve().parent) for item in bin_dir.iterdir()
              if item.is_file() and not item.name.endswith((".txt", ".version"))]
     processed: set[str] = set()
+    seen_sources: set[str] = set()
     while queue:
         binary, loader_dir = queue.pop()
         if str(binary) in processed:
@@ -160,9 +187,10 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
         except subprocess.CalledProcessError:
             continue  # 非 Mach-O(脚本等)
         for entry in dependencies:
-            source = resolve(entry, rpaths, loader_dir)
-            if source is None or is_system(source) or source in processed:
+            source = _resolve_dep(entry, loader_dir, rpaths=rpaths, bin_dir=bin_dir)
+            if source is None or is_system(source) or source in seen_sources:
                 continue
+            seen_sources.add(source)
             target = lib_dir / Path(source).name
             if not target.exists():
                 shutil.copy2(source, target)
@@ -170,7 +198,7 @@ def bundle_dylibs(bin_dir: Path, lib_dir: Path, originals: dict | None = None) -
             relocated[source] = target
             queue.append((target, Path(source).resolve().parent))
         for entry in dependencies:
-            source = resolve(entry, rpaths, loader_dir)
+            source = _resolve_dep(entry, loader_dir, rpaths=rpaths, bin_dir=bin_dir)
             if source is None or is_system(source):
                 continue
             target = relocated.get(source) or lib_dir / Path(source).name
@@ -192,6 +220,50 @@ def tex_cache_manifest(cache: Path) -> str:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"{digest}  {path.relative_to(cache).as_posix()}")
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def install_poppler_data(staging: Path) -> None:
+    archive_name = f"poppler-data-{POPPLER_DATA_VERSION}"
+    url = f"https://poppler.freedesktop.org/{archive_name}.tar.gz"
+    with tempfile.TemporaryDirectory(prefix="texada-poppler-") as tmp:
+        work = Path(tmp)
+        archive = work / "poppler-data.tar.gz"
+        with urllib.request.urlopen(url, timeout=60) as response, archive.open("wb") as target:
+            shutil.copyfileobj(response, target)
+        require(hashlib.sha256(archive.read_bytes()).hexdigest() == POPPLER_DATA_SHA256,
+                "Poppler 字符映射包的 SHA-256 不匹配")
+        run(["tar", "-xzf", str(archive), "-C", str(work)])
+        source = work / archive_name
+        for directory in ("cMap", "cidToUnicode", "nameToUnicode", "unicodeMap"):
+            copy_tree(source / directory, staging / "poppler-data" / directory)
+        notices = staging / "licenses" / "poppler-data"
+        notices.mkdir()
+        for license_file in source.glob("COPYING*"):
+            shutil.copy2(license_file, notices)
+
+
+def stage_poppler(staging: Path) -> dict[str, str]:
+    pdfinfo = shutil.which("pdfinfo")
+    require(pdfinfo is not None, "未找到 pdfinfo;先 brew install poppler")
+    prefix = Path(run(["brew", "--prefix", "poppler"], capture_output=True, text=True).stdout.strip())
+    target = staging / "bin" / "pdfinfo"
+    shutil.copy2(pdfinfo, target)
+    target.chmod(0o755)
+    renderer = staging / "bin" / "pdftoppm"
+    poppler_cpp_lib = prefix / "lib" / "libpoppler-cpp.dylib"
+    run(["xcrun", "clang++", "-std=c++17", "-O2", "-mmacosx-version-min=15.0",
+         "-I", str(prefix / "include" / "poppler" / "cpp"),
+         str(DESKTOP / "poppler_render.cpp"), str(poppler_cpp_lib),
+         "-o", str(renderer)])
+    install_poppler_data(staging)
+    return {
+        str(target): str(Path(pdfinfo).resolve()),
+        str(renderer): str(poppler_cpp_lib.resolve()),
+    }
+
+
+def bundle_poppler(staging: Path) -> int:
+    return bundle_dylibs(staging / "bin", staging / "tools-lib", stage_poppler(staging))
 
 
 def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool = False) -> dict:
@@ -217,26 +289,30 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
     shutil.copy2(TECTONIC, staging / "bin" / "tectonic")
     os.chmod(staging / "bin" / "tectonic", 0o755)
 
-    originals = {}
-    tools = [] if skip_poppler else ["pdfinfo", "pdftoppm"]
+    originals: dict[str, str] = {}
+    smoke: list[tuple[str, str]] = [("tectonic", "--version")]
+    if not skip_poppler:
+        originals.update(stage_poppler(staging))
+        smoke.extend((("pdfinfo", "-v"), ("pdftoppm", "-v")))
     if with_llama_server:
-        tools.append("llama-server")
-    for name in tools:
-        tool = shutil.which(name)
-        require(tool is not None, f"未找到 {name}；请安装所需的 Homebrew 构建依赖")
-        destination = staging / "bin" / name
+        tool = shutil.which("llama-server")
+        require(tool is not None, "未找到 llama-server；请安装所需的 Homebrew 构建依赖")
+        destination = staging / "bin" / "llama-server"
         shutil.copy2(tool, destination)
         os.chmod(destination, 0o755)
-        originals[str(destination)] = str(Path(tool).resolve())
-    if with_llama_server:
-        license_file = Path(originals[str(staging / "bin" / "llama-server")]).parents[1] / "LICENSE"
-        require(license_file.is_file(), "未找到 llama.cpp 的 LICENSE")
+        resolved = str(Path(tool).resolve())
+        originals[str(destination)] = resolved
+        license_file = next(
+            (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
+            None,
+        )
+        require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
         shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
-    if tools:
+        smoke.append(("llama-server", "--version"))
+    if originals:
         count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
         print(f"   已捆绑 {count} 个非系统动态库")
-    for name in ["tectonic", *tools]:
-        flag = "-v" if name in {"pdfinfo", "pdftoppm"} else "--version"
+    for name, flag in smoke:
         run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
@@ -245,7 +321,7 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
     copy_tree(TEX_CACHE, staging / "tex-cache", ignore=shutil.ignore_patterns("*.lock", ".DS_Store"))
     (staging / "licenses" / "tex-cache-manifest.sha256").write_text(
         tex_cache_manifest(staging / "tex-cache"), encoding="utf-8")
-    for area in ("webui", "tex-cache", "bin", "tools-lib"):
+    for area in ("webui", "tex-cache", "bin", "tools-lib", "poppler-data"):
         path = staging / area
         if path.exists():
             sizes[area] = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
@@ -289,7 +365,9 @@ def main(argv=None) -> int:
 
     print("③ py2app 冻结程序部分(首次较慢)…")
     py2app_dist = workdir / "py2app-dist"
+    py2app_build = workdir / "py2app-build"
     run([str(venv_python), str(DESKTOP / "setup_bundle.py"), "py2app",
+         "--bdist-base", str(py2app_build),
          "--dist-dir", str(py2app_dist), "--no-strip"], cwd=str(DESKTOP))
     produced = next(path for path in py2app_dist.iterdir() if path.suffix == ".app")
     app = args.output / "TeXada Studio.app"

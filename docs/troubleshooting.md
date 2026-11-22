@@ -142,9 +142,9 @@ pdftoppm -v
 
 外部 Agent 的 Studio 操作入口、运行时加载范围和 Skill 安装方式见[AgentSkills 使用指南](agent-skills.md)。仓库有 `SKILL.md` 不等于它已自动安装到 Agent，或每个步骤都会向模型加载它。
 
-固定公式宿主在 `skill_mode=on` 时加载公式 Skill；自动选择 Skill 是另一项默认关闭的实验。核对实际 `skill_loaded`、`skill_sha256` 和请求记录，不用零请求的确定性路径证明模型读过 Skill。路径或正文校验失败时，先检查源码包完整性。
+固定宿主在 `skill_mode=on` 时按任务加载公式或 CLI 表格 Skill（Studio 表格重算仍为确定性零请求路径）；自动选择 Skill 是另一项默认关闭的实验。核对实际 `skill_loaded`、`skill_sha256` 和请求记录，不用零请求的确定性路径证明模型读过 Skill。路径或正文校验失败时，先检查源码包完整性。
 
-CLI 读取已有 `layout.json`，不能直接接收 PDF，也不会自动把 Studio 转写候选转换为节点。模型提供方的表格修复尚未实现；fixture 中的预设替换网格不代表真实图像重提取。输入与报告说明见 [Harness 手册](../harness/README.md)。
+CLI 读取已有 `layout.json`（或经 `doc-ocr-extract` 与 `ocr_to_layout.py` 人工逐行审阅转换得到的节点），不能直接接收 PDF，也不会自动把 Studio 转写候选转换为节点。CLI 模型提供方的 `repair_table` 仅允许在 `assess_table_candidate` 与 `audit_table.py` 双重校验下重算、补齐或按显式行数追加末行合计，不允许改写表头和数据行；模型修表和 fixture 预设替换网格都不代表真实图像重提取。输入与报告说明见 [Harness 手册](../harness/README.md)。
 
 CLI 续跑核对本轮 `run_id`、`SKIP`、输入与执行上下文哈希；独立实验使用新的 `--state` 目录。相同标签下更换权重或服务实现时，也应记录实际模型身份并使用新目录。暂时性服务或检查器故障恢复后可重跑，旧人工项不等于新成功。
 

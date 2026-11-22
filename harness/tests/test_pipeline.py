@@ -1,6 +1,7 @@
 """Checker boundary and auditable-output tests; no model or compiler required."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -166,6 +167,88 @@ class ReportEvidenceTest(unittest.TestCase):
                                        "paper-01": {"OK": 2, "NEEDS_HUMAN": 1},
                                        "report-01": {"OK": 2, "NEEDS_HUMAN": 0}})
             self.assertEqual(sum(event.get("action") == "SKIP" for event in state.load_events(directory)), 8)
+
+    def test_model_abstention_stops_retry_immediately_on_unchanged_formula(self):
+        original = r"\sin(x"
+        provider = Mock()
+        provider.repair_formula.side_effect = [original, r"\sin(x)"]
+        provider.last_trace = {"model_calls": 1, "model_called": True, "reason": "ok"}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                pipeline, "run_verify", return_value={"status": "RETRY", "reason": "parse_error"}):
+            status = pipeline.process_formula(directory, "doc", {"id": "f-1", "data": {"latex": original}}, provider)
+            events = state.load_events(directory)
+        self.assertEqual(status, "NEEDS_HUMAN")
+        self.assertEqual(provider.repair_formula.call_count, 1)
+        terminal = events[-1]
+        self.assertEqual(terminal["attempts"], 1)
+        self.assertEqual(terminal["reason"], "model_abstained")
+        self.assertTrue(terminal["resumable"])
+
+    def test_cleared_provider_reason_allows_resumable_success_on_second_attempt(self):
+        original = r"\sin(x"
+        candidate = r"\sin(x)"
+        provider = Mock()
+        traces = [{"model_calls": 1, "model_called": True, "reason": "bad_candidate_json"},
+                  {"model_calls": 1, "model_called": True, "reason": "ok"}]
+        replies = [None, candidate]
+
+        def repair(_node):
+            provider.last_trace = traces.pop(0)
+            return replies.pop(0)
+
+        provider.repair_formula.side_effect = repair
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                pipeline, "run_verify", side_effect=[{"status": "RETRY", "reason": "err"}, {"status": "OK"}]), \
+                patch.object(pipeline, "assess_candidate",
+                             return_value={"allowed": True, "reason": "test_scope", "method": "test"}):
+            status = pipeline.process_formula(directory, "doc", {"id": "f-1", "data": {"latex": original}}, provider)
+            terminal = state.load_events(directory)[-1]
+        self.assertEqual(status, "OK")
+        self.assertEqual(terminal["attempts"], 2)
+        self.assertTrue(terminal["resumable"])
+        self.assertNotIn("provider_reason", terminal)
+
+    def test_evidence_resolves_against_sample_path_and_rejects_symlinks_traversal_and_oversized_crops(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            sample = base / "sample"
+            crops = sample / "crops"
+            crops.mkdir(parents=True)
+            valid_crop = crops / "f1.png"
+            valid_crop.write_bytes(b"png-bytes")
+            outside = base / "outside.png"
+            outside.write_bytes(b"secret")
+            symlink_crop = crops / "link.png"
+            symlink_crop.symlink_to(valid_crop)
+            oversized = crops / "huge.png"
+            with open(oversized, "wb") as stream:
+                stream.seek(24 * 1024 * 1024)
+                stream.write(b"x")
+            nodes = [
+                {"id": "f-valid", "type": "formula", "data": {"latex": r"\frac{a}{b", "crop": "crops/f1.png"}},
+                {"id": "f-trav", "type": "formula", "data": {"latex": r"\frac{a}{b", "crop": "../outside.png"}},
+                {"id": "f-abs", "type": "formula", "data": {"latex": r"\frac{a}{b", "crop": str(outside)}},
+                {"id": "f-link", "type": "formula", "data": {"latex": r"\frac{a}{b", "crop": "crops/link.png"}},
+                {"id": "f-huge", "type": "formula", "data": {"latex": r"\frac{a}{b", "crop": "crops/huge.png"}},
+            ]
+            (sample / "layout.json").write_text(json.dumps({"doc": "crop-doc", "nodes": nodes}))
+            run_dir = base / "run"
+            other_cwd = base / "elsewhere"
+            other_cwd.mkdir()
+            prev_cwd = os.getcwd()
+            try:
+                os.chdir(other_cwd)
+                with patch.object(pipeline, "run_verify",
+                                  side_effect=[{"status": "RETRY"}, {"status": "OK"}] * len(nodes)):
+                    pipeline.run(str(sample), str(run_dir), pipeline.FixtureProvider())
+            finally:
+                os.chdir(prev_cwd)
+            terminals = {e["node_id"]: e for e in state.load_events(str(run_dir)) if e.get("action") == "TERMINAL"}
+            self.assertIsNotNone(terminals["f-valid"]["evidence"])
+            self.assertTrue((run_dir / terminals["f-valid"]["evidence"]).is_file())
+            for bad_id in ("f-trav", "f-abs", "f-link", "f-huge"):
+                with self.subTest(bad_id=bad_id):
+                    self.assertIsNone(terminals[bad_id]["evidence"])
 
 
 if __name__ == "__main__":

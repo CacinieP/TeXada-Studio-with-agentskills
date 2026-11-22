@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from docforensics.tex_context import analyze_math, extract_math  # noqa: E402
+from docforensics.tex_context import _command, analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
 
 
 class MathContextTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class MathContextTests(unittest.TestCase):
             last_end = node["end"]
 
     def test_all_delimiters_and_adjacent_inline_math(self):
-        text = r"$a$$b$ \(c\) $$d$$ \[e\]"
+        text = r"$a$ $b$ \(c\) $$d$$ \[e\]"
         nodes = extract_math(text)
         self.assertEqual([node["latex"] for node in nodes], list("abcde"))
         self.assertEqual([node["kind"] for node in nodes], ["inline", "inline", "inline", "display", "display"])
@@ -180,6 +180,112 @@ class MathContextTests(unittest.TestCase):
         self.assertEqual(analyze_math("") , {"nodes": [], "diagnostics": []})
         with self.assertRaises(TypeError):
             extract_math(None)
+
+    def test_text_box_inner_math_stays_one_node_while_unclosed_math_brace_still_closes(self):
+        text = r"$\text{$x$ {a + b $y$}}$ and $\frac{1}{2$ and \(\mbox{see \(z\) and $w$}\)"
+        nodes = extract_math(text)
+        self.assertEqual([node["latex"] for node in nodes],
+                         [r"\text{$x$ {a + b $y$}}", r"\frac{1}{2", r"\mbox{see \(z\) and $w$}"])
+        self.assertEqual([node["checkable"] for node in nodes], [False, True, False])
+        self.assert_slices(text, nodes)
+
+    def test_outer_end_environment_terminates_unclosed_inline_or_display_math(self):
+        text = "\\begin{itemize}\n\\item $unclosed\n\\end{itemize}\nNext $x+1$."
+        result = analyze_math(text)
+        self.assertEqual([d["code"] for d in result["diagnostics"]], ["unclosed_math"])
+        self.assertEqual([node["latex"] for node in result["nodes"]], ["x+1"])
+
+    def test_unclosed_single_dollar_does_not_consume_display_double_dollar(self):
+        result = analyze_math("$unclosed $$d+1$$ $ok$")
+        self.assertEqual([d["code"] for d in result["diagnostics"]], ["unclosed_math"])
+        self.assertEqual([(n["kind"], n["latex"]) for n in result["nodes"]],
+                         [("display", "d+1"), ("inline", "ok")])
+        adjacent_bad = analyze_math("$a$$b$")
+        self.assertTrue(any(d["code"] == "unclosed_math" for d in adjacent_bad["diagnostics"]))
+
+    def test_non_signature_definition_tokens_do_not_blind_scanner_or_mask_opaque(self):
+        for prefix in (r"\let\myenv\newenvironment" + "\n\\section{Intro}\n",
+                       r"\expandafter\newcommand\csname foo\endcsname{bar}" + "\n"):
+            doc = prefix + "$x+1$\n\\begin{tabular}{ll}\nA & 1\\\\\n\\end{tabular}\n"
+            with self.subTest(prefix=prefix):
+                result = analyze_math(doc)
+                self.assertEqual(result["diagnostics"][0]["code"], "unclosed_definition")
+                self.assertEqual([n["latex"] for n in result["nodes"]], ["x+1"])
+                self.assertIn(r"\begin{tabular}", mask_opaque(doc))
+
+    def test_ascii_only_command_scanning_splits_cjk_suffix(self):
+        self.assertEqual(_command(r"\quad中文", 0), ("quad", 5))
+        nodes = extract_math(r"$a\quad中文$")
+        self.assertEqual(len(nodes), 1)
+        self.assertTrue(nodes[0]["checkable"])
+        self.assertEqual(nodes[0]["reason"], "")
+
+
+class MathGridTests(unittest.TestCase):
+    def test_row_spacing_is_distinguished_from_bracketed_matrix_cells(self):
+        self.assertEqual(
+            check_math_grids(r"\begin{pmatrix} 1 & 2 \\[4pt] 3 & 4 \end{pmatrix}"),
+            {"status": "OK", "reason": "", "scope": "grid_shape"},
+        )
+        self.assertEqual(
+            check_math_grids(r"\begin{pmatrix} 1 & 2 \\[\jot] 3 & 4 \end{pmatrix}"),
+            {"status": "OK", "reason": "", "scope": "grid_shape"},
+        )
+        for ragged in (
+            r"\begin{vmatrix} 1 & 2 \\ 3 & 4 \\ [5] \end{vmatrix}",
+            "\\begin{vmatrix} 1 & 2 \\\\ 3 & 4 \\\\\n[5] \\end{vmatrix}",
+        ):
+            with self.subTest(ragged=ragged):
+                verdict = check_math_grids(ragged)
+                self.assertIsNotNone(verdict)
+                self.assertEqual(verdict["status"], "NEEDS_HUMAN")
+                self.assertIn("[2, 2, 1]", verdict["reason"])
+
+    def test_cases_allows_one_or_two_uniform_columns_and_vmatrix_variants_require_square(self):
+        for valid in (
+            r"f(x)=\begin{vmatrix}2x&1&-1\\-x&x&x\\1&2&x\end{vmatrix}",
+            r"\begin{Vmatrix}a&b\\c&d\end{Vmatrix}",
+            r"\delta_{ij}=\begin{cases}1,&i=j\\0,&i\neq j\end{cases}",
+            r"\begin{cases} x+y=1 \\ x-y=0 \end{cases}",
+            r"f(x)=\begin{cases}x,&\text{if }x>0\\0,&\text{otherwise}\end{cases}",
+            r"f(x)=\begin{cases}1,&x\ge 0\\-1,&\text{其他}\end{cases}",
+            r"f(x)=\begin{cases}x^2,&0\le x\le 1\\0,&x<0\end{cases}",
+        ):
+            with self.subTest(valid=valid):
+                self.assertEqual(check_math_grids(valid), {"status": "OK", "reason": "", "scope": "grid_shape"})
+
+        ragged_cases = check_math_grids(r"\begin{cases}1,&i=j\\0\end{cases}")
+        self.assertEqual(ragged_cases["status"], "NEEDS_HUMAN")
+        self.assertIn("[2, 1]", ragged_cases["reason"])
+
+        wide_cases = check_math_grids(r"\begin{cases}1&2&3\\4&5&6\end{cases}")
+        self.assertEqual(wide_cases["status"], "NEEDS_HUMAN")
+        self.assertIn("预期每行 1 或 2 列", wide_cases["reason"])
+
+        nonsquare_norm = check_math_grids(r"\begin{Vmatrix}1&2&3\\4&5&6\end{Vmatrix}")
+        self.assertEqual(nonsquare_norm["status"], "NEEDS_HUMAN")
+        self.assertIn("[3, 3]", nonsquare_norm["reason"])
+
+    def test_broken_cells_and_broken_outer_formulas_are_never_certified_ok(self):
+        broken = (
+            r"\frac{1}{ + \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} }}}} \foobar",
+            r"\frac{1}{ + \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} }",
+            r"\frac{1}{\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} \frac{1}{ & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} x+ & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} (1 & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} \foobar & 2 \\ 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} 1 & 2 \\[x+1] 3 & 4 \end{pmatrix}",
+            r"\begin{pmatrix} 1 & 2 \\[5] 3 & 4 \end{pmatrix}",
+            r"\begin{cases} 1, & \text{} \\ 0, & x<0 \end{cases}",
+            r"\begin{cases} 1, & \text{bad $x$} \\ 0, & x<0 \end{cases}",
+            r"\begin{cases} 1, & \text{\verb|x|} \\ 0, & x<0 \end{cases}",
+        )
+        for expr in broken:
+            with self.subTest(expr=expr):
+                verdict = check_math_grids(expr)
+                self.assertNotEqual(verdict and verdict.get("status"), "OK")
 
 
 if __name__ == "__main__":

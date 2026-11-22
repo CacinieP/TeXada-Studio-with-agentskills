@@ -9,6 +9,7 @@ import re
 import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
@@ -22,7 +23,10 @@ class DocumentError(ValueError):
 
 
 def document_name(value):
-    if (not isinstance(value, str) or len(value) > 128
+    if not isinstance(value, str):
+        raise DocumentError("请使用不含路径的 .tex 文件名（最长 128 个字符）。")
+    value = unicodedata.normalize("NFC", value)
+    if (len(value) > 128
             or not re.fullmatch(r"[\w ()\-.]+\.tex", value)
             or value.startswith(".") or ".." in value):
         raise DocumentError("请使用不含路径的 .tex 文件名（最长 128 个字符）。")
@@ -52,45 +56,88 @@ class DocumentStore:
         self.documents = Path(documents)
         self.samples = Path(samples)
 
-    def _path(self, directory, name):
-        path = directory / document_name(name)
-        if directory.is_symlink() or path.is_symlink():
+    def _path(self, directory, name, *, for_write=False):
+        norm = document_name(name)
+        if directory.is_symlink():
+            raise DocumentError("不支持符号链接文档。")
+        path = directory / norm
+        if not for_write and not path.exists() and not path.is_symlink() and directory.is_dir():
+            for entry in directory.iterdir():
+                if unicodedata.normalize("NFC", entry.name) == norm:
+                    path = entry
+                    break
+        if path.is_symlink():
             raise DocumentError("不支持符号链接文档。")
         return path
 
     def read(self, name):
         with _LOCK:
-            return self._read(name)
-
-    def _read(self, name):
-        user_path = self._path(self.documents, name)
-        path = user_path if user_path.is_file() else self._path(self.samples, name)
-        if not path.is_file():
-            raise DocumentError("文档不存在。", 404)
-        if path.stat().st_size > MAX_DOCUMENT_BYTES:
-            raise DocumentError("文档超过 2 MiB。", 413)
-        try:
-            content = path.read_text(encoding="utf-8-sig")
-        except UnicodeError:
-            raise DocumentError("文档不是有效的 UTF-8 文本。") from None
-        return {"name": name, "content": content, "sha256": text_hash(content),
-                "origin": "local" if path == user_path else "sample",
-                "saved_at": path.stat().st_mtime, "size": len(content.encode("utf-8"))}
+            name = document_name(name)
+            user_path = self._path(self.documents, name)
+            path = user_path if user_path.is_file() else self._path(self.samples, name)
+            if not path.is_file():
+                raise DocumentError("文档不存在。", 404)
+            if path.stat().st_size > MAX_DOCUMENT_BYTES:
+                raise DocumentError("文档超过 2 MiB。", 413)
+            try:
+                content = path.read_text(encoding="utf-8-sig")
+            except UnicodeError:
+                raise DocumentError("文档不是有效的 UTF-8 文本。") from None
+            return {"name": name, "content": content, "sha256": text_hash(content),
+                    "origin": "local" if path == user_path else "sample",
+                    "saved_at": path.stat().st_mtime, "size": len(content.encode("utf-8"))}
 
     def listing(self):
         with _LOCK:
-            return self._listing()
-
-    def _listing(self):
-        names = {p.name for directory in (self.samples, self.documents) if directory.is_dir()
-                 for p in directory.glob("*.tex") if p.is_file() and not p.is_symlink()}
-        documents = []
-        for name in sorted(names):
-            try:
-                documents.append({k: v for k, v in self.read(name).items() if k != "content"})
-            except DocumentError:
-                continue
-        return {"files": [d["name"] for d in documents], "documents": documents}
+            seen_names = set()
+            seen_casefold = set()
+            seen_inodes = set()
+            names = []
+            if self.documents.is_dir() and not self.documents.is_symlink():
+                for p in sorted(self.documents.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    try:
+                        canonical_name = document_name(p.name)
+                        st = p.stat()
+                    except (DocumentError, OSError):
+                        continue
+                    inode = (st.st_dev, st.st_ino)
+                    if inode in seen_inodes or canonical_name in seen_names:
+                        continue
+                    seen_inodes.add(inode)
+                    seen_names.add(canonical_name)
+                    seen_casefold.add(canonical_name.casefold())
+                    names.append(canonical_name)
+            if self.samples.is_dir() and not self.samples.is_symlink():
+                for p in sorted(self.samples.iterdir(), key=lambda entry: unicodedata.normalize("NFC", entry.name)):
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    try:
+                        name = document_name(p.name)
+                    except DocumentError:
+                        continue
+                    folded = name.casefold()
+                    if folded in seen_casefold:
+                        continue
+                    local_alias = self.documents / name
+                    if not self.documents.is_symlink() and not local_alias.is_symlink() and local_alias.is_file():
+                        try:
+                            lst = local_alias.stat()
+                        except OSError:
+                            pass
+                        else:
+                            if (lst.st_dev, lst.st_ino) in seen_inodes:
+                                continue
+                    seen_casefold.add(folded)
+                    names.append(name)
+            documents = []
+            for name in sorted(names):
+                try:
+                    documents.append({k: v for k, v in self.read(name).items() if k != "content"})
+                except DocumentError:
+                    continue
+            return {"files": [d["name"] for d in documents], "documents": documents}
 
     def _write(self, path, content):
         self._safe_write_path(path)
@@ -132,6 +179,7 @@ class DocumentStore:
                 previous = None
             if create and previous is not None:
                 raise DocumentError("此名称已存在，请使用其他文件名。", 409)
+            old_local = None
             if previous:
                 # Uploading over a sample creates a local copy; an existing local
                 # document always needs the version the editor actually opened.
@@ -139,28 +187,37 @@ class DocumentStore:
                 if not sample_upload and expected_sha256 != previous["sha256"]:
                     raise DocumentError("文件已变化或同名文件已存在；请重新打开或另存为。", 409)
                 if previous["origin"] == "local":
+                    old_local = self._path(self.documents, name)
                     self._archive(previous)
             elif expected_sha256 is not None:
                 raise DocumentError("文件已被移动或删除；请另存为。", 409)
-            self._write(self._path(self.documents, name), content)
+            target = self._path(self.documents, name, for_write=True)
+            self._write(target, content)
+            if old_local is not None and old_local.exists() and not os.path.samefile(old_local, target):
+                old_local.unlink()
             return {"ok": True, **self.read(name)}
 
     def create_many(self, documents):
         with _LOCK:
+            normalized = [(document_name(name), document_text(content)) for name, content in documents]
             paths = []
-            for name, content in documents:
-                path = self._path(self.documents, name)
-                if path.exists() or self._path(self.samples, name).exists() or path in paths:
+            seen_folded = set()
+            for name, _ in normalized:
+                folded = name.casefold()
+                existing = self._path(self.documents, name)
+                target = self._path(self.documents, name, for_write=True)
+                if existing.exists() or self._path(self.samples, name).exists() or folded in seen_folded:
                     raise DocumentError(f"「{name}」已存在或重复，请更换文件名。", 409)
-                self._safe_write_path(path)
-                paths.append(path)
+                self._safe_write_path(target)
+                seen_folded.add(folded)
+                paths.append(target)
 
             published = []
             try:
                 self.documents.mkdir(parents=True, exist_ok=True, mode=0o700)
                 with tempfile.TemporaryDirectory(prefix=".split-", dir=self.documents) as temporary:
                     staged = []
-                    for index, (_, content) in enumerate(documents):
+                    for index, (_, content) in enumerate(normalized):
                         path = Path(temporary) / str(index)
                         self._write(path, content)
                         staged.append(path)
@@ -179,7 +236,7 @@ class DocumentStore:
             return {"ok": True, "files": [path.name for path in paths]}
 
     def rename(self, name, new_name, expected_sha256):
-        document_name(new_name)
+        name, new_name = document_name(name), document_name(new_name)
         with _LOCK:
             old = self.read(name)
             if old["origin"] != "local":
@@ -188,18 +245,34 @@ class DocumentStore:
                 raise DocumentError("文档已变化，请重新打开。", 409)
             if name == new_name:
                 return {"ok": True, **old}
-            try:
-                self.read(new_name)
-            except DocumentError as exc:
-                if exc.status != 404:
+            old_path = self._path(self.documents, name)
+            new_path = self._path(self.documents, new_name, for_write=True)
+            same_local_file = old_path.exists() and new_path.exists() and os.path.samefile(old_path, new_path)
+            if not same_local_file:
+                try:
+                    self.read(new_name)
+                except DocumentError as exc:
+                    if exc.status != 404:
+                        raise
+                else:
+                    raise DocumentError("目标文件名已存在。", 409)
+            self._archive(old)
+            if same_local_file:
+                intermediate = old_path.with_name("." + uuid.uuid4().hex + ".rename")
+                self._safe_write_path(intermediate)
+                os.replace(old_path, intermediate)
+                try:
+                    os.replace(intermediate, new_path)
+                except Exception:
+                    if intermediate.exists() and not old_path.exists():
+                        os.replace(intermediate, old_path)
                     raise
             else:
-                raise DocumentError("目标文件名已存在。", 409)
-            self._archive(old)
-            os.replace(self._path(self.documents, name), self._path(self.documents, new_name))
+                os.replace(old_path, new_path)
             return {"ok": True, **self.read(new_name)}
 
     def delete(self, name, expected_sha256):
+        name = document_name(name)
         with _LOCK:
             old = self.read(name)
             if old["origin"] != "local":

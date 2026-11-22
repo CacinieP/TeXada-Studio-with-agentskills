@@ -10,7 +10,9 @@ import importlib.metadata
 import json
 import math
 import os
+from pathlib import Path
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -25,6 +27,7 @@ VERIFY = os.path.join(REPO, "skills", "doc-formula-verify", "scripts", "verify.p
 AUDIT = os.path.join(REPO, "skills", "doc-table-audit", "scripts", "audit_table.py")
 
 MAX_RETRIES = 2
+MAX_CROP_BYTES = 24 * 1024 * 1024
 TRANSIENT_PROVIDER_FAILURES = {
     "timeout", "network_error", "http_error", "provider_error", "provider_exception",
     "bad_response_json", "bad_response_shape", "empty_response", "bad_candidate_json",
@@ -103,13 +106,75 @@ def _provider_context(provider):
     return {"provider_class": type(provider).__name__, "unverified": state.new_run_id()}
 
 
-def node_identity(node, provider, kind=None):
+def _resolve_crop(crop, sample_path=None):
+    if not isinstance(crop, str) or not crop.strip() or "\x00" in crop:
+        return None
+    if ".." in Path(crop).parts:
+        return None
+    if sample_path is not None:
+        if os.path.isabs(crop) or os.path.islink(sample_path):
+            return None
+        root_dir = os.path.abspath(sample_path)
+        candidate = os.path.join(root_dir, crop)
+        if not os.path.lexists(candidate):
+            repo_candidate = os.path.join(os.path.abspath(REPO), crop)
+            if os.path.lexists(repo_candidate):
+                candidate = repo_candidate
+    else:
+        cwd_root = os.path.abspath(os.getcwd())
+        root_dir = cwd_root
+        candidate = crop if os.path.isabs(crop) else os.path.join(cwd_root, crop)
+        if not os.path.isabs(crop) and not os.path.lexists(candidate):
+            repo_candidate = os.path.join(os.path.abspath(REPO), crop)
+            if os.path.lexists(repo_candidate):
+                root_dir = os.path.abspath(REPO)
+                candidate = repo_candidate
+    if os.path.islink(candidate):
+        return None
+    try:
+        st = os.lstat(candidate)
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CROP_BYTES:
+        return None
+    real_root = os.path.realpath(root_dir)
+    real_candidate = os.path.realpath(candidate)
+    try:
+        if os.path.commonpath([real_root, real_candidate]) != real_root or real_candidate == real_root:
+            return None
+        rel = os.path.relpath(os.path.abspath(candidate), os.path.abspath(root_dir))
+    except ValueError:
+        return None
+    if rel.startswith(".."):
+        return None
+    cur = os.path.abspath(root_dir)
+    for part in Path(rel).parts:
+        cur = os.path.join(cur, part)
+        if os.path.islink(cur):
+            return None
+    return real_candidate
+
+
+def node_identity(node, provider, kind=None, sample_path=None):
     """Return hashes of canonical input and the full known execution context."""
     data = node.get("data") or {}
     crop = data.get("crop") if isinstance(data, dict) else None
     identity = {"node": node}
     if crop:
-        identity["crop_sha256"] = _file_sha256(crop)
+        resolved = _resolve_crop(crop, sample_path=sample_path)
+        if resolved is not None:
+            identity["crop_sha256"] = _file_sha256(resolved)
+        elif sample_path is None and isinstance(crop, str) and not os.path.islink(crop):
+            try:
+                st = os.lstat(crop)
+                identity["crop_sha256"] = (
+                    _file_sha256(crop) if stat.S_ISREG(st.st_mode) and st.st_size <= MAX_CROP_BYTES
+                    else "unavailable"
+                )
+            except OSError:
+                identity["crop_sha256"] = "unavailable"
+        else:
+            identity["crop_sha256"] = "unavailable"
     versions = {}
     for distribution in ("sympy", "antlr4-python3-runtime"):
         try:
@@ -125,6 +190,7 @@ def node_identity(node, provider, kind=None):
         "formula_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "formula_repair.py")),
         "table_repair_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "table_repair.py")),
         "tex_context_sha256": _file_sha256(os.path.join(os.path.dirname(__file__), "tex_context.py")),
+        "anchor_guard_sha256": _file_sha256(anchor_guard.__file__),
         "state_sha256": _file_sha256(state.__file__),
         "source_report_sha256": _file_sha256(source_report.__file__) if node.get("ocr_source") else None,
         "python": list(sys.version_info[:3]), "dependencies": versions,
@@ -133,23 +199,24 @@ def node_identity(node, provider, kind=None):
     return state.canonical_sha256(identity), state.canonical_sha256(context)
 
 
-def _event_context(node, provider, doc, run_id, input_sha256, context_sha256, kind=None):
+def _event_context(node, provider, doc, run_id, input_sha256, context_sha256, kind=None, sample_path=None):
     if not input_sha256 or not context_sha256:
-        input_sha256, context_sha256 = node_identity(node, provider, kind=kind)
+        input_sha256, context_sha256 = node_identity(node, provider, kind=kind, sample_path=sample_path)
     return {"run_id": run_id or state.new_run_id(), "doc": doc, "node_id": node["id"],
             "input_sha256": input_sha256, "context_sha256": context_sha256}
 
 
-def _evidence(run_dir, node):
+def _evidence(run_dir, node, sample_path=None):
     """Copy evidence under a content hash; journal paths are run-relative."""
     data = node.get("data") or {}
     crop = data.get("crop") if isinstance(data, dict) else None
-    if isinstance(crop, str) and os.path.isfile(crop):
-        filename = _file_sha256(crop) + os.path.splitext(crop)[1]
+    resolved = _resolve_crop(crop, sample_path=sample_path)
+    if resolved is not None:
+        filename = _file_sha256(resolved) + os.path.splitext(resolved)[1]
         dst = os.path.join(run_dir, "crops", filename)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        if os.path.abspath(crop) != os.path.abspath(dst):
-            shutil.copy(crop, dst)
+        if os.path.abspath(resolved) != os.path.abspath(dst):
+            shutil.copy(resolved, dst)
         return os.path.relpath(dst, run_dir)
     return None
 
@@ -230,8 +297,9 @@ def _record_check(run_dir, common, result, stage, attempt, **content):
 
 
 def _process(run_dir, doc, node, provider, kind, run_id=None,
-             input_sha256=None, context_sha256=None, revision=None):
-    common = _event_context(node, provider, doc, run_id, input_sha256, context_sha256, kind)
+             input_sha256=None, context_sha256=None, revision=None, sample_path=None):
+    common = _event_context(node, provider, doc, run_id, input_sha256, context_sha256, kind,
+                            sample_path=sample_path)
     if revision is None:
         revision = state.node_revision(state.load_events(run_dir), doc, node["id"],
                                        common["input_sha256"])
@@ -278,6 +346,7 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
                                  candidate=candidate, reason="deterministic_checker_rejected", check=checked)
     while result.get("status") == "RETRY" and attempts < MAX_RETRIES:
         attempts += 1
+        provider_reason = None
         context = {"attempt": attempts, "checker": result, "previous_candidate": previous_candidate,
                    "rejection_reason": rejection_reason}
         candidate, trace = _invoke_provider(run_dir, common, provider, node, kind, attempts, result, context)
@@ -310,14 +379,20 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
         # they never authorize an edit that the preservation scope rejects.
         anchor = anchor_guard.anchor_drift(original, candidate) if kind == "formula" else None
         accepted = result.get("status") == "OK" and scope["allowed"]
+        abstained = (not accepted and kind == "formula" and scope.get("method") == "unchanged"
+                     and result.get("status") != "NEEDS_ENV" and result.get("reason") != "checker_error")
         state.append(run_dir, **common, action="CANDIDATE_SCOPE", attempt=attempts,
                      candidate=candidate, scope=scope, **({"anchor": anchor} if kind == "formula" else {}))
         state.append(run_dir, **common, action="CANDIDATE_ACCEPTED" if accepted else "CANDIDATE_REJECTED",
                      attempt=attempts, candidate=candidate, checker_status=result.get("status"),
                      checker_reason=result.get("reason", ""), checker_detail=result.get("detail", ""),
-                     scope=scope, **({"anchor": anchor} if kind == "formula" else {}))
+                     scope=scope, **({"reason": "model_abstained"} if abstained else {}),
+                     **({"anchor": anchor} if kind == "formula" else {}))
         if accepted:
             repaired = candidate
+        elif abstained:
+            result = {**result, "status": "NEEDS_HUMAN", "reason": "model_abstained"}
+            break
         elif result.get("status") != "NEEDS_ENV" and result.get("reason") != "checker_error":
             if anchor and anchor["drift"]:
                 rejection_reason = anchor["reason"]
@@ -351,21 +426,21 @@ def _process(run_dir, doc, node, provider, kind, run_id=None,
     elif repaired is not None:
         fields.update(original_rows=original, candidate_rows=repaired)
     if repaired is not None:
-        fields["evidence"] = _evidence(run_dir, node)
+        fields["evidence"] = _evidence(run_dir, node, sample_path=sample_path)
     state.append(run_dir, **common, **fields)
     return status
 
 
 def process_formula(run_dir, doc, node, provider, run_id=None, input_sha256=None,
-                    context_sha256=None, revision=None):
+                    context_sha256=None, revision=None, sample_path=None):
     return _process(run_dir, doc, node, provider, "formula", run_id, input_sha256,
-                    context_sha256, revision)
+                    context_sha256, revision, sample_path=sample_path)
 
 
 def process_table(run_dir, doc, node, provider, run_id=None, input_sha256=None,
-                  context_sha256=None, revision=None):
+                  context_sha256=None, revision=None, sample_path=None):
     return _process(run_dir, doc, node, provider, "table", run_id, input_sha256,
-                    context_sha256, revision)
+                    context_sha256, revision, sample_path=sample_path)
 
 
 def _validate_ocr_source(layout, sample_path):
@@ -433,7 +508,7 @@ def run(sample_path, run_dir, provider, run_id=None):
     state.append(run_dir, run_id=run_id, doc=doc, action="PARSE", nodes=len(layout["nodes"]))
     for node in layout["nodes"]:
         nid = node["id"]
-        input_sha256, context_sha256 = node_identity(node, provider)
+        input_sha256, context_sha256 = node_identity(node, provider, sample_path=sample_path)
         # Every event this node emits is bound to the content revision the
         # hashes identify, so evidence stays attributable to a formula version.
         revision = state.node_revision(events, doc, nid, input_sha256)
@@ -452,10 +527,10 @@ def run(sample_path, run_dir, provider, run_id=None):
         ntype = node["type"]
         if ntype == "formula":
             status = process_formula(run_dir, doc, node, provider, run_id, input_sha256,
-                                     context_sha256, revision)
+                                     context_sha256, revision, sample_path=sample_path)
         elif ntype == "table":
             status = process_table(run_dir, doc, node, provider, run_id, input_sha256,
-                                   context_sha256, revision)
+                                   context_sha256, revision, sample_path=sample_path)
         else:
             status = "OK"
             state.append(run_dir, **common, action="TERMINAL", skill="pass-through", status="OK",
