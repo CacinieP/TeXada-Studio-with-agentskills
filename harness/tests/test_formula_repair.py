@@ -199,6 +199,29 @@ class MissingScriptTests(unittest.TestCase):
         evidence = assess_candidate("x^+1%c", "x^2+1%c")
         self.assertFalse(evidence["allowed"])
 
+    def test_postfix_superscripts_allow_deterministic_brace_closure(self):
+        for original in (
+            r"\lim_{x \to 0^+} \frac{1}{x",
+            r"f(0^-) + \frac{1}{2",
+            r"A^* + \frac{1}{2",
+            r"A^+ = \frac{1}{2",
+        ):
+            with self.subTest(original=original):
+                self.assertIsNone(repair_blocker(original))
+                self.assertEqual(deterministic_candidate(original), original + "}")
+        for ambiguous in (
+            "x^+1", "x^+y", "a_+b", "a_ + b", "a_",
+            r"[a_] + \frac{1}{2", r"(a_, b) + \frac{1}{2",
+            r"[x^] + \frac{1}{2", r"\left[a_\right] + \frac{1}{2",
+            r"\{a_; b\} + \frac{1}{2",
+        ):
+            with self.subTest(ambiguous=ambiguous):
+                self.assertEqual(repair_blocker(ambiguous), "missing_script_operand")
+                self.assertIsNone(deterministic_candidate(ambiguous))
+        self.assertEqual(repair_blocker(r"0 \le x \le 1"), "parser_coverage_unsupported")
+        self.assertIsNone(repair_blocker(r"0 \le x \le 1", allow_parser_gaps=True))
+        self.assertEqual(repair_blocker(r"0 \le x_ \le 1", allow_parser_gaps=True), "missing_script_operand")
+
 
 if __name__ == "__main__":
     unittest.main()

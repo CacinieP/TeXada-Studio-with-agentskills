@@ -133,13 +133,33 @@ class LocalProductTest(unittest.TestCase):
     def test_matrix_and_cases_are_checked_for_shape(self):
         matrices = self.post("analyze", {"content": (
             r"$f(x)=\begin{vmatrix}2x&1&-1\\-x&x&x\\1&2&x\end{vmatrix}$ "
-            r"$\delta_{ij}=\begin{cases}1,&i=j\\0,&i\neq j\end{cases}$"
+            r"$\delta_{ij}=\begin{cases}1,&i=j\\0,&i\neq j\end{cases}$ "
+            r"$\begin{cases} x+y=1 \\ x-y=0 \end{cases}$ "
+            r"$f(x)=\begin{cases}x,&\text{if }x>0\\0,&\text{otherwise}\end{cases}$ "
+            r"$g(x)=\begin{cases}x^2,&0\le x\le 1\\0,&\text{其他}\end{cases}$"
         )})
         self.assertEqual(matrices.json()["problems"], [])
         invalid = self.post("analyze", {"content": r"$\begin{cases}1,&i=j\\0\end{cases}$"})
         [problem] = invalid.json()["problems"]
         self.assertEqual(problem["status"], "NEEDS_HUMAN")
         self.assertIn("[2, 1]", problem["reason"])
+        for broken in (
+            r"$$\frac{1}{ + \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} }}}} \foobar$$",
+            r"$$\begin{pmatrix} \frac{1}{ & 2 \\ 3 & 4 \end{pmatrix}$$",
+            r"$$\begin{pmatrix} 1 & 2 \\[x+1] 3 & 4 \end{pmatrix}$$",
+        ):
+            with self.subTest(broken=broken):
+                problems = self.post("analyze", {"content": broken}).json()["problems"]
+                self.assertEqual(len(problems), 1)
+                self.assertEqual(problems[0]["status"], "NEEDS_HUMAN")
+
+    def test_production_requirements_exclude_test_only_httpx(self):
+        req_lines = [
+            line.strip()
+            for line in (Path(studio.REPO) / "webui" / "requirements.txt").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertFalse(any(line.startswith("httpx") for line in req_lines), req_lines)
 
     def test_old_guessed_script_candidate_cannot_be_adopted(self):
         job_id, original, candidate = self.candidate(original="$a_+b$", candidate="$a_1+b$")

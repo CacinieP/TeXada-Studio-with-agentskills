@@ -2,9 +2,9 @@
 # 从已提交的 HEAD 生成可复核源码包；不收集工作目录或本机运行依赖。
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST="$REPO_DIR/dist"
+DIST="${PACKAGE_DIST_DIR:-$REPO_DIR/dist}"
 cd "$REPO_DIR"
-COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
+COMMIT="$(git rev-parse --verify "${1:-HEAD}^{commit}")"
 if ! git diff --quiet "$COMMIT" -- || ! git diff --cached --quiet "$COMMIT" --; then
   echo "请先审阅并提交代码；打包只包含 HEAD，不能包含未提交的修改。" >&2
   exit 1
@@ -34,7 +34,8 @@ required = {"LICENSE", "README.md", "README.en.md", "THIRD_PARTY_NOTICES.md",
             "scripts/package.sh", "scripts/run-local-studio.py", "webui/app.py",
             "webui/requirements.txt", "harness/requirements.txt"}
 runtime_directories = {".git", ".github", "state", "work", "dist", "models", ".venv",
-                       "venv", "node_modules", "__pycache__", ".repo_memory", ".ssh", ".aws"}
+                       "venv", "node_modules", "__pycache__", ".repo_memory", ".ssh", ".aws",
+                       "superpowers", ".superpowers", ".worktrees"}
 private_names = {"secrets.env", "session.json", "credentials.json", "id_rsa", "id_ed25519",
                  ".netrc", ".DS_Store"}
 runtime_suffixes = {".gguf", ".safetensors", ".pyc", ".pyo", ".log", ".pem", ".key",

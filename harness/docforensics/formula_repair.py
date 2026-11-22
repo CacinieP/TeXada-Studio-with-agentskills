@@ -26,11 +26,23 @@ _UNSAFE_COMMANDS = frozenset({
 _TRAILING_OPERATORS = frozenset({"+", "-", "*", "/", "=", "<", ">", r"\cdot", r"\times", r"\pm", r"\mp"})
 _PAIRS = {"(": ")", "[": "]", r"\{": r"\}", r"\langle": r"\rangle"}
 _CLOSERS = frozenset(_PAIRS.values())
+_SCRIPT_INVALID_RIGHT = frozenset({"^", "_", "}", *_CLOSERS, r"\right", ",", ";"})
 _RELATIONS = frozenset({"=", "<", ">", "≤", "≥", "≠", r"\le", r"\leq", r"\ge", r"\geq",
                         r"\ne", r"\neq", r"\equiv", r"\approx", r"\sim", r"\simeq"})
 _TWO_ARGUMENT_COMMANDS = frozenset({
     r"\frac", r"\dfrac", r"\tfrac", r"\binom", r"\dbinom", r"\tbinom",
 })
+_POSTFIX_SCRIPT_FOLLOWERS = frozenset(
+    {"}", ")", "]", r"\}", r"\rangle", ",", ";", "|", r"\vert", r"\rvert", r"\right"}
+    | _RELATIONS
+    | _TRAILING_OPERATORS
+    | {
+        r"\to", r"\rightarrow", r"\leftarrow", r"\leftrightarrow", r"\mapsto",
+        r"\implies", r"\iff", r"\Rightarrow", r"\Leftarrow", r"\Leftrightarrow",
+        r"\in", r"\notin", r"\ni", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
+        r"\quad", r"\qquad", r"\,", r"\;", r"\:", r"\!", r"\thinspace", r"\negthinspace",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -130,7 +142,34 @@ def _missing_required_argument(text):
     return False
 
 
-def repair_blocker(original):
+def _has_missing_script_operand(tokens):
+    if tokens[-1].text in {"^", "_"}:
+        return True
+    for index, left in enumerate(tokens[:-1]):
+        if left.text not in {"^", "_"}:
+            continue
+        if index == 0 or (
+            tokens[index - 1].text in {"{", *_PAIRS} | _TRAILING_OPERATORS | _RELATIONS
+            and not (index >= 2 and tokens[index - 2].text == "^" and tokens[index - 1].text in {"+", "-", "*"})
+        ):
+            return True
+        right = tokens[index + 1]
+        if left.text == "_":
+            if right.text in _TRAILING_OPERATORS | _RELATIONS | _SCRIPT_INVALID_RIGHT:
+                return True
+            continue
+        if right.text == "*":
+            continue
+        if right.text in {"+", "-"}:
+            if index + 2 >= len(tokens) or tokens[index + 2].text in _POSTFIX_SCRIPT_FOLLOWERS:
+                continue
+            return True
+        if right.text in (_TRAILING_OPERATORS - {"+", "-", "*"}) | _RELATIONS | _SCRIPT_INVALID_RIGHT:
+            return True
+    return False
+
+
+def repair_blocker(original, *, allow_parser_gaps=False):
     """Return a stable reason for source that must not be guessed, or ``None``."""
     if not isinstance(original, str) or not original.strip():
         return "invalid_original"
@@ -156,16 +195,15 @@ def repair_blocker(original):
         depth += (token.text == "{") - (token.text == "}")
         if depth < 0:
             return "extra_closing_brace"
-    if _parser_coverage_unsupported(tokens):
+    if not allow_parser_gaps and _parser_coverage_unsupported(tokens):
         return "parser_coverage_unsupported"
     if tokens[-1].text == "\\":
         return "incomplete_command"
-    if tokens[-1].text in {"^", "_"} or any(
-        left.text in {"^", "_"} and right.text in _TRAILING_OPERATORS | _RELATIONS | {"^", "_", "}"}
-        for left, right in zip(tokens, tokens[1:])
-    ):
+    if _has_missing_script_operand(tokens):
         return "missing_script_operand"
-    if tokens[-1].text in _TRAILING_OPERATORS:
+    if tokens[-1].text in _TRAILING_OPERATORS and not (
+        len(tokens) >= 3 and tokens[-2].text == "^" and tokens[-1].text in {"+", "-", "*"}
+    ):
         return "missing_operator_operand"
     if tokens[-1].text == "{":
         return "missing_group_content"
