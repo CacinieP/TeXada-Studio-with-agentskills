@@ -134,14 +134,43 @@ class ProviderRuntimeTest(unittest.TestCase):
 
     def test_response_echoing_key_is_rejected_and_redacted(self):
         key = "test-only-api-key"
+        escaped = "test\\u002donly\\u002dapi\\u002dkey"
         with patch.dict(os.environ, {"VLM_API_KEY": key}):
             provider = vlm.OpenAICompatibleProvider(model="MiniCPM-V-4.7-1B")
-        for content in (json.dumps({"latex": key}), '{"latex":"test\\u002donly\\u002dapi\\u002dkey"}'):
-            with self.subTest(content=content), patch.object(vlm.urllib.request, "urlopen", return_value=response(content)):
+        formula_cases = (
+            json.dumps({"latex": key}),
+            f'{{"latex":"{escaped}"}}',
+            f'{{"wrong":"{escaped}"}}',
+            f'["{escaped}"]',
+            f'{{"{escaped}":" "}}',
+            f'{{"latex":"{escaped}\\n"}}',
+        )
+        for content in formula_cases:
+            with self.subTest(kind="formula", content=content), patch.object(
+                    vlm.urllib.request, "urlopen", return_value=response(content)):
                 self.assertIsNone(provider.repair_formula({"data": {"latex": "a_"}}))
             self.assertEqual(provider.last_trace["reason"], "credential_in_response")
+            self.assertFalse(provider.last_trace["response_truncated"])
             self.assertNotIn(key, json.dumps(provider.last_trace))
+            self.assertNotIn("test\\u002donly", provider.last_trace["raw_candidate_response"])
             self.assertIn("redacted", provider.last_trace["raw_candidate_response"])
+        rows = [["项目", "金额"], ["A", "1.5"], ["合计", "2.0"]]
+        table_cases = (
+            f'{{"wrong":"{escaped}"}}',
+            f'{{"rows":[["{escaped}"]]}}',
+            f'{{"rows":[["a","{escaped}\\n"],["c","1"]]}}',
+            f'["{escaped}"]',
+        )
+        for content in table_cases:
+            with self.subTest(kind="table", content=content), patch.object(
+                    vlm.urllib.request, "urlopen", return_value=response(content)):
+                self.assertIsNone(provider.repair_table({"data": {"rows": rows}}))
+            self.assertEqual(provider.last_trace["reason"], "credential_in_response")
+            self.assertFalse(provider.last_trace["response_truncated"])
+            self.assertNotIn(key, json.dumps(provider.last_trace))
+            self.assertNotIn("test\\u002donly", provider.last_trace["raw_candidate_response"])
+            self.assertIn("redacted", provider.last_trace["raw_candidate_response"])
+        self.assertIn("anchor_guard", vlm._implementation_hashes())
 
     def test_explicit_refusal_and_truncation_reject_even_valid_json_content(self):
         cases = [({"refusal": "cannot comply"}, "stop", "refused_response"),

@@ -11,10 +11,12 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import py_compile
 import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import warnings
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from docforensics import anchor_guard, pipeline, state  # noqa: E402
@@ -83,6 +85,41 @@ class AnchorGuardNegativeTest(unittest.TestCase):
         self.assertTrue(tester["drift"])
         self.assertEqual(tester["findings"][0]["kind"], "operator_added")
 
+    def test_iiiint_and_multi_step_operator_rank_swaps(self):
+        for orig, cand, expected_reason, expected_kind in (
+            ("\\iiint_V f\\,dV", "\\int_V f\\,dV", "anchor_drift:operator_downgraded:\\iiint", "operator_downgraded"),
+            ("\\iiiint_M f", "\\int_M f", "anchor_drift:operator_downgraded:\\iiiint", "operator_downgraded"),
+            ("\\iiiint_M f", "\\iint_M f", "anchor_drift:operator_downgraded:\\iiiint", "operator_downgraded"),
+            ("\\int_M f", "\\iiiint_M f", "anchor_drift:operator_upgraded:\\int", "operator_upgraded"),
+        ):
+            with self.subTest(orig=orig, cand=cand):
+                verdict = anchor_guard.anchor_drift(orig, cand)
+                self.assertTrue(verdict["drift"])
+                self.assertEqual(verdict["reason"], expected_reason)
+                self.assertEqual(len(verdict["findings"]), 1)
+                self.assertEqual(verdict["findings"][0]["kind"], expected_kind)
+
+    def test_raw_docstrings_compile_cleanly_under_warnings_as_errors(self):
+        with tempfile.TemporaryDirectory() as tmp, warnings.catch_warnings():
+            warnings.simplefilter("error", SyntaxWarning)
+            for target in (Path(anchor_guard.__file__), Path(GUARD)):
+                cfile = Path(tmp) / (target.stem + ".pyc")
+                py_compile.compile(str(target), cfile=str(cfile), doraise=True)
+
+    def test_anchor_guard_hash_participates_in_pipeline_node_identity(self):
+        node = {"id": "f-1", "type": "formula", "data": {"latex": "x"}}
+        provider = Mock()
+        provider.fingerprint.return_value = {"provider": "mock"}
+        before = pipeline.node_identity(node, provider)
+        real_sha = pipeline._file_sha256
+
+        def fake_sha(path):
+            return "changed" if str(path).endswith("anchor_guard.py") else real_sha(path)
+
+        with patch.object(pipeline, "_file_sha256", side_effect=fake_sha):
+            after = pipeline.node_identity(node, provider)
+        self.assertNotEqual(before[1], after[1])
+
 
 class GuardPipelineConsistencyTest(unittest.TestCase):
     def test_drifting_candidate_is_rejected_with_anchor_reason(self):
@@ -137,7 +174,9 @@ class AnchorGuardScriptTest(unittest.TestCase):
         self.assertEqual(record["reason"], "anchor_drift:operator_downgraded:\\iint")
         record = script.verdict("\\sum_k a_k", "\\sum_k a_k")
         self.assertEqual(record["status"], "OK")
-        record = script.verdict(None, "x")
+        with patch.object(script, "anchor_drift", side_effect=AssertionError("must not call anchor_drift")) as drift:
+            record = script.verdict(None, "x")
+            drift.assert_not_called()
         self.assertEqual(record["status"], "NEEDS_HUMAN")
 
     def test_jsonl_mode_reports_per_line(self):
@@ -146,26 +185,36 @@ class AnchorGuardScriptTest(unittest.TestCase):
             json.dumps({"id": "a", "original": "\\sum_k a_k", "candidate": "\\sum_k a_k"}),
             json.dumps({"id": "b", "original": "\\sum_k a_k", "candidate": "a_k"}),
             "not json",
+            "[1, 2]",
             json.dumps({"id": "d"}),
         ]) + "\n"
         with patch.object(sys, "stdin", io.StringIO(payload)), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             exit_code = script.main(["-"])
         records = [json.loads(line) for line in out.getvalue().strip().splitlines()]
-        self.assertEqual(exit_code, 0)
+        self.assertEqual(exit_code, 1)
         self.assertEqual(records[0]["status"], "OK")
         self.assertEqual(records[0]["id"], "a")
         self.assertEqual(records[1]["status"], "RETRY")
         self.assertEqual(records[1]["id"], "b")
         self.assertEqual(records[2]["status"], "NEEDS_HUMAN")
+        self.assertIn("id", records[2])
+        self.assertIsNone(records[2]["id"])
         self.assertEqual(records[3]["status"], "NEEDS_HUMAN")
+        self.assertIn("id", records[3])
+        self.assertIsNone(records[3]["id"])
+        self.assertEqual(records[4]["status"], "NEEDS_HUMAN")
+        self.assertEqual(records[4]["id"], "d")
 
     def test_wrong_arguments_print_usage(self):
         script = self.load_script_module()
-        with contextlib.redirect_stderr(io.StringIO()) as err:
-            exit_code = script.main([])
-        self.assertEqual(exit_code, 1)
-        self.assertIn("doc-anchor-guard", err.getvalue())
+        for bad_argv in ([], ["--help"], ["-h", "x"], ["--stdin", "x"], ["-", "x"]):
+            with self.subTest(bad_argv=bad_argv), contextlib.redirect_stderr(io.StringIO()) as err:
+                exit_code = script.main(bad_argv)
+            self.assertEqual(exit_code, 1)
+            self.assertIn("doc-anchor-guard", err.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(script.main(["-x+1", "-x+1"]), 0)
 
 
 def _checker(status, **fields):

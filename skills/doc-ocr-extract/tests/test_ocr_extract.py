@@ -126,6 +126,38 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(len(payload["raw_response"]), ocr_extract.RESPONSE_EXCERPT_LIMIT)
         self.assertEqual(len(payload["lines"]), 1)
 
+    def test_base_with_trailing_v1_does_not_duplicate_v1_prefix(self):
+        for base in ("http://127.0.0.1:11434", "http://127.0.0.1:11434/",
+                     "http://127.0.0.1:11434/v1", "http://127.0.0.1:11434/v1/"):
+            captured = {}
+            def fake_urlopen(request, timeout=None):
+                captured["url"] = request.full_url
+                return endpoint(openai_body("ok"))
+            with self.subTest(base=base), patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                status, _, _ = ocr_extract.extract(PNG_1X1, model="m", base=base, prompt="p")
+            self.assertEqual(status, "OK")
+            self.assertEqual(captured["url"], "http://127.0.0.1:11434/v1/chat/completions")
+
+    def test_tsv_leading_and_trailing_tabs_are_preserved_on_nonblank_lines(self):
+        tsv = "col1\tcol2\tcol3\r\n\t10\t20\r\nA\t30\t  \r\n   \t  \r\n"
+        status, _, payload, _ = self.call(text=tsv)
+        self.assertEqual(status, "OK")
+        self.assertEqual(payload["lines"], ["col1\tcol2\tcol3", "\t10\t20", "A\t30\t"])
+
+    def test_magic_bytes_select_accurate_image_data_url_mime(self):
+        jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"
+        webp = b"RIFF\x10\x00\x00\x00WEBPVP8 \x04\x00\x00\x00"
+        for raw, expected_mime in ((PNG_1X1, "image/png"), (jpeg, "image/jpeg"), (webp, "image/webp")):
+            captured = {}
+            def fake_urlopen(request, timeout=None):
+                captured["payload"] = json.loads(request.data.decode())
+                return endpoint(openai_body("ok"))
+            with self.subTest(mime=expected_mime), patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                status, _, _ = ocr_extract.extract(raw, model="m", base=BASE, prompt="p")
+            self.assertEqual(status, "OK")
+            url = captured["payload"]["messages"][0]["content"][1]["image_url"]["url"]
+            self.assertTrue(url.startswith(f"data:{expected_mime};base64,"), url)
+
 
 class RecordTest(unittest.TestCase):
     def run_record(self, record, transport="openai"):

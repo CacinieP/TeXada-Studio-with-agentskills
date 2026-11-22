@@ -130,7 +130,8 @@ def _implementation_hashes():
             "skill_loader": file_sha256(Path(__file__).with_name("skills_runtime.py")),
             "formula_repair": file_sha256(Path(__file__).with_name("formula_repair.py")),
             "table_repair": file_sha256(Path(__file__).with_name("table_repair.py")),
-            "tex_context": file_sha256(Path(__file__).with_name("tex_context.py"))}
+            "tex_context": file_sha256(Path(__file__).with_name("tex_context.py")),
+            "anchor_guard": file_sha256(Path(__file__).with_name("anchor_guard.py"))}
 
 
 def _repair_context(value):
@@ -483,15 +484,16 @@ class OpenAICompatibleProvider:
             except ValueError:
                 trace["reason"] = "bad_candidate_json"
                 return None
+            if _contains_credential(record, self._api_key):
+                trace["raw_candidate_response"] = "[redacted credential response]"
+                trace["response_truncated"] = False
+                trace["reason"] = "credential_in_response"
+                return None
             if not isinstance(record, dict) or set(record) != {"latex"} or not isinstance(record["latex"], str):
                 trace["reason"] = "bad_candidate_type"
                 return None
             if not record["latex"].strip():
                 trace["reason"] = "empty_candidate"
-                return None
-            if self._api_key and self._api_key in record["latex"]:
-                trace["raw_candidate_response"] = "[redacted credential response]"
-                trace["reason"] = "credential_in_response"
                 return None
             if any(ord(char) < 32 or ord(char) == 127 for char in record["latex"]):
                 trace["reason"] = "bad_candidate_text"
@@ -642,6 +644,11 @@ class OpenAICompatibleProvider:
             except ValueError:
                 trace["reason"] = "bad_candidate_json"
                 return None
+            if _contains_credential(record, self._api_key):
+                trace["raw_candidate_response"] = "[redacted credential response]"
+                trace["response_truncated"] = False
+                trace["reason"] = "credential_in_response"
+                return None
             if not isinstance(record, dict) or set(record) != {"rows"} or not isinstance(record["rows"], list):
                 trace["reason"] = "bad_candidate_type"
                 return None
@@ -662,10 +669,6 @@ class OpenAICompatibleProvider:
                 return None
             if any(len(cell) > TABLE_CELL_LIMIT for row in candidate for cell in row):
                 trace["reason"] = "candidate_too_large"
-                return None
-            if _contains_credential(candidate, self._api_key):
-                trace["raw_candidate_response"] = "[redacted credential response]"
-                trace["reason"] = "credential_in_response"
                 return None
             trace["reason"] = "ok"
             return candidate

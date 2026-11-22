@@ -20,14 +20,46 @@ def record_digest(record):
                                     separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
 
+_FORMULA_PAIRS = {"$$": "$$", "$": "$", r"\[": r"\]", r"\(": r"\)"}
+
+
 def _formula(text):
-    for left, right in (("$$", "$$"), (r"\[", r"\]"), (r"\(", r"\)"), ("$", "$")):
-        if text.startswith(left) and text.endswith(right) and len(text) > len(left) + len(right):
-            inner = text[len(left):-len(right)].strip()
-            if right in inner:
-                raise ValueError("multiple_math_spans_require_review")
-            return inner
-    return text
+    raw = text.strip()
+    delimiters = []
+    index, length = 0, len(raw)
+    while index < length:
+        if raw[index] == "\\":
+            pair = raw[index:index + 2]
+            if pair in (r"\[", r"\(", r"\]", r"\)"):
+                delimiters.append((pair, index, index + 2))
+                index += 2
+            elif index + 1 < length:
+                index += 2
+            else:
+                index += 1
+        elif raw.startswith("$$", index):
+            delimiters.append(("$$", index, index + 2))
+            index += 2
+        elif raw[index] == "$":
+            delimiters.append(("$", index, index + 1))
+            index += 1
+        else:
+            index += 1
+    if not delimiters:
+        return text
+    if len(delimiters) == 2:
+        (left, l_start, l_end), (right, r_start, r_end) = delimiters
+        if _FORMULA_PAIRS.get(left) != right:
+            raise ValueError("unclosed_or_mismatched_math_delimiter")
+        if l_start != 0 or r_end != length:
+            raise ValueError("mixed_text_and_math_requires_review")
+        return raw[l_end:r_start].strip()
+    if len(delimiters) >= 4 and len(delimiters) % 2 == 0 and all(
+        _FORMULA_PAIRS.get(delimiters[pos][0]) == delimiters[pos + 1][0]
+        for pos in range(0, len(delimiters), 2)
+    ):
+        raise ValueError("multiple_math_spans_require_review")
+    raise ValueError("unclosed_or_mismatched_math_delimiter")
 
 
 def _table(lines, separator):

@@ -40,6 +40,13 @@ _DOCUMENT_ENVIRONMENTS = frozenset({
     "ProvideDocumentEnvironment", "DeclareDocumentEnvironment",
 })
 _SCALAR_ENVIRONMENTS = frozenset({"equation", "equation*", "math", "displaymath"})
+_TEXT_BOX_COMMANDS = frozenset({
+    "text", "textbf", "textit", "textrm", "textsf", "texttt",
+    "textup", "textsl", "textsc", "textnormal", "emph",
+    "textsuperscript", "textsubscript",
+    "mbox", "hbox", "vbox", "vtop", "fbox", "framebox", "makebox",
+    "parbox", "raisebox", "footnote", "intertext", "shortintertext", "tag",
+})
 _KNOWN_COMMANDS = frozenset("""
     frac dfrac tfrac sqrt binom dbinom tbinom left right middle
     displaystyle textstyle scriptstyle scriptscriptstyle
@@ -66,14 +73,18 @@ _KNOWN_COMMANDS = frozenset("""
 _ENVIRONMENT = re.compile(r"\\(begin|end)\s*\{([^{}\r\n]+)\}")
 
 
+def _is_command_letter(char):
+    return ("A" <= char <= "Z") or ("a" <= char <= "z") or char == "@"
+
+
 def _command(text, offset):
     """Return an exact control word/symbol and its end, including neither slash."""
     end = offset + 1
     if end >= len(text):
         return "", end
-    if text[end].isalpha() or text[end] == "@":
+    if _is_command_letter(text[end]):
         start = end
-        while end < len(text) and (text[end].isalpha() or text[end] == "@"):
+        while end < len(text) and _is_command_letter(text[end]):
             end += 1
         return text[start:end], end
     return text[end], end + 1
@@ -124,31 +135,56 @@ def _balanced_end(text, offset, opening="{", closing="}"):
     return None
 
 
-def _skip_definition(text, start, command, cursor):
+def _skip_definition(text, start, command, after):
     """Skip conventional command/environment definitions, including body math."""
-    if cursor < len(text) and text[cursor] == "*":
+    cursor = after
+    if command not in {"def", "gdef", "edef", "xdef"} and cursor < len(text) and text[cursor] == "*":
         cursor += 1
     cursor = _skip_space(text, cursor)
     if command in {"def", "gdef", "edef", "xdef"}:
         if cursor >= len(text) or text[cursor] != "\\":
-            return _line_end(text, start), False
-        _, cursor = _command(text, cursor)
+            return after, False
+        target, cursor = _command(text, cursor)
+        if not target or target == "csname":
+            return after, False
         while cursor < len(text) and text[cursor] != "{":
             if text[cursor] == "%":
                 cursor = _line_end(text, cursor)
+            elif text[cursor] == "\n" and cursor + 1 < len(text) and text[cursor + 1] == "\n":
+                return after, False
             else:
                 cursor += 1
+        if cursor >= len(text) or text[cursor] != "{":
+            return after, False
         end = _balanced_end(text, cursor)
         return (end, True) if end is not None else (len(text), False)
-    if cursor < len(text) and text[cursor] == "{":
+    if command in {"newenvironment", "renewenvironment", *_DOCUMENT_ENVIRONMENTS}:
+        if cursor >= len(text) or text[cursor] != "{":
+            return after, False
         end = _balanced_end(text, cursor)
         if end is None:
             return len(text), False
+        env_name = text[cursor + 1:end - 1].strip()
+        if not env_name or any(char in env_name for char in "\\$%\r\n"):
+            return after, False
+        cursor = end
+    elif cursor < len(text) and text[cursor] == "{":
+        end = _balanced_end(text, cursor)
+        if end is None:
+            return len(text), False
+        inner = _skip_space(text, cursor + 1)
+        if inner >= end - 1 or text[inner] != "\\":
+            return after, False
+        target, target_end = _command(text, inner)
+        if not target or target == "csname" or _skip_space(text, target_end) != end - 1:
+            return after, False
         cursor = end
     elif cursor < len(text) and text[cursor] == "\\":
-        _, cursor = _command(text, cursor)
+        target, cursor = _command(text, cursor)
+        if not target or target == "csname":
+            return after, False
     else:
-        return _line_end(text, start), False
+        return after, False
     cursor = _skip_space(text, cursor)
     while cursor < len(text) and text[cursor] == "[":
         end = _balanced_end(text, cursor, "[", "]")
@@ -158,11 +194,37 @@ def _skip_definition(text, start, command, cursor):
     bodies = (3 if command in _DOCUMENT_ENVIRONMENTS else
               2 if command in {"newenvironment", "renewenvironment", *_DOCUMENT_COMMANDS} else 1)
     for _ in range(bodies):
+        if cursor >= len(text) or text[cursor] != "{":
+            return after, False
         end = _balanced_end(text, cursor)
         if end is None:
             return len(text), False
         cursor = _skip_space(text, end)
     return cursor, True
+
+
+def _text_box_brace_start(text, command, after):
+    """Return the index of ``{`` opening a text-box command's text argument, or None."""
+    cursor = after
+    if cursor < len(text) and text[cursor] == "*":
+        cursor += 1
+    cursor = _skip_space(text, cursor)
+    if command == "raisebox":
+        end = _balanced_end(text, cursor)
+        if end is None:
+            return None
+        cursor = _skip_space(text, end)
+    while cursor < len(text) and text[cursor] == "[":
+        end = _balanced_end(text, cursor, "[", "]")
+        if end is None:
+            return None
+        cursor = _skip_space(text, end)
+    if command == "parbox":
+        end = _balanced_end(text, cursor)
+        if end is None:
+            return None
+        cursor = _skip_space(text, end)
+    return cursor if cursor < len(text) and text[cursor] == "{" else None
 
 
 def _skip_verb(text, cursor):
@@ -184,6 +246,7 @@ def _skip_opaque(text, cursor, environment):
 def _find_close(text, cursor, closing, environment=None):
     """Find a matching end without letting comments or raw literals close math."""
     nested = []
+    text_depth = 0
     while cursor < len(text):
         value = text[cursor]
         if value == "%":
@@ -197,6 +260,12 @@ def _find_close(text, cursor, closing, environment=None):
             if command in _DEFINITIONS:
                 cursor, _ = _skip_definition(text, cursor, command, end)
                 continue
+            if text_depth == 0 and command in _TEXT_BOX_COMMANDS:
+                brace_start = _text_box_brace_start(text, command, end)
+                if brace_start is not None:
+                    text_depth = 1
+                    cursor = brace_start + 1
+                    continue
             match = _ENVIRONMENT.match(text, cursor) if command in {"begin", "end"} else None
             if match:
                 direction, name = match.groups()
@@ -213,18 +282,29 @@ def _find_close(text, cursor, closing, environment=None):
                     if name == environment:
                         return cursor, match.end(), None
                     return None, match.end(), "mismatched_environment"
+                else:
+                    return None, match.start(), "unclosed_math"
                 cursor = match.end()
                 continue
-            if not environment and text.startswith(closing, cursor):
+            if text_depth == 0 and not environment and text.startswith(closing, cursor):
                 return cursor, cursor + len(closing), None
             # A new explicit display can recover after an unclosed inline or
             # display region. The earlier region stays a diagnostic and is never
             # given a replacement range that swallows the later formula.
-            if not environment and command == "[" and closing in {"$", r"\)", r"\]"}:
+            if text_depth == 0 and not environment and command == "[" and closing in {"$", r"\)", r"\]"}:
                 return None, cursor, "unclosed_math"
             cursor = end
             continue
+        if text_depth > 0:
+            if value == "{":
+                text_depth += 1
+            elif value == "}":
+                text_depth -= 1
+            cursor += 1
+            continue
         if not environment and value == "$" and closing in {"$", "$$"}:
+            if closing == "$" and text.startswith("$$", cursor):
+                return None, cursor, "unclosed_math"
             if text.startswith(closing, cursor):
                 return cursor, cursor + len(closing), None
         cursor += 1
@@ -252,7 +332,7 @@ def _checkability(body, kind):
                 return False, "structured_math"
             if command in {"(", ")", "[", "]"}:
                 return False, "nested_math_delimiter"
-            if command and (command[0].isalpha() or command[0] == "@") and command not in _KNOWN_COMMANDS:
+            if command and _is_command_letter(command[0]) and command not in _KNOWN_COMMANDS:
                 return False, "unsupported_command:" + command
             cursor = end
         else:
@@ -377,7 +457,9 @@ def mask_opaque(content):
             if command == "verb":
                 end, _ = _skip_verb(content, after)
             elif command in _DEFINITIONS:
-                end, _ = _skip_definition(content, cursor, command, after)
+                def_end, valid = _skip_definition(content, cursor, command, after)
+                if valid or def_end > after:
+                    end = def_end
             elif command == "begin":
                 match = _ENVIRONMENT.match(content, cursor)
                 if match and match.group(2) in OPAQUE_ENVIRONMENTS:
