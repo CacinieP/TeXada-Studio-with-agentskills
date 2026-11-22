@@ -30,11 +30,16 @@ class LocalLauncherTest(unittest.TestCase):
 
     def test_prepend_local_bin_puts_texada_bin_first_once(self):
         local = str(launcher.LOCAL_TOOL_BIN)
-        self.assertEqual(launcher.prepend_local_bin(""), local)
-        self.assertEqual(launcher.prepend_local_bin("/usr/bin"), os.pathsep.join([local, "/usr/bin"]))
+        expected_prefix = (
+            os.pathsep.join([local, str(launcher.LOCAL_POPPLER_BIN)])
+            if os.name == "nt"
+            else local
+        )
+        self.assertEqual(launcher.prepend_local_bin(""), expected_prefix)
+        self.assertEqual(launcher.prepend_local_bin("/usr/bin"), os.pathsep.join([expected_prefix, "/usr/bin"]))
         once = launcher.prepend_local_bin(f"/usr/bin{os.pathsep}local")
         self.assertEqual(launcher.prepend_local_bin(once), once, "重复前置不叠加")
-        self.assertTrue(once.startswith(local + os.pathsep))
+        self.assertTrue(once.startswith(expected_prefix + os.pathsep))
 
     def args(self, *extra):
         return launcher.parser().parse_args(["--state-dir", str(self.directory), "--no-browser", *extra])
@@ -104,8 +109,9 @@ class LocalLauncherTest(unittest.TestCase):
         self.assertEqual(state["config"]["workers"], 1)
         self.assertFalse(state["config"]["access_log"])
         self.assertIsNone(state["session"]["owned_model_pid"])
-        self.assertEqual(session_file.stat().st_mode & 0o777, 0o600)
-        stopped = json.loads(session_file.read_text())
+        if os.name == "posix":
+            self.assertEqual(session_file.stat().st_mode & 0o777, 0o600)
+        stopped = json.loads(session_file.read_text(encoding="utf-8"))
         self.assertFalse(stopped["running"])
         self.assertIsNone(stopped["url"])
         self.assertFalse((self.directory / "launcher.lock").exists())
@@ -310,6 +316,114 @@ class LocalLauncherTest(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True), patch.object(launcher.sys, "platform", "darwin"), \
                 patch.object(launcher.Path, "home", return_value=self.directory):
             self.assertEqual(launcher.default_state_dir(), self.directory / "Library/Application Support/TeXada Studio")
+        self.assertEqual(
+            launcher.default_state_dir(
+                platform_name="win32",
+                os_name="nt",
+                env={"LOCALAPPDATA": str(self.directory / "LocalAppData")},
+                home=self.directory,
+            ),
+            self.directory / "LocalAppData" / "TeXada Studio",
+        )
+
+    def test_windows_alive_uses_win32_synchronize_without_os_kill(self):
+        import ctypes
+
+        closed_handles = []
+        fake_kernel32 = SimpleNamespace(
+            OpenProcess=Mock(return_value=42),
+            WaitForSingleObject=Mock(return_value=0x00000102),
+            CloseHandle=Mock(side_effect=lambda h: closed_handles.append(h) or 1),
+        )
+        fake_windll = SimpleNamespace(kernel32=fake_kernel32)
+        with patch.object(launcher.os, "name", "nt"), \
+                patch.object(launcher.os, "kill", side_effect=AssertionError("os.kill forbidden on Windows")), \
+                patch.object(ctypes, "windll", fake_windll, create=True), \
+                patch.object(ctypes, "get_last_error", return_value=0, create=True):
+            self.assertTrue(launcher._alive(1234))
+            fake_kernel32.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
+            fake_kernel32.WaitForSingleObject.assert_called_once_with(42, 0)
+            self.assertEqual(closed_handles, [42])
+
+            closed_handles.clear()
+            fake_kernel32.WaitForSingleObject.return_value = 0
+            self.assertFalse(launcher._alive(1234))
+            self.assertEqual(closed_handles, [42])
+
+            fake_kernel32.OpenProcess.return_value = 0
+            with patch.object(ctypes, "get_last_error", return_value=5, create=True):
+                self.assertTrue(launcher._alive(5678), "ERROR_ACCESS_DENIED means process exists")
+            with patch.object(ctypes, "get_last_error", return_value=87, create=True):
+                self.assertFalse(launcher._alive(5678), "ERROR_INVALID_PARAMETER means dead/missing")
+
+            for bad in (0, -5, True, "123", None, (1 << 32) + 1234):
+                fake_kernel32.OpenProcess.reset_mock()
+                self.assertFalse(launcher._alive(bad))
+                fake_kernel32.OpenProcess.assert_not_called()
+
+    def test_watch_parent_exit_detects_terminated_windows_parent_even_when_getppid_is_frozen(self):
+        import ctypes
+
+        closed_handles = []
+        fake_kernel32 = SimpleNamespace(
+            OpenProcess=Mock(return_value=77),
+            WaitForSingleObject=Mock(return_value=0),
+            CloseHandle=Mock(side_effect=lambda h: closed_handles.append(h) or 1),
+        )
+        fake_windll = SimpleNamespace(kernel32=fake_kernel32)
+        server = SimpleNamespace(should_exit=False)
+        with patch.dict(os.environ, {"TEXADA_EXIT_WHEN_ORPHANED": "1"}), \
+                patch.object(launcher.os, "name", "nt"), \
+                patch.object(launcher.os, "getppid", return_value=4242), \
+                patch.object(launcher.time, "sleep", return_value=None), \
+                patch.object(ctypes, "windll", fake_windll, create=True):
+            thread = launcher.watch_parent_exit(server)
+            self.assertIsNotNone(thread)
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(server.should_exit, "父进程句柄变为 signaled 时必须置 server.should_exit=True")
+        self.assertEqual(closed_handles, [77])
+
+        # Fallback when OpenProcess returns 0 (cannot open handle): must fall back to _alive(parent)
+        fake_kernel32_denied = SimpleNamespace(
+            OpenProcess=Mock(return_value=0),
+            WaitForSingleObject=Mock(),
+            CloseHandle=Mock(),
+        )
+        server2 = SimpleNamespace(should_exit=False)
+        with patch.dict(os.environ, {"TEXADA_EXIT_WHEN_ORPHANED": "1"}), \
+                patch.object(launcher.os, "name", "nt"), \
+                patch.object(launcher.os, "getppid", return_value=4242), \
+                patch.object(launcher, "_alive", return_value=False), \
+                patch.object(launcher.time, "sleep", return_value=None), \
+                patch.object(ctypes, "windll", SimpleNamespace(kernel32=fake_kernel32_denied), create=True):
+            thread2 = launcher.watch_parent_exit(server2)
+            self.assertIsNotNone(thread2)
+            thread2.join(timeout=2)
+        self.assertFalse(thread2.is_alive())
+        self.assertTrue(server2.should_exit, "无法打开句柄但 _alive(parent) 为 False 时也必须退出")
+
+    def test_find_model_files_detects_llama_server_exe(self):
+        home_exe = self.directory / ".texada" / "bin" / "llama-server.exe"
+        home_exe.parent.mkdir(parents=True)
+        home_exe.write_bytes(b"MZ-llama")
+        home_exe.chmod(0o755)
+        args = self.args()
+        with patch.object(launcher.Path, "home", return_value=self.directory), \
+                patch.object(launcher.shutil, "which", return_value=None), \
+                patch.dict(os.environ, {"TEXADA_BUNDLE_DIR": ""}):
+            exe, _, _ = launcher.find_model_files(args, os_name="nt")
+        self.assertEqual(exe, str(home_exe))
+
+    def test_start_local_studio_bat_exists_utf8_no_bom_and_checks_venv_scripts(self):
+        bat_path = ROOT / "scripts" / "start-local-studio.bat"
+        self.assertTrue(bat_path.is_file(), "scripts/start-local-studio.bat must exist")
+        raw = bat_path.read_bytes()
+        self.assertFalse(raw.startswith(b"\xef\xbb\xbf"), "start-local-studio.bat must not contain UTF-8 BOM")
+        text = raw.decode("utf-8")
+        self.assertIn("TEXADA_STUDIO_PYTHON", text)
+        self.assertIn(r".venv\Scripts\python.exe", text)
+        self.assertIn(r"scripts\run-local-studio.py", text)
 
 
 if __name__ == "__main__":

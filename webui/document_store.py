@@ -14,6 +14,14 @@ import uuid
 
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
 _LOCK = threading.RLock()
+_WINDOWS_RESERVED_STEMS = frozenset({
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+})
 
 
 class DocumentError(ValueError):
@@ -30,6 +38,12 @@ def document_name(value):
             or not re.fullmatch(r"[\w ()\-.]+\.tex", value)
             or value.startswith(".") or ".." in value):
         raise DocumentError("请使用不含路径的 .tex 文件名（最长 128 个字符）。")
+    stem = value[:-4]
+    if not stem or stem[-1] in {" ", "."}:
+        raise DocumentError("文件名词干末尾不能是空格或点号。")
+    device_stem = stem.split(".", 1)[0].rstrip(" .").upper()
+    if device_stem in _WINDOWS_RESERVED_STEMS:
+        raise DocumentError("文件名不能使用系统保留设备名。")
     return value
 
 
@@ -102,10 +116,11 @@ class DocumentStore:
                         st = p.stat()
                     except (DocumentError, OSError):
                         continue
-                    inode = (st.st_dev, st.st_ino)
-                    if inode in seen_inodes or canonical_name in seen_names:
+                    inode = (st.st_dev, st.st_ino) if st.st_ino != 0 else None
+                    if (inode is not None and inode in seen_inodes) or canonical_name in seen_names:
                         continue
-                    seen_inodes.add(inode)
+                    if inode is not None:
+                        seen_inodes.add(inode)
                     seen_names.add(canonical_name)
                     seen_casefold.add(canonical_name.casefold())
                     names.append(canonical_name)
@@ -127,7 +142,7 @@ class DocumentStore:
                         except OSError:
                             pass
                         else:
-                            if (lst.st_dev, lst.st_ino) in seen_inodes:
+                            if lst.st_ino != 0 and (lst.st_dev, lst.st_ino) in seen_inodes:
                                 continue
                     seen_casefold.add(folded)
                     names.append(name)

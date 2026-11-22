@@ -227,6 +227,47 @@ class ManagedDownloadTests(unittest.TestCase):
                 patch("managed_models.shutil.which", return_value=str(system_bin)):
             self.assertEqual(find_llama_server(), str(system_bin))
 
+    def test_find_llama_server_discovers_windows_exe_in_bundle_and_home_bin(self):
+        bundle_dir = self.root / "win-bundle"
+        bundled_exe = bundle_dir / "bin" / "llama-server.exe"
+        bundled_exe.parent.mkdir(parents=True)
+        bundled_exe.write_bytes(b"MZ-llama-server")
+        bundled_exe.chmod(0o755)
+
+        with patch.dict(os.environ, {"TEXADA_BUNDLE_DIR": str(bundle_dir)}), \
+                patch("managed_models.shutil.which", return_value=None):
+            self.assertEqual(find_llama_server(os_name="nt"), str(bundled_exe.resolve()))
+
+        fake_home = self.root / "win-home"
+        home_exe = fake_home / ".texada" / "bin" / "llama-server.exe"
+        home_exe.parent.mkdir(parents=True)
+        home_exe.write_bytes(b"MZ-home-llama")
+        home_exe.chmod(0o755)
+        with patch.dict(os.environ, {"TEXADA_BUNDLE_DIR": ""}), \
+                patch.object(managed_models.Path, "home", return_value=fake_home), \
+                patch("managed_models.shutil.which", return_value=None):
+            self.assertEqual(find_llama_server(os_name="nt"), str(home_exe))
+
+    def test_start_passes_create_no_window_flag_on_windows(self):
+        state = self.root / "win-state"
+        manager = ManagedModels(state)
+        paths = (self.root / "w.gguf", self.root / "mmproj.gguf")
+        for item in paths:
+            item.write_bytes(b"stub")
+        fake_proc = SimpleNamespace(poll=lambda: None, terminate=lambda: None, wait=lambda timeout=None: 0)
+        with patch.object(managed_models.os, "name", "nt"), \
+                patch.object(managed_models.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch("managed_models.find_llama_server", return_value="C:/texada/bin/llama-server.exe"), \
+                patch("managed_models.subprocess.run",
+                      return_value=SimpleNamespace(stdout="version: 12631\n", stderr="")) as run_mock, \
+                patch("managed_models.subprocess.Popen", return_value=fake_proc) as popen_mock, \
+                patch("managed_models.local_json_request",
+                      return_value={"data": [{"id": self.profile.model}]}):
+            manager._start(self.profile, paths)
+
+        self.assertEqual(popen_mock.call_args.kwargs.get("creationflags"), 0x08000000)
+        self.assertEqual(run_mock.call_args.kwargs.get("creationflags"), 0x08000000)
+
 
 if __name__ == "__main__":
     unittest.main()

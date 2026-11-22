@@ -15,9 +15,23 @@ concurrency:
 
 jobs:
   regression:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: bash
     steps:
+      - name: Preserve committed LF line endings on Windows
+        shell: bash
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
@@ -26,28 +40,37 @@ jobs:
         with:
           node-version: lts/*
       - name: Install test dependencies
+        shell: bash
         run: python -m pip install -r webui/requirements-test.txt
       - name: Harness regression
+        shell: bash
         run: python -m unittest discover -s harness/tests -p 'test_*.py'
       - name: Studio regression
+        shell: bash
         run: python -m unittest discover -s webui -p 'test_*.py'
       - name: Script regression
+        shell: bash
         run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Desktop shell regression
+        shell: bash
         run: |
           python -W error -m compileall -q -f desktop
           python -m unittest discover -s desktop -p 'test_*.py'
       - name: LaTeX cleanup regression
+        shell: bash
         run: python -m unittest discover -s skills/latex-cleanup/tests -p 'test_*.py'
       - name: OCR extraction and reviewed layout regression
+        shell: bash
         run: python -m unittest discover -s skills/doc-ocr-extract/tests -p 'test_*.py'
       - name: JavaScript behavior regression
+        shell: bash
         run: |
           node webui/test_studio.cjs
           node webui/test_latex.cjs
           node webui/test_templates.cjs
           node skills/latex-cleanup/tests/test_audit_math.cjs
       - name: Python and launcher syntax
+        shell: bash
         run: |
           python -W error -m compileall -q -f harness webui scripts skills
           bash -n scripts/backup.sh
@@ -55,6 +78,7 @@ jobs:
           sh -n scripts/run-minicpm-v47-studio.sh
           sh -n scripts/start-local-studio.command
       - name: Inline JavaScript syntax
+        shell: bash
         run: |
           python - <<'PY'
           import os
@@ -62,9 +86,9 @@ jobs:
           import re
           import subprocess
           for name in ('index.html', 'studio.html'):
-              source = (Path('webui') / name).read_text()
+              source = (Path('webui') / name).read_text(encoding='utf-8')
               blocks = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', source, re.S)
               target = Path(os.environ['RUNNER_TEMP']) / (name + '.js')
-              target.write_text('\n'.join(blocks))
+              target.write_text('\n'.join(blocks), encoding='utf-8')
               subprocess.run(['node', '--check', str(target)], check=True)
           PY

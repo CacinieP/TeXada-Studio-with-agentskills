@@ -15,7 +15,11 @@ class SkillRuntimeTest(unittest.TestCase):
         directory = Path(root) / "doc-formula-verify"
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "SKILL.md"
-        path.write_text(text or '---\nname: doc-formula-verify\ndescription: Syntax review\n---\nKeep human review.\n', encoding="utf-8")
+        path.write_text(
+            text or "---\nname: doc-formula-verify\ndescription: Syntax review\n---\nKeep human review.\n",
+            encoding="utf-8",
+            newline="\n",
+        )
         return path
 
     def test_reads_exact_body_and_hash_and_checker(self):
@@ -23,12 +27,12 @@ class SkillRuntimeTest(unittest.TestCase):
             path = self.make_skill(directory)
             checker = path.parent / "scripts" / "verify.py"
             checker.parent.mkdir()
-            checker.write_text("# checker\n")
+            checker.write_text("# checker\n", encoding="utf-8", newline="\n")
             skill = load_skill(skill_root=directory)
-            self.assertEqual(skill.instructions, path.read_text())
+            self.assertEqual(skill.instructions, path.read_text(encoding="utf-8"))
             self.assertEqual(skill.sha256, hashlib.sha256(path.read_bytes()).hexdigest())
             self.assertEqual(skill.checker_sha256, hashlib.sha256(checker.read_bytes()).hexdigest())
-            path.write_text(path.read_text() + "New rule.\n")
+            path.write_text(path.read_text(encoding="utf-8") + "New rule.\n", encoding="utf-8", newline="\n")
             self.assertNotEqual(load_skill(skill_root=directory).sha256, skill.sha256)
 
     def test_disallows_arbitrary_names_and_traversal(self):

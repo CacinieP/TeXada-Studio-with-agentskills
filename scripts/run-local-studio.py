@@ -24,15 +24,19 @@ sys.path.insert(0, str(ROOT / "webui"))
 from local_runtime import DEFAULT_BASE, DEFAULT_MODEL, LocalRuntime, LocalRuntimeError, _model_name, validate_base_url
 
 
-def default_state_dir():
-    override = os.environ.get("TEXADA_STUDIO_STATE_DIR")
+def default_state_dir(*, platform_name=None, os_name=None, env=None, home=None):
+    source_env = os.environ if env is None else env
+    override = source_env.get("TEXADA_STUDIO_STATE_DIR")
     if override:
         return Path(override).expanduser()
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "TeXada Studio"
-    if os.name == "nt":
-        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "TeXada Studio"
-    return Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))) / "texada-studio"
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Application Support" / "TeXada Studio"
+    if effective_os == "nt":
+        return Path(source_env.get("LOCALAPPDATA", str(user_home / "AppData" / "Local"))) / "TeXada Studio"
+    return Path(source_env.get("XDG_DATA_HOME", str(user_home / ".local" / "share"))) / "texada-studio"
 
 
 MODEL_PROFILES = {
@@ -126,9 +130,47 @@ def private_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
+def _get_win32_kernel32():
+    import ctypes
+
+    windll = getattr(ctypes, "windll", None)
+    if isinstance(windll, ctypes.LibraryLoader) and hasattr(ctypes, "WinDLL"):
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+        return kernel32
+    if windll is not None:
+        return windll.kernel32
+    return None
+
+
+def _win32_pid_alive(pid: int) -> bool:
+    if type(pid) is not int or pid <= 0 or pid > 0xFFFFFFFF:
+        return False
+    import ctypes
+
+    kernel32 = _get_win32_kernel32()
+    if kernel32 is None:
+        return False
+
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == 5
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 0x00000102
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _alive(pid):
     if type(pid) is not int or pid < 1:
         return False
+    if os.name == "nt":
+        return _win32_pid_alive(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -157,17 +199,32 @@ def acquire_lock(state):
     raise RuntimeError("无法取得本地启动锁。")
 
 
-def find_model_files(args):
+def find_model_files(args, *, os_name=None):
     profile = model_profile(args) or MODEL_PROFILES["35b-q4"]
-    models = Path.home() / ".texada" / "models" / profile["directory"]
+    home = Path.home()
+    models = home / ".texada" / "models" / profile["directory"]
     gguf = args.gguf.expanduser() if args.gguf else models / profile["gguf"]
     mmproj = args.mmproj.expanduser() if args.mmproj else models / "mmproj-model-f16.gguf"
-    executable = shutil.which("llama-server")
+    effective_os = os_name if os_name is not None else os.name
+    names = ("llama-server.exe", "llama-server") if effective_os == "nt" else ("llama-server", "llama-server.exe")
+    executable = None
+    bundle_dir = os.environ.get("TEXADA_BUNDLE_DIR", "").strip()
+    if bundle_dir:
+        for name in names:
+            bundled = Path(bundle_dir).resolve() / "bin" / name
+            if bundled.is_file() and os.access(bundled, os.X_OK):
+                executable = str(bundled)
+                break
     if not executable:
-        for candidate in (Path.home() / ".texada" / "bin" / "llama-server",
-                          Path.home() / ".texada" / "runtime" / "llama-server"):
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                executable = str(candidate)
+        executable = next((shutil.which(name) for name in names if shutil.which(name)), None)
+    if not executable:
+        for base in (home / ".texada" / "bin", home / ".texada" / "runtime"):
+            for name in names:
+                candidate = base / name
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    executable = str(candidate)
+                    break
+            if executable:
                 break
     return executable, gguf, mmproj
 
@@ -266,15 +323,19 @@ def existing_session_url(state, port):
 
 
 LOCAL_TOOL_BIN = Path.home() / ".texada" / "bin"
+LOCAL_POPPLER_BIN = Path.home() / ".texada" / "Library" / "bin"
 
 
 def prepend_local_bin(path_value):
-    """把 ~/.texada/bin(install_local_tools.py 的安装位置)放到 PATH 最前。"""
+    """把 ~/.texada/bin(及 Windows 下 ~/.texada/Library/bin)放到 PATH 最前。"""
     entries = [entry for entry in (path_value or "").split(os.pathsep) if entry]
-    local = str(LOCAL_TOOL_BIN)
-    if local in entries:
+    candidates = [str(LOCAL_TOOL_BIN)]
+    if os.name == "nt":
+        candidates.append(str(LOCAL_POPPLER_BIN))
+    additions = [item for item in candidates if item not in entries]
+    if not additions:
         return path_value
-    return os.pathsep.join([local, *entries])
+    return os.pathsep.join([*additions, *entries])
 
 
 def watch_parent_exit(server):
@@ -282,15 +343,36 @@ def watch_parent_exit(server):
     if os.environ.get("TEXADA_EXIT_WHEN_ORPHANED") != "1":
         return None
     parent = os.getppid()
+    win_kernel32 = None
+    parent_handle = None
+    if os.name == "nt" and type(parent) is int and 0 < parent <= 0xFFFFFFFF:
+        win_kernel32 = _get_win32_kernel32()
+        if win_kernel32 is not None:
+            opened = win_kernel32.OpenProcess(0x00100000, False, parent)
+            if opened:
+                parent_handle = opened
+
     def watch():
-        while True:
-            time.sleep(2)
-            try:
-                if os.getppid() != parent:
-                    server.should_exit = True
+        try:
+            while not getattr(server, "should_exit", False):
+                time.sleep(2)
+                try:
+                    if parent_handle is not None:
+                        if win_kernel32.WaitForSingleObject(parent_handle, 0) != 0x00000102:
+                            server.should_exit = True
+                            return
+                    elif os.getppid() != parent or not _alive(parent):
+                        server.should_exit = True
+                        return
+                except OSError:
                     return
-            except OSError:
-                return
+        finally:
+            if parent_handle is not None and win_kernel32 is not None:
+                try:
+                    win_kernel32.CloseHandle(parent_handle)
+                except Exception:
+                    pass
+
     import threading
     thread = threading.Thread(target=watch, daemon=True, name="parent-watch")
     thread.start()

@@ -15,6 +15,26 @@ import zipfile
 SCRIPT = Path(__file__).resolve().with_name("package.sh")
 
 
+def _bash_executable() -> str:
+    if os.name != "nt":
+        return "bash"
+    git_exe = shutil.which("git")
+    candidates: list[Path] = []
+    if git_exe:
+        git_path = Path(git_exe).resolve()
+        for parent in git_path.parents[:3]:
+            candidates.append(parent / "bin" / "bash.exe")
+            candidates.append(parent / "usr" / "bin" / "bash.exe")
+    for env_key in ("ProgramFiles", "ProgramW6432"):
+        root = os.environ.get(env_key)
+        if root:
+            candidates.append(Path(root) / "Git" / "bin" / "bash.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "bash"
+
+
 class SourcePackageTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="texada package test ")
@@ -25,6 +45,7 @@ class SourcePackageTests(unittest.TestCase):
         self.git("config", "user.name", "Synthetic Package Test")
         self.git("config", "user.email", "synthetic@example.invalid")
         self.git("config", "core.autocrlf", "false")
+        self.git("config", "core.symlinks", "true")
         for name in ("LICENSE", "README.md", "README.en.md", "THIRD_PARTY_NOTICES.md",
                      "scripts/run-local-studio.py", "webui/app.py", "webui/requirements.txt",
                      "harness/requirements.txt", ".github/workflows/test.yml", "state/.gitkeep"):
@@ -49,10 +70,10 @@ class SourcePackageTests(unittest.TestCase):
         self.git("commit", "-q", "-m", "Synthetic source snapshot")
 
     def package(self):
-        return subprocess.run(["bash", str(self.repo / "scripts/package.sh")],
+        return subprocess.run([_bash_executable(), str(self.repo / "scripts/package.sh")],
                               cwd=self.temporary.name,
                               env={**os.environ, "TEXADA_PACKAGE_PYTHON": sys.executable},
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     def output_files(self):
         return sorted((self.repo / "dist").glob("*"))
@@ -146,8 +167,19 @@ class SourcePackageTests(unittest.TestCase):
         self.assertEqual(self.output_files(), [])
 
     def test_package_never_follows_committed_symbolic_links(self):
-        (self.repo / "linked.tex").symlink_to("../../outside.tex")
-        self.commit()
+        try:
+            (self.repo / "linked.tex").symlink_to("../../outside.tex")
+            self.commit()
+        except (OSError, NotImplementedError):
+            blob = subprocess.run(
+                ["git", "-C", str(self.repo), "hash-object", "-w", "--stdin"],
+                input="../../outside.tex",
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
+            self.git("update-index", "--add", "--cacheinfo", f"120000,{blob},linked.tex")
+            self.git("commit", "-q", "-m", "Synthetic symlink")
         result = self.package()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("symbolic links", result.stderr)

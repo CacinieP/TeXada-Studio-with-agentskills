@@ -1,6 +1,6 @@
 # 安装与使用排错
 
-本页对应当前本地浏览器版。正常入口是 `scripts/start-local-studio.command`，不是旧云 API 脚本；完整步骤见[本地使用指南](local-studio.md)。文档编辑、确定性检查与可确定的语法候选不需要模型；图片/PDF 转写和模型候选需要配置好的本机服务；PDF 编译另需 TeX 与页面转换工具。
+本页对应当前本地版。正常入口在 macOS 为 `scripts/start-local-studio.command`，在 Windows 为 `scripts/start-local-studio.bat`（或各自的桌面自包含发行包），不是旧云 API 脚本；完整步骤见[本地使用指南](local-studio.md)。文档编辑、确定性检查与可确定的语法候选不需要模型；图片/PDF 转写和模型候选需要配置好的本机服务；PDF 编译另需 TeX 与页面转换工具。
 
 以下命令从仓库根目录运行。遇到问题先保留未保存内容、错误与任务记录，再按相应功能排查。
 
@@ -10,12 +10,24 @@
 
 需要 Python 3.11 或更新版本。用自己实际安装的版本创建虚拟环境，例如：
 
+macOS / Linux：
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python --version
 .venv/bin/python -m pip install -r webui/requirements.txt
 .venv/bin/python -m pip check
 .venv/bin/python scripts/run-local-studio.py --check
+```
+
+Windows（PowerShell）：
+
+```powershell
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe --version
+.venv\Scripts\python.exe -m pip install -r webui\requirements.txt
+.venv\Scripts\python.exe -m pip check
+.venv\Scripts\python.exe scripts\run-local-studio.py --check
 ```
 
 `--check` 只检查 Python 依赖、可选工具和配置，不启动服务、不探测模型、不写会话。缺少 Tectonic 或 Poppler 不影响源码编辑，但相应 PDF 功能不可用。`No module named docforensics` 通常表示绕过了项目入口或 Python 环境不一致；先使用上述 `.venv/bin/python` 和启动器。
@@ -30,10 +42,11 @@ python3 -m venv .venv
 
 ## 启动后没有窗口、端口被占用或显示 401
 
-macOS 可双击 `scripts/start-local-studio.command`；终端入口为：
+macOS 可双击 `scripts/start-local-studio.command`，Windows 可双击 `scripts/start-local-studio.bat`；终端入口为：
 
 ```bash
-./scripts/start-local-studio.command
+./scripts/start-local-studio.command      # macOS / Linux
+scripts\start-local-studio.bat            # Windows
 ```
 
 启动器默认打开本机浏览器，在 `127.0.0.1:8888` 提供工作台，并自行生成会话访问凭据。普通本地使用不需要手动配置 `DEMO_TOKEN` 或复制 `.env`。只打开不带会话信息的 `/studio` 地址会返回 401。
@@ -116,7 +129,7 @@ pdftoppm -v
 
 “采用候选”只更新编辑器；“保存”或 `⌘/Ctrl+S` 才写入本地文档。直接导出的 `.tex` 是下载副本，不等于工作区已经保存。刷新或切换前先保留未保存内容。
 
-保存提示版本冲突时，保留当前缓冲区，可先导出源码副本，再比较另一窗口保存的版本或另建文档。不要通过替换版本哈希强行覆盖。示例首次保存会建立本地副本，不修改仓库原件；单个 `.tex` 上限为 2 MiB。
+保存提示版本冲突时，保留当前缓冲区，可先导出源码副本，再比较另一窗口保存的版本或另建文档。不要通过替换版本哈希强行覆盖。示例首次保存会建立本地副本，不修改仓库原件；单个 `.tex` 上限为 2 MiB。为保证跨平台兼容，文档名不可使用 Windows 保留设备名（如 `CON.tex`、`NUL.tex`、`COM1.tex`、`LPT1.tex` 或 `CON.notes.tex`），且 `.tex` 之前的词干末尾不能带空格或点号。
 
 候选绑定生成时的原文、编辑器版本与来源哈希。编辑后撤销也可能让旧候选失效；历史候选只有在当前来源仍匹配时才能恢复审阅。不要把过期候选强行采用到新版本。原文视图与候选 diff 的导出对象也不同，导出前核对当前视图与文件名。
 

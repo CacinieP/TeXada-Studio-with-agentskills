@@ -2030,6 +2030,10 @@ def studio_tools_install(token: str = Query(""), body: dict = None):
         raise HTTPException(status_code=502, detail=f"下载失败：{error}")
     if tool == "tectonic":
         os.environ["TECTONIC"] = result["path"]
+    elif tool == "poppler" and isinstance(result.get("path"), str) and result["path"]:
+        current_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+        if result["path"] not in current_entries:
+            os.environ["PATH"] = os.pathsep.join([result["path"], *current_entries])
     return {**result, "tools": {"tectonic": bool(shutil.which(_tectonic_command())),
                                 "pdftoppm": bool(shutil.which("pdftoppm")),
                                 "pdfinfo": bool(shutil.which("pdfinfo"))}}

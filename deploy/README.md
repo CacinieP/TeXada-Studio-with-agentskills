@@ -1,6 +1,6 @@
 # 运行、部署与维护
 
-当前默认交付是本地单用户 WebUI：在自己的电脑运行 FastAPI，用浏览器编辑 `.tex`，连接同机模型服务。CLI 布局树检查是独立入口。源码包不包含 Python 环境、模型权重、TeX 工具或用户数据，不是安装即用的桌面二进制应用。
+当前源码交付是本地单用户 WebUI 与 CLI 检查入口：在自己的电脑运行 FastAPI，用浏览器或 `desktop/app.py` 桌面窗口编辑 `.tex`，连接同机模型服务。源码包不包含 Python 环境、模型权重、TeX 工具或用户数据；若需解压/拖入即用的零依赖桌面包，请使用 [desktop/README](../desktop/README.md) 中的 macOS `.app` / DMG 或 Windows x64 自包含便携 ZIP 构建流水线。
 
 ## 准备独立目录
 
@@ -15,6 +15,8 @@ git archive HEAD | ssh texada-node \
 
 在目标项目目录使用 Python 3.11+：
 
+macOS / Linux：
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r webui/requirements.txt
@@ -22,16 +24,25 @@ python3 -m venv .venv
 .venv/bin/python scripts/run-local-studio.py --check
 ```
 
-`--check` 离线检查依赖和配置，不连接模型、不启动服务、不写入会话。编辑、文档管理和确定性检查不需要模型；模型候选及图片识别另需可用的本机服务。当前实机验收以 macOS 为主，路径中的 Windows/Linux 分支不代表完成了这些平台的实机测试。
+Windows（PowerShell）：
 
-PDF 编译与导入还需要 Tectonic、Poppler 和预先准备的 TeX 资源。`TECTONIC` 可以指定已有编译器路径。先执行 `.venv/bin/python scripts/prepare-local-tex.py` 离线检查固定样本；需要首次联网准备时，再显式加 `--download-resources`。Studio 正常编译使用 `--untrusted --only-cached`，缺缓存会提示失败。字体及首次准备范围见[本地使用指南](../docs/local-studio.md#首次准备与离线使用)。
+```powershell
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r webui\requirements.txt
+.venv\Scripts\python.exe -m pip check
+.venv\Scripts\python.exe scripts\run-local-studio.py --check
+```
+
+`--check` 离线检查依赖和配置，不连接模型、不启动服务、不写入会话。编辑、文档管理和确定性检查不需要模型；模型候选及图片识别另需可用的本机服务。GitHub Actions 在 `ubuntu-latest` 与 `windows-latest` 双系统回归矩阵及 `macos-15` / `windows-latest` 自包含桌面打包流水线上执行自动化验证。
+
+PDF 编译与导入还需要 Tectonic、Poppler 和预先准备的 TeX 资源。`TECTONIC` 可以指定已有编译器路径（Windows 默认缓存位于 `%LOCALAPPDATA%\TectonicProject\Tectonic\Cache`）。先执行 `scripts/prepare-local-tex.py` 离线检查固定样本；需要首次联网准备时，再显式加 `--download-resources`。Studio 正常编译使用 `--untrusted --only-cached`，缺缓存会提示失败。字体及首次准备范围见[本地使用指南](../docs/local-studio.md#首次准备与离线使用)。
 
 ## 默认本地启动
 
-macOS 可双击 `scripts/start-local-studio.command`，或从项目目录运行：
+macOS 可双击 `scripts/start-local-studio.command`，Windows 可双击 `scripts/start-local-studio.bat`，或从项目目录运行：
 
 ```bash
-.venv/bin/python scripts/run-local-studio.py
+.venv/bin/python scripts/run-local-studio.py          # Windows: .venv\Scripts\python.exe scripts\run-local-studio.py
 ```
 
 默认监听 `127.0.0.1:8888` 并打开浏览器。使用已部署的本机模型时可明确指定：

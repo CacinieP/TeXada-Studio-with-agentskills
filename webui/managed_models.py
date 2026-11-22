@@ -80,19 +80,25 @@ def _clean_model_environment(source):
     }
 
 
-def find_llama_server():
+def find_llama_server(*, os_name=None):
+    effective_os = os_name if os_name is not None else os.name
+    names = ("llama-server.exe", "llama-server") if effective_os == "nt" else ("llama-server", "llama-server.exe")
     bundle_dir = os.environ.get("TEXADA_BUNDLE_DIR", "").strip()
     if bundle_dir:
-        bundled = Path(bundle_dir).resolve() / "bin" / "llama-server"
-        if bundled.is_file() and os.access(bundled, os.X_OK):
-            return str(bundled)
+        bundle_bin = Path(bundle_dir).resolve() / "bin"
+        for name in names:
+            bundled = bundle_bin / name
+            if bundled.is_file() and os.access(bundled, os.X_OK):
+                return str(bundled)
+    home = Path.home()
     candidates = (
-        Path.home() / ".texada/bin/llama-server",
-        Path.home() / ".texada/runtime/llama-server",
+        *(home / ".texada" / "bin" / name for name in names),
+        *(home / ".texada" / "runtime" / name for name in names),
         Path("/opt/homebrew/bin/llama-server"),
         Path("/usr/local/bin/llama-server"),
     )
-    return shutil.which("llama-server") or next(
+    found_in_path = next((shutil.which(name) for name in names if shutil.which(name)), None)
+    return found_in_path or next(
         (str(path) for path in candidates if path.is_file() and os.access(path, os.X_OK)), None
     )
 
@@ -276,8 +282,15 @@ class ManagedModels:
             return
         executable = find_llama_server()
         clean_env = _clean_model_environment(os.environ)
+        win_kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {}
         version = subprocess.run(
-            [executable, "--version"], capture_output=True, text=True, timeout=10, check=True, env=clean_env
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+            env=clean_env,
+            **win_kwargs,
         )
         output = version.stdout + version.stderr
         build = re.search(r"build (\d+)", output) or re.search(r"version: (\d+)(?:\s|$)", output)
@@ -309,7 +322,7 @@ class ManagedModels:
                     "--alias", profile.model, "--host", "127.0.0.1", "--port", str(port),
                     "--ctx-size", "8192", "--parallel", "1", "-ngl", "99",
                     "--jinja", "--reasoning", "off", "--no-webui",
-                ], stdout=log, stderr=subprocess.STDOUT, env=clean_env)
+                ], stdout=log, stderr=subprocess.STDOUT, env=clean_env, **win_kwargs)
         base = f"http://127.0.0.1:{port}/v1"
         deadline = time.monotonic() + 180
         try:

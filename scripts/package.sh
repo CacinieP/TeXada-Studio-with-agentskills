@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # 从已提交的 HEAD 生成可复核源码包；不收集工作目录或本机运行依赖。
 set -euo pipefail
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*)
+    REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -W)"
+    ;;
+  *)
+    REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    ;;
+esac
 DIST="${PACKAGE_DIST_DIR:-$REPO_DIR/dist}"
 cd "$REPO_DIR"
 COMMIT="$(git rev-parse --verify "${1:-HEAD}^{commit}")"

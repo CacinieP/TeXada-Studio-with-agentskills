@@ -29,21 +29,76 @@ import urllib.request
 from urllib.parse import quote
 from pathlib import Path
 
+def _default_venv_python(repo_root: Path = Path(__file__).resolve().parents[1], *, os_name: str | None = None) -> Path:
+    effective_os = os_name if os_name is not None else os.name
+    if effective_os == "nt":
+        return repo_root / ".venv" / "Scripts" / "python.exe"
+    return repo_root / ".venv" / "bin" / "python"
+
+
+def _default_state_dir(
+    *,
+    platform_name: str | None = None,
+    os_name: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    source_env = os.environ if env is None else env
+    override = source_env.get("TEXADA_STUDIO_STATE_DIR")
+    if override:
+        return Path(override).expanduser()
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Application Support" / "TeXada Studio"
+    if effective_os == "nt":
+        local_appdata = source_env.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local")
+        return Path(local_appdata) / "TeXada Studio"
+    xdg_data = source_env.get("XDG_DATA_HOME") or str(user_home / ".local" / "share")
+    return Path(xdg_data) / "texada-studio"
+
+
+def _default_tex_cache_target(
+    *,
+    platform_name: str | None = None,
+    os_name: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    source_env = os.environ if env is None else env
+    effective_platform = platform_name if platform_name is not None else sys.platform
+    effective_os = os_name if os_name is not None else os.name
+    user_home = home if home is not None else Path.home()
+    if effective_platform == "darwin":
+        return user_home / "Library" / "Caches" / "TectonicProject.Tectonic"
+    if effective_os == "nt":
+        local_appdata = source_env.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local")
+        return Path(local_appdata) / "TectonicProject" / "Tectonic" / "Cache"
+    xdg_cache = source_env.get("XDG_CACHE_HOME") or str(user_home / ".cache")
+    return Path(xdg_cache) / "Tectonic"
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_DIR = Path(os.environ["TEXADA_BUNDLE_DIR"]).resolve() if os.environ.get("TEXADA_BUNDLE_DIR") else None
 LAUNCHER = (BUNDLE_DIR or REPO_ROOT) / "scripts" / "run-local-studio.py"
-VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
-DEFAULT_STATE_DIR = Path.home() / "Library" / "Application Support" / "TeXada Studio"
+VENV_PYTHON = _default_venv_python(REPO_ROOT)
+DEFAULT_STATE_DIR = _default_state_dir()
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 TEX_CACHE_SOURCE = BUNDLE_DIR / "tex-cache" if BUNDLE_DIR else None
-TEX_CACHE_TARGET = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
+TEX_CACHE_TARGET = _default_tex_cache_target()
 
 
 def tool_bin_dirs():
-    """PATH 前置目录:捆绑 bin(自包含包)与 ~/.texada/bin(一键安装位置)。"""
+    """PATH 前置目录:捆绑 bin(自包含包)与 ~/.texada/bin(含 Windows Library/bin)。"""
     dirs = [Path.home() / ".texada" / "bin"]
+    if os.name == "nt":
+        dirs.append(Path.home() / ".texada" / "Library" / "bin")
     if BUNDLE_DIR is not None:
-        dirs.insert(0, BUNDLE_DIR / "bin")
+        bundled = [BUNDLE_DIR / "bin"]
+        if os.name == "nt":
+            bundled.append(BUNDLE_DIR / "Library" / "bin")
+        dirs = [*bundled, *dirs]
     return dirs
 
 
@@ -79,16 +134,53 @@ def read_entry(state_dir: Path):
     if not token or parts.username or parts.password or parts.fragment:
         return None
     pid = record.get("pid")
-    return {"url": url, "pid": pid if isinstance(pid, int) else None,
+    return {"url": url, "pid": pid if type(pid) is int and pid >= 1 else None,
             "running": record.get("running") is True}
+
+
+def _win32_pid_alive(pid: int) -> bool:
+    if type(pid) is not int or pid <= 0 or pid > 0xFFFFFFFF:
+        return False
+    import ctypes
+
+    windll = getattr(ctypes, "windll", None)
+    if isinstance(windll, ctypes.LibraryLoader) and hasattr(ctypes, "WinDLL"):
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+    elif windll is not None:
+        kernel32 = windll.kernel32
+    else:
+        return False
+
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == 5
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 0x00000102
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def entry_alive(entry) -> bool:
     """会话记录是否指向一个仍在运行的启动器进程。"""
-    if not entry or not entry["running"] or not isinstance(entry.get("pid"), int):
+    if not entry or not entry["running"]:
         return False
+    pid = entry.get("pid")
+    if type(pid) is not int or pid < 1:
+        return False
+    if os.name == "nt":
+        return _win32_pid_alive(pid)
     try:
-        os.kill(entry["pid"], 0)
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
     except OSError:
         return False
     return True
@@ -201,12 +293,18 @@ def seed_tex_cache(source=None, target=None, copier=None):
         if destination.exists():
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=destination.parent) as staging:
-            shutil.copyfile(entry, staging.name)
+        staging = destination.parent / f".{destination.name}.tmp-{os.getpid()}-{secrets.token_hex(6)}"
+        try:
+            shutil.copyfile(entry, staging)
             try:
-                os.link(staging.name, destination)
+                os.link(staging, destination)
             except FileExistsError:
                 continue
+            except OSError:
+                if not destination.exists():
+                    os.replace(staging, destination)
+        finally:
+            staging.unlink(missing_ok=True)
         copied = True
     return copied
 
@@ -218,6 +316,8 @@ def start_backend_thread(state_dir: Path, port, server_box: dict):
         return server_box
 
     seed_tex_cache()
+    if os.name == "nt" and TEX_CACHE_TARGET.is_dir():
+        os.environ.setdefault("TECTONIC_CACHE_DIR", str(TEX_CACHE_TARGET))
     state_dir.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     os.environ.update({
@@ -437,20 +537,42 @@ def _install_signal_pump(interval=0.2):
         return False
 
 
-def _terminate_watchdog(read_fd, state, deadline=_watchdog_deadline, exiter=None):
+def _read_wakeup_bytes(channel) -> bytes:
+    if hasattr(channel, "recv"):
+        return channel.recv(64)
+    return os.read(channel, 64)
+
+
+def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter=None):
     """看门狗线程体:收到唤醒字节后有界等待,随后自行清理并强制退出。
 
-    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的管道,读到字节即知收到了
-    信号。第一个字节后至多再等 deadline 秒让主线程走正常退出;期间再来第二个信号
-    则立即强制。随后执行清理钩子(标记会话停止、停止后端)并退出,保证有界退出。
+    信号到达时 CPython 会把信号编号写进 set_wakeup_fd 的 socketpair,读到非空字节即知
+    收到了信号。未收到真实唤醒字节前的任何 OSError/EOF(如平台不支持或正常退出关闭
+    socket)直接返回,绝不误杀进程;若主线程已完成正常窗口收尾进入 finally 关闭看门狗
+    (closing 标志或对端关闭产生 EOF),同样直接返回让 main() 正常返回。
     """
     exiter = os._exit if exiter is None else exiter
+    woken = False
     try:
-        select.select([read_fd], [], [])  # 阻塞等待第一个唤醒字节
-        os.read(read_fd, 64)
-        readable, _, _ = select.select([read_fd], [], [], deadline)
-        if readable:
-            os.read(read_fd, 64)
+        readable, _, _ = select.select([read_channel], [], [])
+        if not readable or state.get("closing"):
+            return
+        first = _read_wakeup_bytes(read_channel)
+        if not first or state.get("closing"):
+            return
+        woken = True
+        readable2, _, _ = select.select([read_channel], [], [], deadline)
+        if state.get("closing"):
+            return
+        if readable2:
+            try:
+                second = _read_wakeup_bytes(read_channel)
+            except OSError:
+                if state.get("closing"):
+                    return
+                second = b"\x01"
+            if not second or state.get("closing"):
+                return
         shutdown = state.get("shutdown")
         if callable(shutdown):
             try:
@@ -459,19 +581,69 @@ def _terminate_watchdog(read_fd, state, deadline=_watchdog_deadline, exiter=None
                 pass  # 清理失败也必须退出,保证有界
         exiter(0)
     except Exception:
+        if not woken or state.get("closing"):
+            return
+        shutdown = state.get("shutdown")
+        if callable(shutdown):
+            try:
+                shutdown()
+            except Exception:
+                pass
         exiter(0)
 
 
-def _install_terminate_watchdog(state, deadline=_watchdog_deadline):
-    """安装 set_wakeup_fd 管道与看门狗线程;失败时返回 False。"""
+def _close_terminate_watchdog(state) -> None:
+    """标记正常收尾、复位 set_wakeup_fd 并关闭保存的唤醒 socketpair。"""
+    state["closing"] = True
+    sockets = state.pop("wakeup_sockets", None)
+    if not sockets:
+        return
     try:
-        read_fd, write_fd = os.pipe()
-        os.set_blocking(write_fd, False)
-        signal.set_wakeup_fd(write_fd)
+        signal.set_wakeup_fd(-1)
     except (OSError, ValueError):
+        pass
+    for sock in reversed(sockets):
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
+def _install_terminate_watchdog(state, deadline=_watchdog_deadline, *, os_name=None):
+    """安装唤醒通道与看门狗线程:POSIX 用原生 os.pipe,Windows 用 Winsock socketpair。"""
+    effective_os = os_name if os_name is not None else os.name
+    _close_terminate_watchdog(state)
+    state["closing"] = False
+    if effective_os != "nt":
+        try:
+            read_fd, write_fd = os.pipe()
+            os.set_blocking(write_fd, False)
+            signal.set_wakeup_fd(write_fd)
+        except (OSError, ValueError):
+            return False
+        threading.Thread(
+            target=_terminate_watchdog, args=(read_fd, state),
+            kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
+        ).start()
+        return True
+
+    read_sock = write_sock = None
+    try:
+        read_sock, write_sock = socket.socketpair()
+        read_sock.setblocking(False)
+        write_sock.setblocking(False)
+        signal.set_wakeup_fd(write_sock.fileno(), warn_on_full_buffer=False)
+    except (OSError, ValueError):
+        for sock in (write_sock, read_sock):
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
         return False
+    state["wakeup_sockets"] = (read_sock, write_sock)
     threading.Thread(
-        target=_terminate_watchdog, args=(read_fd, state),
+        target=_terminate_watchdog, args=(read_sock, state),
         kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
     ).start()
     return True
@@ -572,6 +744,7 @@ def main(argv=None) -> int:
         _cleanup()
         return 0
     finally:
+        _close_terminate_watchdog(_terminate_state)
         _terminate_state["window_closer"] = None
         _terminate_state["shutdown"] = None
 

@@ -73,9 +73,11 @@ class VerifiedEditsTests(unittest.TestCase):
         self.assertEqual(code, 0, report)
         self.assertTrue(report["written"])
         self.assertEqual(self.source.read_bytes(), b"\xef\xbb\xbfThis is correct.\r\nLast line")
-        self.assertEqual(stat.S_IMODE(self.source.stat().st_mode), 0o640)
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE(self.source.stat().st_mode), 0o640)
         self.assertEqual((self.backup / "original.bin").read_bytes(), original)
-        self.assertEqual(stat.S_IMODE((self.backup / "original.bin").stat().st_mode), 0o640)
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE((self.backup / "original.bin").stat().st_mode), 0o640)
         self.assertEqual((self.backup / "plan.json").read_bytes(), plan_bytes)
         record = json.loads((self.backup / "record.json").read_text())
         self.assertEqual(record["status"], "prepared")
