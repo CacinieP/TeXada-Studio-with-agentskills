@@ -288,5 +288,62 @@ class MissingScriptTests(unittest.TestCase):
         self.assertEqual(repair_blocker(r"0 \le x_ \le 1", allow_parser_gaps=True), "missing_script_operand")
 
 
+class StructuralDelimiterInsertionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).resolve().parents[2] / "skills/doc-formula-verify/scripts/verify.py"
+        spec = importlib.util.spec_from_file_location("formula_checker_structural", path)
+        cls.checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.checker)
+
+    def test_authorizes_pure_interior_and_opening_brace_insertions(self):
+        cases = [
+            (r"x^{n+1 + y = 0", r"x^{n+1} + y = 0"),
+            (r"\frac{a}{b + c = d", r"\frac{a}{b + c} = d"),
+            (r"\sqrt{x+1 + y = 2", r"\sqrt{x+1} + y = 2"),
+            (r"\frac1}{2}", r"\frac{1}{2}"),
+            (r"x^n+1}", r"x^{n+1}"),
+            (r"x_{i+1} + y_j+1}", r"x_{i+1} + y_{j+1}"),
+        ]
+        for original, candidate in cases:
+            with self.subTest(original=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(verdict["method"], "structural_delimiter_insertion")
+                self.assertEqual(verdict["reason"], "structural_syntax_repair")
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_authorizes_pure_left_right_structural_insertions(self):
+        cases = [
+            (r"\left(\frac{a}{b} = c", r"\left(\frac{a}{b}\right) = c"),
+            (r"\left(a + \left[b\right]) = c", r"\left(a + \left[b\right]\right) = c"),
+            (r"(x+1\right)", r"\left(x+1\right)"),
+            (r"x+1\right)", r"\left(x+1\right)"),
+            (r"\left\lvert x \right", r"\left\lvert x \right\rvert"),
+        ]
+        for original, candidate in cases:
+            with self.subTest(original=original, candidate=candidate):
+                verdict = assess_candidate(original, candidate)
+                self.assertTrue(verdict["allowed"], verdict)
+                self.assertEqual(verdict["method"], "structural_delimiter_insertion")
+                self.assertEqual(self.checker.check(candidate)[0], "OK")
+
+    def test_rejects_surplus_braces_spacing_changes_and_ambiguous_juxtaposition(self):
+        rejected = [
+            (r"x^{n+1 + y = 0", r"{x^{n+1}} + y = 0"),
+            (r"x^{n+1 + y = 0", r"x^{n + 1} + y = 0"),
+            (r"x} + {y", r"{x} + {y}"),
+            (r"x + }", r"x + {}"),
+            (r"\frac{\left(x+1}{2}", r"\frac{\left(x+1}{2}\right)"),
+            (r"\displaystyle \int_{0}^{1 x^2\,dx", r"\displaystyle \int_{0}^{1} x^2\,dx"),
+            (r"\lim_{y \to b k(y)=N", r"\lim_{y \to b} k(y)=N"),
+            ("x}+", "{x}+"),
+            ("a_+b}", "a_{1}+b}"),
+        ]
+        for original, candidate in rejected:
+            with self.subTest(original=original, candidate=candidate):
+                self.assertFalse(assess_candidate(original, candidate)["allowed"])
+
+
 if __name__ == "__main__":
     unittest.main()

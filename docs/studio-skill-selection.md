@@ -7,15 +7,16 @@ fixed check→candidate→human sequence. With both experiments enabled, the mod
 also chooses constrained actions. Leaving both disabled preserves the default
 fixed formula instruction loading and existing workflow.
 
-The catalog consists of exactly two versioned `capability.json` files:
+The catalog consists of exactly three versioned `capability.json` files:
 
 | ID | Capability | Accepted input |
 |---|---|---|
-| `doc-formula-verify` | text formula syntax review | bounded LaTeX string |
-| `doc-table-audit` | simple tabular numeric totals | bounded supplied document text |
+| `doc-formula-verify` | text formula syntax review (`1.4.0`) | bounded LaTeX string |
+| `doc-table-audit` | simple tabular numeric totals (`1.0.0`) | bounded supplied document text |
+| `latex-cleanup` | conservative TeX document cleanup (`0.2.3`) | bounded supplied document text |
 
 Each declares `schema_version`, semantic `version`, node kind, input JSON schema
-and supported action names. The host accepts only those two known contracts;
+and supported action names. The host accepts only those three known contracts;
 arbitrary paths, schema variants, tools, OCR capabilities and unknown metadata
 schema versions are rejected. Metadata is read and hashed before selection; loading the
 catalog never reads a `SKILL.md` body. The selecting model sees the metadata,
@@ -29,8 +30,12 @@ and loading are separate `SKILL_SELECTED` and `SKILL_LOADED` events. The latter
 records the metadata hash, body hash, checker hash, ID, capability and version.
 A body/version/path failure has a rejection event and reaches no checker or
 repair callback. Formula repair receives the selected formula instructions only
-after loading; table instructions are loaded for the existing deterministic host,
-whose candidates still come from Decimal arithmetic rather than a model.
+after loading; simple scalar wrong-total tables still resolve deterministically
+with zero repair model calls, while short/blank simple `tabular` total rows pass
+the loaded `doc-table-audit` body to `vlm.repair_table`. When `inspect_tex_cleanup`
+detects zero-width format noise or unclosed non-math TeX commands/prose environments,
+Studio adds `cleanup-document` and passes the loaded `latex-cleanup` body to
+`vlm.repair_cleanup` if deterministic stripping does not complete the cleanup.
 
 Null/declined selection, unknown IDs, mismatched kinds, malformed responses,
 no applicable capability, unavailable catalogs and load failures preserve the

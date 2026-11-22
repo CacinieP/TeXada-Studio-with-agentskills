@@ -408,6 +408,55 @@ class ProviderRuntimeTest(unittest.TestCase):
                 self.assertIsNone(provider.repair_table(node))
             self.assertEqual(provider.last_trace["reason"], reason)
 
+    def test_repair_table_and_cleanup_validate_loaded_skill_and_inject_instructions(self):
+        from docforensics.skills_runtime import load_cleanup_skill, load_skill, load_table_skill
+
+        rows = [["项目", "金额"], ["A", "1.5"], ["合计"]]
+        fixed_rows = [["项目", "金额"], ["A", "1.5"], ["合计", "1.5"]]
+        provider = vlm.OpenAICompatibleProvider(skill_mode="off")
+        table_skill = load_table_skill()
+        formula_skill = load_skill()
+        cleanup_skill = load_cleanup_skill()
+
+        with patch.object(vlm.urllib.request, "urlopen") as network:
+            self.assertIsNone(provider.repair_table({"data": {"rows": rows}}, loaded_skill=formula_skill))
+            self.assertEqual(provider.last_trace["reason"], "wrong_loaded_skill")
+            self.assertIsNone(provider.repair_table({"data": {"rows": rows}}, loaded_skill="not-a-skill"))
+            self.assertEqual(provider.last_trace["reason"], "wrong_loaded_skill")
+            network.assert_not_called()
+
+        with patch.object(
+            vlm.urllib.request, "urlopen", return_value=response(json.dumps({"rows": fixed_rows}))
+        ) as network:
+            self.assertEqual(provider.repair_table({"data": {"rows": rows}}, loaded_skill=table_skill), fixed_rows)
+        payload = json.loads(network.call_args.args[0].data)
+        self.assertIn('<loaded_skill name="doc-table-audit">', payload["messages"][0]["content"])
+        self.assertIn(table_skill.instructions, payload["messages"][0]["content"])
+        self.assertTrue(provider.last_trace["skill_loaded"])
+        self.assertEqual(provider.last_trace["skill_id"], "doc-table-audit")
+        self.assertEqual(provider.last_trace["skill_sha256"], table_skill.sha256)
+
+        doc_in = "\\section{标题\n正文。\n"
+        doc_out = "\\section{标题}\n正文。\n"
+        with patch.object(vlm.urllib.request, "urlopen") as network:
+            self.assertIsNone(provider.repair_cleanup({"data": {"content": doc_in}}, loaded_skill=table_skill))
+            self.assertEqual(provider.last_trace["reason"], "wrong_loaded_skill")
+            network.assert_not_called()
+
+        with patch.object(
+            vlm.urllib.request, "urlopen", return_value=response(json.dumps({"content": doc_out}))
+        ) as network:
+            self.assertEqual(
+                provider.repair_cleanup({"data": {"content": doc_in}}, loaded_skill=cleanup_skill),
+                doc_out,
+            )
+        cleanup_payload = json.loads(network.call_args.args[0].data)
+        self.assertIn('<loaded_skill name="latex-cleanup">', cleanup_payload["messages"][0]["content"])
+        self.assertIn(cleanup_skill.instructions, cleanup_payload["messages"][0]["content"])
+        self.assertTrue(provider.last_trace["skill_loaded"])
+        self.assertEqual(provider.last_trace["skill_id"], "latex-cleanup")
+        self.assertEqual(provider.last_trace["skill_sha256"], cleanup_skill.sha256)
+
     def test_configuration_and_skill_validation_precede_network(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(vlm.urllib.request, "urlopen") as network:
             with self.assertRaisesRegex(ValueError, "skill_unavailable"):

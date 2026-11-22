@@ -296,6 +296,24 @@ class PlannerTest(unittest.TestCase):
         provider.repair_formula.assert_not_called()
         self.assertFalse(studio._table_problems(fixed))
 
+    def test_cleanup_action_mask_and_non_formula_model_call_accounting(self):
+        events = []
+        check = Mock(return_value={"status": "RETRY"})
+        repair = Mock(return_value={"accepted": True, "check": {"status": "OK"}, "edits": [], "model_calls": 1})
+        host = ConstrainedPlanner(
+            "\\section{标题\n",
+            [{"id": "cleanup-document", "kind": "cleanup", "line": 1, "document_text": "\\section{标题\n"}],
+            ScriptedProvider(),
+            check,
+            repair,
+            lambda action, **fields: events.append({"action": action, **fields}),
+        )
+        self.assertEqual(host.snapshot()["nodes"][0]["action_mask"], ["check-cleanup", "request-human"])
+        _, report = host.run()
+        self.assertEqual(report["nodes"][0]["state"], "candidate")
+        # 2 model planner steps + 1 repair model call = 3 reserved model calls.
+        self.assertEqual(report["reserved_model_calls"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
