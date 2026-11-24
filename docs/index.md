@@ -27,7 +27,7 @@
 ## 项目、技术与发布
 
 - 项目介绍：[项目报告](project-report.md)、[微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[技术文章](technical-article.md)、[发布清单](open-source-release.md)。
-- 发布准备：[v0.1.1 发布说明](releases/v0.1.1.md)、[v0.1.0 发布说明](releases/v0.1.0.md)、[开源清单](open-source-release.md)、[准备度记录](open-source-readiness.md)、[发布与传播计划](launch-plan.md)、[早期草案](releases/v0.1.0-alpha.1-draft.md)。
+- 发布准备：[v0.1.2 发布说明](releases/v0.1.2.md)、[v0.1.1 发布说明](releases/v0.1.1.md)、[v0.1.0 发布说明](releases/v0.1.0.md)、[开源清单](open-source-release.md)、[准备度记录](open-source-readiness.md)、[发布与传播计划](launch-plan.md)、[早期草案](releases/v0.1.0-alpha.1-draft.md)。
 - 维护记录：[CHANGELOG](../CHANGELOG.md)、[迁移记录](repository-migration.md)、[隐私扫描记录](security-scan-notes.md)。
 - 引用项目：[CITATION.cff](../CITATION.cff)，同时注明所用提交号。
 
