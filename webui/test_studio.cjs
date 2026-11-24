@@ -215,6 +215,7 @@ const pageLoadFiles = run('loadFiles');
 const pageCompilePreview = run('compilePreview');
 const pageAnalyze = run('analyze');
 const pageRestoreJob = run('restoreJob');
+const pageDownload = run('download');
 const pageFixHandler = get('btnFix').onclick;
 windowListeners.get('load')();
 
@@ -1251,5 +1252,92 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   };
   vm.runInContext('render(maliciousStatus)', indexCtx);
   assert.match(indexNodes.get('docs').innerHTML, /<span class="chip">n1 OK&quot; onmouseover=&quot;alert\(1\)<\/span>/);
+  // Issue #81 & #54: deferred blob revoke, pywebview native save_file export, edit-state sync, and native history bridge.
+  {
+    const origSetTimeout = context.setTimeout;
+    const origCreateObjectURL = context.URL.createObjectURL;
+    const origRevokeObjectURL = context.URL.revokeObjectURL;
+    const origDownload = run('download');
+    const origBrowserDownload = run('browserDownload');
+    const timers = [];
+    const revoked = [];
+    try {
+      context.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+      context.URL.createObjectURL = () => 'blob:http://127.0.0.1/export-test';
+      context.URL.revokeObjectURL = url => revoked.push(url);
+      run('download = browserDownload');
+      run(`browserDownload('notes.tex', new Blob(['x^2'], { type: 'text/plain' }))`);
+      assert.equal(revoked.length, 0, 'browser download must not revoke blob URL synchronously before async readers');
+      assert.ok(timers.some(t => t.ms >= 10000), 'blob URL revocation must be deferred');
+      timers.forEach(t => t.fn());
+      assert.deepEqual(revoked, ['blob:http://127.0.0.1/export-test']);
+      context.setTimeout = origSetTimeout;
+
+      // Desktop pywebview bridge path for export and edit-state sync.
+      const savedCalls = [];
+      const editStates = [];
+      context.window.pywebview = {
+        api: {
+          save_file: async (name, b64) => {
+            savedCalls.push({ name, text: Buffer.from(b64, 'base64').toString('utf8') });
+            return { saved: true, cancelled: false, name };
+          },
+          set_edit_state: (dirty, canUndo, canRedo, nativeEditable) => {
+            editStates.push({ dirty, canUndo, canRedo, nativeEditable });
+            return { ok: true };
+          },
+        },
+      };
+      context.btoa = str => Buffer.from(str, 'binary').toString('base64');
+      context._pageDownload = pageDownload;
+      await run(`_pageDownload('paper.tex', new Blob(['\\\\section{A}'], { type: 'text/plain' }))`);
+      delete context._pageDownload;
+      assert.equal(savedCalls.length, 1);
+      assert.equal(savedCalls[0].name, 'paper.tex');
+      assert.equal(savedCalls[0].text, '\\section{A}');
+
+      // Native Edit -> Undo / Redo routes to Monaco when editing, execCommand for regular inputs, and ignores open dialogs.
+      const hm = context.testEditor.model;
+      context.testEditor.setValue('v0');
+      run("curName='hist.tex';savedContent='v0';showCenter('edit');lastDesktopEditState=null;syncDesktopEditState(true);");
+      assert.equal(editStates.at(-1).dirty, false);
+      assert.equal(editStates.at(-1).canUndo, false);
+      hm.pushEditOperations([], [{ range: hm.getFullModelRange(), text: 'v1' }]);
+      run('updateSaveState()');
+      assert.equal(editStates.at(-1).dirty, true);
+      assert.equal(editStates.at(-1).canUndo, true);
+      context.document.activeElement = get('editor');
+      assert.equal(run("window.TeXadaStudioHistory('undo')"), true);
+      assert.equal(context.testEditor.getValue(), 'v0');
+      assert.equal(run("window.TeXadaStudioHistory('redo')"), true);
+      assert.equal(context.testEditor.getValue(), 'v1');
+
+      // Regular <input> routes to document.execCommand and never undoes the main document.
+      const execCalls = [];
+      context.document.execCommand = cmd => { execCalls.push(cmd); return true; };
+      context.document.activeElement = get('fileFilter');
+      assert.equal(run("window.TeXadaStudioHistory('undo')"), true);
+      assert.deepEqual(execCalls, ['undo']);
+      assert.equal(context.testEditor.getValue(), 'v1');
+
+      // Open modal dialog blocks Monaco undo when focus is not in an input.
+      context.document.activeElement = get('btnHistoryClose');
+      get('historyDialog').open = true;
+      assert.equal(run("window.TeXadaStudioHistory('undo')"), false);
+      assert.equal(context.testEditor.getValue(), 'v1');
+      get('historyDialog').open = false;
+      context.document.activeElement = get('editor');
+      delete context.document.execCommand;
+    } finally {
+      delete context.window.pywebview;
+      context.setTimeout = origSetTimeout;
+      context.URL.createObjectURL = origCreateObjectURL;
+      context.URL.revokeObjectURL = origRevokeObjectURL;
+      context._restoreDownload = origDownload;
+      run('download = _restoreDownload');
+      delete context._restoreDownload;
+    }
+  }
+
   console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

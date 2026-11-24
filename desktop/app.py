@@ -12,6 +12,7 @@ GUI 依赖 pywebview(``pip install -r desktop/requirements.txt``),仅在打开�
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import secrets
@@ -453,7 +454,285 @@ def stop_launcher(child: subprocess.Popen) -> None:
             child.kill()
 
 
-_terminate_state = {"window_closer": None, "shutdown": None, "signal_pump": None}
+_ALLOWED_EXPORT_SUFFIXES = frozenset({".tex", ".pdf", ".md"})
+_MAX_EXPORT_BYTES = 64 * 1024 * 1024
+_DESKTOP_LOCALIZATION = {
+    "global.quitConfirmation": "当前文档有未保存修改。确定放弃修改并关闭窗口？",
+    "global.quit": "放弃并关闭",
+    "global.cancel": "取消",
+    "global.ok": "确定",
+    "global.saveFile": "保存文件",
+    "cocoa.menu.about": "关于",
+    "cocoa.menu.services": "服务",
+    "cocoa.menu.view": "视图",
+    "cocoa.menu.edit": "编辑",
+    "cocoa.menu.hide": "隐藏",
+    "cocoa.menu.hideOthers": "隐藏其他",
+    "cocoa.menu.showAll": "全部显示",
+    "cocoa.menu.quit": "退出",
+    "cocoa.menu.fullscreen": "进入全屏",
+    "cocoa.menu.cut": "剪切",
+    "cocoa.menu.copy": "拷贝",
+    "cocoa.menu.paste": "粘贴",
+    "cocoa.menu.selectAll": "全选",
+    "windows.fileFilter.allFiles": "所有文件",
+}
+
+
+def _prepare_webview_storage(state_dir: Path) -> Path:
+    """为桌面 WebView 准备持久化存储目录（保留本地偏好，避免每次启动清空并规避 Cookie 竞态）。"""
+    state_dir.mkdir(parents=True, exist_ok=True)
+    storage = state_dir / "webview-storage"
+    if storage.is_symlink():
+        raise RuntimeError(f"桌面存储目录不得为符号链接:{storage}")
+    storage.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        os.chmod(storage, 0o700)
+    return storage
+
+
+def _sanitize_export_filename(filename: str) -> str:
+    if not isinstance(filename, str):
+        raise ValueError("导出文件名必须是字符串。")
+    name = filename.strip()
+    if (
+        not name
+        or len(name) > 200
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or any(ord(ch) < 32 for ch in name)
+        or name in {".", ".."}
+        or Path(name).name != name
+    ):
+        raise ValueError("导出文件名包含非法字符。")
+    if Path(name).suffix.lower() not in _ALLOWED_EXPORT_SUFFIXES:
+        raise ValueError("仅支持导出 .tex、.pdf 或 .md 文件。")
+    return name
+
+
+def _is_trusted_loopback_url(url) -> bool:
+    if not isinstance(url, str) or not url:
+        return False
+    parts = urllib.parse.urlsplit(url)
+    return parts.scheme == "http" and parts.hostname in LOOPBACK_HOSTS
+
+
+def _atomic_write_bytes(target: Path, payload: bytes) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.parent / f".{target.name}.tmp-{os.getpid()}-{secrets.token_hex(6)}"
+    try:
+        with staging.open("wb") as handle:
+            handle.write(payload)
+        os.replace(str(staging), str(target))
+    except Exception:
+        staging.unlink(missing_ok=True)
+        raise
+
+
+class _DesktopBridge:
+    """最小桌面 JS 桥接：仅暴露原生文件保存与编辑状态同步，内部属性全部以 _ 隐藏。"""
+
+    def __init__(self, webview_module=None):
+        self._webview = webview_module
+        self._window = None
+        self._lock = threading.RLock()
+        self._dirty = False
+        self._can_undo = False
+        self._can_redo = False
+        self._native_editable = False
+        self._terminating = False
+
+    def _attach(self, window) -> None:
+        with self._lock:
+            self._window = window
+            if window is not None and hasattr(window, "confirm_close"):
+                window.confirm_close = bool(self._dirty) and not self._terminating
+
+    def _mark_terminating(self) -> None:
+        with self._lock:
+            self._terminating = True
+            if self._window is not None and hasattr(self._window, "confirm_close"):
+                self._window.confirm_close = False
+
+    def _history_enabled(self, direction: str) -> bool:
+        with self._lock:
+            if self._native_editable:
+                return True
+            if direction == "undo":
+                return self._can_undo
+            if direction == "redo":
+                return self._can_redo
+            return False
+
+    def set_edit_state(self, dirty=False, can_undo=False, can_redo=False, native_editable=False):
+        with self._lock:
+            self._dirty = bool(dirty)
+            self._can_undo = bool(can_undo)
+            self._can_redo = bool(can_redo)
+            self._native_editable = bool(native_editable)
+            if self._window is not None and hasattr(self._window, "confirm_close"):
+                self._window.confirm_close = self._dirty and not self._terminating
+        return {"ok": True}
+
+    def save_file(self, filename, data_base64):
+        window = self._window
+        if window is None:
+            raise RuntimeError("桌面窗口尚未就绪。")
+        current_url = window.get_current_url() if callable(getattr(window, "get_current_url", None)) else None
+        if not _is_trusted_loopback_url(current_url):
+            raise RuntimeError("仅允许本地 TeXada Studio 工作台触发文件导出。")
+        safe_name = _sanitize_export_filename(filename)
+        if not isinstance(data_base64, str):
+            raise ValueError("导出数据格式无效。")
+        if len(data_base64) > (_MAX_EXPORT_BYTES * 4 // 3) + 16:
+            raise ValueError("导出文件过大。")
+        try:
+            payload = base64.b64decode(data_base64.encode("ascii"), validate=True)
+        except (ValueError, UnicodeEncodeError) as exc:
+            raise ValueError("导出数据编码无效。") from exc
+        if len(payload) > _MAX_EXPORT_BYTES:
+            raise ValueError("导出文件过大。")
+        file_dialog = getattr(self._webview, "FileDialog", None)
+        save_dialog = getattr(file_dialog, "SAVE", 30)
+        selection = window.create_file_dialog(save_dialog, save_filename=safe_name)
+        target_raw = selection[0] if isinstance(selection, (list, tuple)) and selection else selection
+        if not isinstance(target_raw, str) or not target_raw.strip():
+            return {"saved": False, "cancelled": True}
+        target = Path(target_raw)
+        _atomic_write_bytes(target, payload)
+        return {"saved": True, "cancelled": False, "name": target.name}
+
+
+def _dispatch_macos_history_js(window, direction: str) -> bool:
+    """在 Cocoa 主线程异步派发撤销/重做 JS，绝不阻塞等待信号量避免死锁。"""
+    if direction not in {"undo", "redo"} or window is None:
+        return False
+    script = f"window.TeXadaStudioHistory && window.TeXadaStudioHistory({json.dumps(direction)});"
+    try:
+        from webview.platforms.cocoa import BrowserView
+
+        uid = getattr(window, "uid", None)
+        instance = BrowserView.instances.get(uid) if uid is not None else None
+        native_webview = getattr(instance, "webview", None)
+        if native_webview is not None:
+            native_webview.evaluateJavaScript_completionHandler_(script, None)
+            return True
+    except Exception:
+        pass
+    evaluate = getattr(window, "evaluate_js", None)
+    if callable(evaluate):
+        threading.Thread(
+            target=lambda: evaluate(script), daemon=True, name=f"history-{direction}"
+        ).start()
+        return True
+    return False
+
+
+def _find_edit_submenu(main_menu):
+    if main_menu is None:
+        return None
+    items = list(main_menu.itemArray() or [])
+    for item in items:
+        submenu = item.submenu()
+        if submenu is None:
+            continue
+        for sub_item in list(submenu.itemArray() or []):
+            action = str(sub_item.action() or "")
+            if action in {"cut:", "copy:", "paste:", "selectAll:"}:
+                return submenu
+    for item in items:
+        submenu = item.submenu()
+        if submenu is not None and str(submenu.title() or "") in {"Edit", "编辑"}:
+            return submenu
+    return None
+
+
+_EDIT_MENU_TARGET_CLASSES: dict[type, type] = {}
+
+
+def _edit_menu_target_class(base_cls: type) -> type:
+    cls = _EDIT_MENU_TARGET_CLASSES.get(base_cls)
+    if cls is not None:
+        return cls
+
+    class _TexadaEditHistoryMenuTarget(base_cls):
+        def texadaUndo_(self, _sender):
+            self._dispatch(self._window, "undo")
+
+        def texadaRedo_(self, _sender):
+            self._dispatch(self._window, "redo")
+
+        def validateMenuItem_(self, item):
+            action = str(item.action() or "")
+            if action == "texadaUndo:":
+                return self._bridge._history_enabled("undo")
+            if action == "texadaRedo:":
+                return self._bridge._history_enabled("redo")
+            return True
+
+    _EDIT_MENU_TARGET_CLASSES[base_cls] = _TexadaEditHistoryMenuTarget
+    return _TexadaEditHistoryMenuTarget
+
+
+def _install_macos_edit_history_menu(window, bridge: _DesktopBridge, *, app=None, appkit=None, dispatcher=None) -> bool:
+    """macOS: 向系统菜单栏 Edit 菜单顶部注入「撤销 ⌘Z」「重做 ⇧⌘Z」（#54）。"""
+    if appkit is None:
+        if sys.platform != "darwin":
+            return False
+        try:
+            import AppKit as appkit
+        except Exception:
+            return False
+    try:
+        ns_app = app if app is not None else appkit.NSApplication.sharedApplication()
+        edit_menu = _find_edit_submenu(ns_app.mainMenu())
+        if edit_menu is None:
+            return False
+        for existing in list(edit_menu.itemArray() or []):
+            if str(existing.action() or "") == "texadaUndo:":
+                return True
+
+        dispatch = dispatcher if dispatcher is not None else _dispatch_macos_history_js
+        base_cls = getattr(appkit, "NSObject", object)
+        target_cls = _edit_menu_target_class(base_cls)
+        target = target_cls.alloc().init() if hasattr(target_cls, "alloc") else target_cls()
+        target._window = window
+        target._bridge = bridge
+        target._dispatch = dispatch
+        cmd_mask = getattr(appkit, "NSEventModifierFlagCommand", getattr(appkit, "NSCommandKeyMask", 1 << 20))
+        shift_mask = getattr(appkit, "NSEventModifierFlagShift", getattr(appkit, "NSShiftKeyMask", 1 << 17))
+
+        undo_item = appkit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("撤销", "texadaUndo:", "z")
+        undo_item.setTarget_(target)
+        undo_item.setKeyEquivalentModifierMask_(cmd_mask)
+
+        redo_item = appkit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("重做", "texadaRedo:", "Z")
+        redo_item.setTarget_(target)
+        redo_item.setKeyEquivalentModifierMask_(cmd_mask | shift_mask)
+
+        separator = appkit.NSMenuItem.separatorItem()
+        edit_menu.insertItem_atIndex_(separator, 0)
+        edit_menu.insertItem_atIndex_(redo_item, 0)
+        edit_menu.insertItem_atIndex_(undo_item, 0)
+        _terminate_state["edit_menu_target"] = target
+        return True
+    except Exception:
+        return False
+
+
+def _schedule_macos_edit_history_menu(window, bridge: _DesktopBridge) -> None:
+    if sys.platform != "darwin":
+        return
+    try:
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(_install_macos_edit_history_menu, window, bridge)
+    except Exception:
+        pass
+
+
+_terminate_state = {"window_closer": None, "shutdown": None, "signal_pump": None, "edit_menu_target": None, "terminating": False}
 _watchdog_deadline = 5.0
 
 
@@ -500,6 +779,8 @@ def _close_shown_windows(windows) -> bool:
     if not ready:
         return False
     for window in ready:
+        if hasattr(window, "confirm_close"):
+            window.confirm_close = False
         window.destroy()
     _nudge_cocoa_event_loop()
     return True
@@ -513,6 +794,10 @@ def _terminate_action(signum, state, exiter=None):
     在清理后保持默认信号退出语义不变。
     """
     exiter = os._exit if exiter is None else exiter
+    state["terminating"] = True
+    bridge = state.get("bridge")
+    if bridge is not None:
+        bridge._mark_terminating()
     closer = state.get("window_closer")
     if closer:
         try:
@@ -534,6 +819,9 @@ def _terminate_action(signum, state, exiter=None):
     os.kill(os.getpid(), signum)
 
 
+_SIGNAL_PUMP_CLASS = None
+
+
 def _install_signal_pump(interval=0.2):
     """macOS:让主 run loop 周期执行 Python 回调,待决信号处理器才能及时运行。
 
@@ -541,17 +829,20 @@ def _install_signal_pump(interval=0.2):
     每 interval 秒执行一次回调把执行权带回解释器,_on_terminate 就能走 window_closer
     正常清理。仅注册 NSTimer;失败时返回 False,不影响其它路径。
     """
+    global _SIGNAL_PUMP_CLASS
     try:
         from Foundation import NSObject, NSTimer, NSRunLoop, NSRunLoopCommonModes
     except Exception:
         return False
 
-    class _SignalPump(NSObject):
-        def tick_(self, _timer):
-            return None  # 执行 Python 字节码即可触发待决信号处理器
-
     try:
-        pump = _SignalPump.alloc().init()
+        if _SIGNAL_PUMP_CLASS is None:
+            class _SignalPump(NSObject):
+                def tick_(self, _timer):
+                    return None  # 执行 Python 字节码即可触发待决信号处理器
+
+            _SIGNAL_PUMP_CLASS = _SignalPump
+        pump = _SIGNAL_PUMP_CLASS.alloc().init()
         timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(
             interval, pump, "tick:", None, True)
         NSRunLoop.currentRunLoop().addTimer_forMode_(timer, NSRunLoopCommonModes)
@@ -617,21 +908,27 @@ def _terminate_watchdog(read_channel, state, deadline=_watchdog_deadline, exiter
 
 
 def _close_terminate_watchdog(state, *, force: bool = False) -> None:
-    """空闲退出时关闭唤醒 socketpair;若已收到终止信号且非 force,保持看门狗武装兜底析构卡死。"""
+    """空闲退出时关闭唤醒通道(socketpair / pipe);若已收到终止信号且非 force,保持看门狗武装兜底析构卡死。"""
     if state.get("woken") and not force:
         return
     state["closing"] = True
     state["woken"] = False
     sockets = state.pop("wakeup_sockets", None)
-    if not sockets:
+    pipe_fds = state.pop("wakeup_pipe", None)
+    if not sockets and not pipe_fds:
         return
     try:
         signal.set_wakeup_fd(-1)
     except (OSError, ValueError):
         pass
-    for sock in reversed(sockets):
+    for sock in reversed(sockets or ()):
         try:
             sock.close()
+        except OSError:
+            pass
+    for fd in reversed(pipe_fds or ()):
+        try:
+            os.close(fd)
         except OSError:
             pass
 
@@ -643,12 +940,20 @@ def _install_terminate_watchdog(state, deadline=_watchdog_deadline, *, os_name=N
     state["closing"] = False
     state["woken"] = False
     if effective_os != "nt":
+        read_fd = write_fd = None
         try:
             read_fd, write_fd = os.pipe()
             os.set_blocking(write_fd, False)
-            signal.set_wakeup_fd(write_fd)
+            signal.set_wakeup_fd(write_fd, warn_on_full_buffer=False)
         except (OSError, ValueError):
+            for fd in (write_fd, read_fd):
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
             return False
+        state["wakeup_pipe"] = (read_fd, write_fd)
         threading.Thread(
             target=_terminate_watchdog, args=(read_fd, state),
             kwargs={"deadline": deadline}, daemon=True, name="terminate-watchdog",
@@ -696,6 +1001,9 @@ def main(argv=None) -> int:
     port = args.port or 8888
     _terminate_state["window_closer"] = None
     _terminate_state["shutdown"] = None
+    _terminate_state["bridge"] = None
+    _terminate_state["edit_menu_target"] = None
+    _terminate_state["terminating"] = False
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, _on_terminate)
     previous = read_entry(state_dir)
@@ -763,18 +1071,52 @@ def main(argv=None) -> int:
             print("缺少桌面窗口依赖:捆绑包不应出现此错误;仓库模式请先 .venv/bin/pip install -r desktop/requirements.txt", file=sys.stderr)
             return 1
 
-        webview.create_window("TeXada Studio", entry["url"], width=1440, height=900, min_size=(1024, 640))
+        try:
+            storage_dir = _prepare_webview_storage(state_dir)
+        except (OSError, RuntimeError) as error:
+            _cleanup()
+            print(f"无法初始化桌面存储目录:{error}", file=sys.stderr)
+            return 1
+
+        settings = getattr(webview, "settings", None)
+        if settings is not None and hasattr(settings, "__setitem__"):
+            settings["ALLOW_DOWNLOADS"] = True
+
+        bridge = _DesktopBridge(webview)
+        window = webview.create_window(
+            "TeXada Studio",
+            entry["url"],
+            width=1440,
+            height=900,
+            min_size=(1024, 640),
+            js_api=bridge,
+        )
+        bridge._attach(window)
+        shown_event = getattr(getattr(window, "events", None), "shown", None)
+        if shown_event is not None and sys.platform == "darwin":
+            try:
+                shown_event += lambda: _schedule_macos_edit_history_menu(window, bridge)
+            except Exception:
+                pass
+        _terminate_state["bridge"] = bridge
         _terminate_state["window_closer"] = lambda: _close_shown_windows(webview.windows)
         _terminate_state["shutdown"] = _cleanup
         _install_signal_pump()
         _install_terminate_watchdog(_terminate_state)
-        webview.start()
+        webview.start(
+            private_mode=False,
+            storage_path=str(storage_dir),
+            localization=_DESKTOP_LOCALIZATION,
+        )
         _cleanup()
         return 0
     finally:
         _close_terminate_watchdog(_terminate_state)
         _terminate_state["window_closer"] = None
         _terminate_state["shutdown"] = None
+        _terminate_state["bridge"] = None
+        _terminate_state["edit_menu_target"] = None
+        _terminate_state["terminating"] = False
 
 
 if __name__ == "__main__":
