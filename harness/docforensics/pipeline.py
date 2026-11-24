@@ -49,11 +49,21 @@ def load_provider(args):
     return FixtureProvider(args.fixture_repairs)
 
 
+def _subprocess_window_kwargs():
+    if os.name == "nt" or sys.platform == "win32":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        if flags:
+            return {"creationflags": flags}
+    return {}
+
+
 def run_verify(latex):
     if not isinstance(latex, str):
         return {"status": "NEEDS_HUMAN", "reason": "bad_input: latex must be a string"}
     try:
-        p = subprocess.run([sys.executable, VERIFY, latex], capture_output=True, text=True, timeout=30)
+        p = subprocess.run([sys.executable, VERIFY, latex],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=30, **_subprocess_window_kwargs())
         result = json.loads(p.stdout.strip().splitlines()[-1])
         expected_exits = {"OK": 0, "RETRY": 0, "NEEDS_HUMAN": 1, "NEEDS_ENV": 2}
         if not isinstance(result, dict) or result.get("status") not in expected_exits:
@@ -68,7 +78,8 @@ def run_verify(latex):
 def run_audit(rec):
     try:
         p = subprocess.run([sys.executable, AUDIT], input=json.dumps(rec),
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=30, **_subprocess_window_kwargs())
         result = json.loads(p.stdout.strip().splitlines()[-1])
         if not isinstance(result, dict) or result.get("status") not in ("OK", "RETRY", "NEEDS_HUMAN"):
             raise ValueError("invalid audit status")

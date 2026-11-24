@@ -44,6 +44,13 @@ def _ensure_bundle_sys_path(bundle_dir: Path) -> None:
 def _prepare_stdio_and_utf8() -> None:
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    if sys.stdin is None:
+        sys.stdin = open(os.devnull, "r", encoding="utf-8")
+    elif callable(getattr(sys.stdin, "reconfigure", None)):
+        try:
+            sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, AttributeError):
+            pass
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
     elif callable(getattr(sys.stdout, "reconfigure", None)):

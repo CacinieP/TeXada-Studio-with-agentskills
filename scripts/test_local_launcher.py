@@ -425,6 +425,41 @@ class LocalLauncherTest(unittest.TestCase):
         self.assertIn(r".venv\Scripts\python.exe", text)
         self.assertIn(r"scripts\run-local-studio.py", text)
 
+    def test_corrupt_saved_settings_falls_back_instead_of_deadlocking_startup(self):
+        (self.directory / "local-runtime.json").write_text("{corrupted-json", encoding="utf-8")
+        capture = io.StringIO()
+        with patch.object(launcher, "dependency_status", return_value=READY), \
+                contextlib.redirect_stdout(capture):
+            code = launcher.run(self.args("--check"))
+        self.assertEqual(code, 0)
+        self.assertIn("已损坏", capture.getvalue())
+        self.assertIn("设置页", capture.getvalue())
+
+        # Providing explicit CLI --base-url overrides corrupt config cleanly on startup.
+        observed = {}
+
+        class Server:
+            def __init__(self, _config):
+                pass
+
+            def run(self):
+                observed["base"] = os.environ["VLM_BASE_URL"]
+
+        module = SimpleNamespace(Config=lambda *_a, **kw: kw, Server=Server)
+        override_url = "http://127.0.0.1:18089/v1"
+        with patch.object(launcher, "dependency_status", return_value=READY), \
+                patch.object(launcher, "_listen_available", return_value=True), \
+                patch.object(launcher, "select_service", return_value=None), \
+                patch.dict(sys.modules, {"uvicorn": module}), \
+                patch.dict(os.environ, dict(os.environ), clear=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            rc = launcher.run(self.args("--base-url", override_url, "--model", "recovered-model"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(observed["base"], override_url)
+        repaired = json.loads((self.directory / "local-runtime.json").read_text(encoding="utf-8"))
+        self.assertEqual(repaired["base_url"], override_url)
+        self.assertEqual(repaired["model"], "recovered-model")
+
 
 if __name__ == "__main__":
     unittest.main()

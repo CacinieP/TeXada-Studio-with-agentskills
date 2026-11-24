@@ -505,12 +505,28 @@ def _subprocess_text(value) -> str:
     return value
 
 
+def _normalize_compile_path(value: str) -> str:
+    text = value.strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    if os.name == "nt" or _re.match(r"^[A-Za-z]:/", text):
+        text = text.lower()
+    return text
+
+
 def _source_compile_error(output: str, source: Path, line_count: int):
     """Return a location only when Tectonic names the compiled source file."""
-    source_paths = {source.name, "./" + source.name, str(source)}
-    for match in _re.finditer(r"^error:[ \t]*([^:\r\n]+):(\d{1,8}):[ \t]*([^\r\n]+)", output, _re.M):
+    raw_source = _normalize_compile_path(str(source))
+    basename = raw_source.rsplit("/", 1)[-1]
+    source_paths = {
+        _normalize_compile_path(source.name),
+        basename,
+        raw_source,
+        _normalize_compile_path(source.as_posix()),
+    }
+    for match in _re.finditer(r"^error:[ \t]*((?:[A-Za-z]:)?[^:\r\n]+):(\d{1,8}):[ \t]*([^\r\n]+)", output, _re.M):
         filename, line, message = match.groups()
-        if filename not in source_paths:
+        if _normalize_compile_path(filename) not in source_paths:
             continue
         number = int(line)
         if 1 <= number <= line_count:
@@ -554,7 +570,9 @@ def _studio_compile(content: str, name: str, tag: str):
             return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
-        output = _subprocess_text(run.stderr) or _subprocess_text(run.stdout)
+        stderr_text = _subprocess_text(run.stderr)
+        stdout_text = _subprocess_text(run.stdout)
+        output = "\n".join(part for part in (stderr_text, stdout_text) if part.strip()) or stderr_text or stdout_text
         log = output[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
             diagnostic = _source_compile_error(output, texf, content.count("\n") + 1)
@@ -623,7 +641,7 @@ def studio_pdf(name: str, tag: str, token: str = Query("")):
     p = str(_artifact_directory(name, tag) / "main.pdf")
     if not os.path.exists(p):
         raise HTTPException(status_code=404, detail="no pdf")
-    return FileResponse(p, media_type="application/pdf", filename=name.replace(".tex", f"-{tag}.pdf"))
+    return FileResponse(p, media_type="application/pdf", filename=name.removesuffix(".tex") + f"-{tag}.pdf")
 
 
 @app.get("/api/studio/preview/{name}/{tag}")
@@ -644,7 +662,8 @@ def _verify_formula(latex: str):
     """Verifier failures are environment problems, never a successful check."""
     try:
         result = subprocess.run([_sys.executable, VERIFY, latex],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                timeout=30, **_subprocess_window_kwargs())
         data = json.loads(result.stdout.strip().splitlines()[-1])
         expected_codes = {"OK": 0, "RETRY": 0, "NEEDS_HUMAN": 1, "NEEDS_ENV": 2}
         status = data.get("status")
@@ -776,7 +795,8 @@ def _verify_table_grid(rows, expected=None, *, node_id="t-studio"):
     rec = {"id": node_id, "rows": rows, "expected": expected or {}}
     try:
         proc = subprocess.run([_sys.executable, AUDIT_TABLE], input=json.dumps(rec),
-                              capture_output=True, text=True, timeout=30)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=30, **_subprocess_window_kwargs())
         result = json.loads(proc.stdout.strip().splitlines()[-1])
         status = result.get("status")
         if status not in ("OK", "RETRY", "NEEDS_HUMAN"):
@@ -2123,7 +2143,6 @@ def studio_analyze(token: str = Query(""), name: str = Query(""), body: dict = N
 def studio_fix(token: str = Query(""), body: dict = None):
     _guard(token)
     body = body or {}
-    name, content = body.get("name", ""), body.get("content", "")
     name, content = _document_body(body)
     planner_mode = body.get("planner_mode", False)
     if type(planner_mode) is not bool:

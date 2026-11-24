@@ -392,7 +392,21 @@ def run(args):
     ready = report_dependencies(status)
     state = (args.state_dir or default_state_dir()).expanduser().resolve()
     runtime = LocalRuntime(state)
-    config = runtime.get_config()
+    try:
+        config = runtime.get_config()
+    except LocalRuntimeError as exc:
+        if exc.code != "invalid_saved_settings":
+            raise
+        print(
+            "警告：本地模型配置 local-runtime.json 已损坏，已临时回退默认配置；打开 Studio 后可在设置页重新保存修复。",
+            flush=True,
+        )
+        config = {
+            "base_url": DEFAULT_BASE,
+            "model": DEFAULT_MODEL,
+            "source": "corrupt-fallback",
+            "error": exc.message,
+        }
     values = None
     if args.base_url or args.model:
         values = {"base_url": validate_base_url(args.base_url) if args.base_url else config["base_url"],
