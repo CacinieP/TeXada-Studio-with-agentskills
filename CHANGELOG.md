@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.2 — 2026-11-24
+
+### Fixed
+
+- **Desktop native exports, persistent preferences, unsaved-close guard, and macOS Edit Undo/Redo (#54, #81, #85)**: Enable `pywebview` download handling and expose a minimal `_DesktopBridge` (`save_file` with native save dialog and atomic overwrite; `set_edit_state` for unsaved-close protection and menu validation); persist WebView preferences in a private `0o700` `webview-storage` directory with Chinese desktop localization; inject macOS native `Edit → 撤销 (⌘Z)` / `重做 (⇧⌘Z)` menu items routing to `window.TeXadaStudioHistory` (distinguishing Monaco vs native inputs vs open modal dialogs) while preserving bounded `SIGTERM` exit (`returncode == 0`), cleaning up the POSIX wakeup pipe, and caching PyObjC helper classes.
+- **Complete offline TeX pre-warming and clean built-in templates/samples (#82, #86)**: Expand `scripts/prepare-local-tex.py` to pre-warm `ctexart`, `ctexbeamer`, `article` (`10pt`/`11pt`/`12pt`), `amsthm`, `geometry`, `amsmath`, `amssymb`, `graphicx`, `booktabs`, and 11pt/12pt scriptsize math fonts (`cmmi8`/`cmsy8`/`cmmi6`); switch `samples/docs/exam-01.tex` and `samples/docs/report-01.tex` to `\documentclass[UTF8,fontset=fandol]{ctexart}` so bundled offline TeX compiles them without missing system fonts; clean built-in templates (`lecture-notes`, `exam-paper`, `english-article`) so all 5 templates analyze with zero false-positive warnings; and expand macOS and Windows isolated CI smoke tests to compile all 5 built-in templates plus representative samples strictly offline (`--untrusted --only-cached`).
+- **Studio diagnostics, candidate compile feedback, model selector sync, and board diff (#83, #88)**: Label `cleanup` problems as `"文档清洗"` instead of `"表格合计"`; drive candidate compile status and report export from `compile_ok ?? ok` with neutral styling for `NOT_CHECKED`, PDF-only preview fallback when `pdftoppm` is absent, and explicit compile-error surfacing on candidate failure; synchronize the Settings managed-model selector (`#managedModel`) with the active running profile without overwriting manual selections; and fix the reversed `diffSpans` argument order in `webui/index.html` so the repaired-formula column displays repaired tokens instead of original tokens.
+- **Cross-platform runtime, Windows diagnostics, UTF-8 stdio, corrupt-config recovery, and CLI routing (#84, #87)**: Parse Windows drive-letter and relative TeX error locations in `_source_compile_error`, merge non-empty `stderr` + `stdout` in `_studio_compile`, strip `.tex` safely via `removesuffix(".tex")`, enforce UTF-8 decoding with `errors="replace"` and `CREATE_NO_WINDOW` across formula/table/harness checker subprocesses plus `sys.stdin` UTF-8 setup in `desktop/windows_entry.py`, recover cleanly from corrupt `local-runtime.json` in `scripts/run-local-studio.py`, and initialize `self.skill_root` in `LocalProvider`.
+
+### Changed
+
+- Bump desktop bundle metadata to `0.1.2` (macOS `CFBundleShortVersionString` `0.1.2`, build `7`; Windows `0.1.2.0`).
+
 ## 0.1.1 — 2026-11-22
 
 ### Added
