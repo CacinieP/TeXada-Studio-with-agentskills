@@ -260,8 +260,10 @@ function renderProblems(problems) {
   $("problems").innerHTML = problems.map(p => {
     const line = Number.isSafeInteger(p.line) && p.line > 0 ? p.line : null;
     const tag = line ? "button" : "div";
-    return `<${tag} class="prob ${p.type === "formula" ? "f" : "t"}"${line ? ` type="button" data-problem-line="${line}"` : ""}>
-      <span>${p.type === "formula" ? "公式" : "表格合计"}${line ? ` · L${line}` : ""}
+    const kindClass = p.type === "formula" ? "f" : p.type === "cleanup" ? "c" : "t";
+    const kindLabel = p.type === "formula" ? "公式" : p.type === "cleanup" ? "文档清洗" : "表格合计";
+    return `<${tag} class="prob ${kindClass}"${line ? ` type="button" data-problem-line="${line}"` : ""}>
+      <span>${kindLabel}${line ? ` · L${line}` : ""}
         ${p.status === "RETRY" ? "⚠ 可尝试修复" : p.status === "NEEDS_ENV" ? "检查器不可用" : "✗ 需人工"}</span>
       ${p.reason ? `<span class="prob-reason">${esc(p.reason)}</span>` : ""}
       ${p.latex ? `<span class="prob-source loc">${esc(p.latex.slice(0,100))}</span>` : ""}
@@ -413,7 +415,7 @@ $("pvZoomFit").onclick = () => { pvZoom = "fit"; setPreference("previewZoom",pvZ
 $("pvZoom100").onclick = () => { pvZoom = "raw"; setPreference("previewZoom",pvZoom); renderPreviewPage(); };
 function compileErrorSummary(log) {
   const lines = String(log || "").split(/\r?\n/).map(line => line.trim());
-  const diagnostic = lines.find(line => /^error:\s*main\.tex:\d+:/i.test(line))
+  const diagnostic = lines.find(line => /^error:\s*(?:[^\r\n]*[\\/])?main\.tex:\d+:/i.test(line))
     || lines.find(line => /^error:\s*!|^!\s/.test(line));
   return diagnostic?.replace(/^error:\s*!?\s*|^!\s*/i,"").slice(0,240) || "";
 }
@@ -524,6 +526,17 @@ function lineStyle(l) {
   return esc(l);
 }
 
+function compileOutcomeOk(outcome) {
+  return !!(outcome && (outcome.compile_ok ?? outcome.ok));
+}
+function compileOutcomeHtml(label, outcome) {
+  if (!outcome || outcome.status === "NOT_CHECKED") {
+    return `${label} <span style="color:var(--dim)">未检查</span>`;
+  }
+  const ok = compileOutcomeOk(outcome);
+  return `${label} <span style="color:${ok ? "var(--ok)" : "var(--err)"}">${ok ? "✓ 通过" : "✗ 失败"}</span>`;
+}
+
 async function applyResult(res, source = null) {
   source = source || await captureSource();
   await validateCandidate(res, source);
@@ -577,22 +590,42 @@ async function applyResult(res, source = null) {
   showCenter("diff");toggleAgentDrawer(true,$('btnAgent'));
   renderProblems(res.problems_after);
   $("compile").innerHTML =
-    `修复前编译 <span style="color:${res.compile_before.ok ? "var(--ok)" : "var(--err)"}">${res.compile_before.status === "NOT_CHECKED" ? "未检查" : res.compile_before.ok ? "✓ 通过" : "✗ 失败"}</span>\n` +
-    `修复后编译 <span style="color:${res.compile_after.ok ? "var(--ok)" : "var(--err)"}">${res.compile_after.status === "NOT_CHECKED" ? "未检查" : res.compile_after.ok ? "✓ 通过" : "✗ 失败"}</span>`;
-  if (res.compile_after.png) {
+    compileOutcomeHtml("修复前编译", res.compile_before) + "\n" +
+    compileOutcomeHtml("修复后编译", res.compile_after);
+  const afterOutcome = res.compile_after;
+  const afterChecked = !!afterOutcome && afterOutcome.status !== "NOT_CHECKED";
+  const afterOk = compileOutcomeOk(afterOutcome);
+  if (afterOutcome?.png) {
     $("preview").className = "";
     const img = document.createElement("img");
     img.alt = "修复候选 PDF 预览";
-    img.src = authUrl(res.compile_after.png);
+    img.src = authUrl(afterOutcome.png);
     $("preview").replaceChildren(img);
-  }
-  if (res.compile_after.png) {
-    const png = res.compile_after.png;
-    lastPreviewTag = res.compile_after.tag || png.split("/").pop().split("?")[0];
-    previewBinding = {name:curName, content:res.fixed_content, pdf:res.compile_after.pdf};
-    previewPages = (res.compile_after.pages || [png]).map(page => typeof page === "string" ? page : page.url || page.png).filter(Boolean); previewPage = 0;
+    const png = afterOutcome.png;
+    lastPreviewTag = afterOutcome.tag || png.split("/").pop().split("?")[0];
+    previewBinding = {name:curName, content:res.fixed_content, pdf:afterOutcome.pdf};
+    previewPages = (afterOutcome.pages || [png]).map(page => typeof page === "string" ? page : page.url || page.png).filter(Boolean); previewPage = 0;
     $("pvStatus").textContent = "候选编译完成 · 尚未采用";
     renderPreviewPage(); setPdfAvailable(true);
+  } else if (afterOk) {
+    $("preview").className = "hint";
+    $("preview").textContent = "候选 PDF 已生成，页面预览不可用。";
+    lastPreviewTag = afterOutcome.tag || null;
+    previewBinding = {name:curName, content:res.fixed_content, pdf:afterOutcome.pdf};
+    previewPages = []; previewPage = 0;
+    $("pvStatus").textContent = "候选 PDF 已生成 · 尚未采用（页面预览不可用）";
+    $("pvTabStatus").textContent = "✓ 编译完成";
+    $("pvImgWrap").innerHTML = '<div class="preview-empty"><p>候选 PDF 已生成，页面预览不可用。</p></div>';
+    if (afterOutcome.log) { $("pvLog").textContent = afterOutcome.log; $("pvLog").classList.remove("hide"); }
+    setPdfAvailable(!!(lastPreviewTag || afterOutcome.pdf));
+  } else if (afterChecked) {
+    $("preview").className = "hint";
+    $("preview").textContent = "候选编译未通过，请查看编译诊断后再决定。";
+    showCompileFailure(afterOutcome, res.fixed_content);
+  } else {
+    $("preview").className = "hint";
+    $("preview").textContent = "候选尚未编译检查。";
+    invalidatePreview("候选已生成，请核对差异。");
   }
 }
 
@@ -770,8 +803,8 @@ $("btnReport").onclick = () => {
     `模型选 Skill：${r.skill_selection ? "开启" : "关闭"}；选择拒绝：${r.planner?.selection_rejections ?? 0}`,
     `原文 SHA256：${r.original_sha256}`, `候选 SHA256：${r.candidate_sha256}`,
     "", "语法通过不代表数学含义正确。本报告记录修复候选，需人工核对。",
-    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.status === "NOT_CHECKED" ? "未检查" : r.compile_before.ok ? "通过" : "失败"}`,
-    `候选编译：${r.compile_after.status === "NOT_CHECKED" ? "未检查" : r.compile_after.ok ? "通过" : "失败"}`,
+    `范围：${r.scope}`, "", `修复前编译：${r.compile_before.status === "NOT_CHECKED" ? "未检查" : compileOutcomeOk(r.compile_before) ? "通过" : "失败"}`,
+    `候选编译：${r.compile_after.status === "NOT_CHECKED" ? "未检查" : compileOutcomeOk(r.compile_after) ? "通过" : "失败"}`,
     `修改数：${(r.edits || []).length}；剩余问题：${r.problems_after.length}`, "", "## 修改记录", ""];
   for (const e of (r.edits || [])) report.push(`L${e.line} · ${e.skill}`, "", "原文：", "~~~~latex", e.before, "~~~~", "候选：", "~~~~latex", e.after, "~~~~", "");
   for (const p of r.problems_after) report.push(`待处理 L${p.line}：${p.reason || p.status}`);
@@ -916,6 +949,7 @@ async function loadConfig(probe=false) {
 }
 function openModelSettings() {
   modelDraftEdited=false;
+  managedModelUserSelected=false;
   if (studioConfig) displayConfig(studioConfig);
   openDialog("settingsDialog");
   loadConfig().catch(warn);
@@ -951,7 +985,24 @@ $("btnTestModel").onclick = async () => {
   finally { $("btnTestModel").disabled=false; }
 };
 let managedModelStatus = null, managedModelTimer = null, managedModelRequest = 0;
-let managedModelSubmitting = false;
+let managedModelSubmitting = false, managedModelUserSelected = false;
+function syncManagedModelSelection(status) {
+  const profiles = status?.profiles;
+  if (!Array.isArray(profiles) || !profiles.length) return;
+  const runningProfile = status.job?.state === "running"
+    ? profiles.find(item => item.id === status.job.profile)
+    : null;
+  if (runningProfile) {
+    $("managedModel").value = runningProfile.id;
+    return;
+  }
+  if (managedModelUserSelected) return;
+  const preferred =
+    (status.active?.model && profiles.find(item => item.model === status.active.model)) ||
+    (status.job?.profile && status.job.state && profiles.find(item => item.id === status.job.profile)) ||
+    (studioConfig?.model && profiles.find(item => item.model === studioConfig.model));
+  if (preferred) $("managedModel").value = preferred.id;
+}
 function renderManagedModels() {
   if (!managedModelStatus) return;
   const {profiles, active, job, runtime_available: runtime} = managedModelStatus;
@@ -991,6 +1042,7 @@ async function refreshManagedModels() {
   const status = await j("/api/studio/models?token=" + encodeURIComponent(T));
   if (request !== managedModelRequest || !Array.isArray(status.profiles) || !status.profiles.length) return;
   managedModelStatus = status;
+  syncManagedModelSelection(status);
   renderManagedModels();
   scheduleManagedModelRefresh();
   if (previous?.action === "start" && previous.state === "running" && status.job?.state !== "running") {
@@ -1017,7 +1069,7 @@ async function managedModelAction(action) {
     if (failure) showManagedModelError(failure);
   }
 }
-$("managedModel").addEventListener("change",renderManagedModels);
+$("managedModel").addEventListener("change", () => { managedModelUserSelected = true; renderManagedModels(); });
 $("btnDownloadModel").onclick = () => managedModelAction("download");
 $("btnStartModel").onclick = () => managedModelAction("start");
 $("btnStopModel").onclick = () => managedModelAction("stop");

@@ -167,7 +167,7 @@ function render(d) {
         <div class="pane">
           <div class="pane-head"><span>修复后 · repaired.tex</span><span class="pill pass" id="pr-${esc(e.node_id)}">编译检查中…</span></div>
           <div class="pane-body">
-            <div class="codeline"><span class="gutter">1</span><span>${diffSpans(a, b, "add")}</span></div>
+            <div class="codeline"><span class="gutter">1</span><span>${diffSpans(b, a, "add")}</span></div>
             <div class="mathbox good" id="mr-${esc(e.node_id)}"></div>
           </div>
         </div>

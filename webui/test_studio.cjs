@@ -1339,5 +1339,94 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     }
   }
 
+  // Issue #83: cleanup problem label, compile_ok candidate status/report/failure handling, managed model sync, and index.html repaired diff.
+  {
+    run("renderProblems([{type:'formula',status:'RETRY',line:2,latex:'x+'},{type:'cleanup',status:'RETRY',line:4,reason:'zero_width_noise'},{type:'table_total',status:'RETRY',line:9,reason:'sum mismatch'}])");
+    const probHtml = get('problems').innerHTML;
+    assert.match(probHtml, /class="prob f"[^>]*>[\s\S]*公式 · L2/);
+    assert.match(probHtml, /class="prob c"[^>]*>[\s\S]*文档清洗 · L4/);
+    assert.match(probHtml, /class="prob t"[^>]*>[\s\S]*表格合计 · L9/);
+    assert.doesNotMatch(probHtml, /表格合计 · L4/);
+
+    context.testEditor.setValue('orig line 1\norig line 2\n');
+    run("curName='diag.tex';showCenter('edit');");
+    context.pdfOnlyCandidate = {
+      requires_review: true,
+      fixed_content: 'fixed line 1\nfixed line 2\n',
+      original_sha256: hash('orig line 1\norig line 2\n'),
+      candidate_sha256: hash('fixed line 1\nfixed line 2\n'),
+      problems_after: [],
+      compile_before: { status: 'NOT_CHECKED', ok: false },
+      compile_after: { ok: false, compile_ok: true, preview_ok: false, png: null, pdf: '/api/studio/pdf/diag.tex/after-pdf', tag: 'after-pdf', log: 'pdftoppm missing' },
+    };
+    await run('applyResult(pdfOnlyCandidate)');
+    assert.match(get('compile').innerHTML, /color:var\(--dim\)">未检查/);
+    assert.match(get('compile').innerHTML, /修复后编译.*color:var\(--ok\)">✓ 通过/);
+    assert.equal(get('btnPdf').disabled, false, 'PDF-only compile_ok candidate must enable PDF export');
+    let reportCaptured = null;
+    const savedDownload = run('download');
+    context.captureReport = (name, blob) => { reportCaptured = { name, blob }; };
+    run('download = captureReport; $("btnReport").onclick();');
+    context._savedDownload = savedDownload;
+    run('download = _savedDownload;');
+    delete context._savedDownload;
+    const reportText = await reportCaptured.blob.text();
+    assert.match(reportText, /候选编译：通过/);
+
+    context.failedCandidate = {
+      requires_review: true,
+      fixed_content: 'bad fixed line 1\nbad fixed line 2\n',
+      original_sha256: hash('orig line 1\norig line 2\n'),
+      candidate_sha256: hash('bad fixed line 1\nbad fixed line 2\n'),
+      problems_after: [],
+      compile_before: { ok: true, compile_ok: true },
+      compile_after: { ok: false, compile_ok: false, png: null, log: 'error: C:\\work\\main.tex:2: Undefined control sequence.' },
+    };
+    await run('applyResult(failedCandidate)');
+    assert.match(get('compile').innerHTML, /修复后编译.*color:var\(--err\)">✗ 失败/);
+    assert.match(get('pvStatus').textContent, /Undefined control sequence/);
+    assert.match(get('pvLog').textContent, /Undefined control sequence/);
+    assert.equal(get('btnPdf').disabled, true);
+    assert.match(get('preview').textContent, /候选编译未通过/);
+
+    // Managed model selector syncs to active/running 35b profile on open.
+    const prevJ = run('j');
+    try {
+      get('managedModel').value = '1b';
+      context.models35bWire = async (url) => {
+        if (String(url).startsWith('/api/studio/models')) {
+          return {
+            runtime_available: true,
+            active: { base_url: 'http://127.0.0.1:18081/v1', model: 'minicpm-v4.7-35b-a3b-q4' },
+            job: { profile: '35b', action: 'download', state: 'done', bytes: 1, total: 1 },
+            profiles: [
+              { id: '1b', name: '1B', model: 'minicpm-v4.7-1b-q4_k_m', size: 1e9, downloaded: false },
+              { id: '35b', name: '35B', model: 'minicpm-v4.7-35b-a3b-q4', size: 22e9, downloaded: true },
+            ],
+          };
+        }
+        return { local_mode: true, model: 'minicpm-v4.7-35b-a3b-q4', base_url: 'http://127.0.0.1:18081/v1', tools: {} };
+      };
+      run('j = models35bWire; managedModelUserSelected = false;');
+      await run('refreshManagedModels()');
+      assert.equal(get('managedModel').value, '35b', 'active 35b profile must be selected automatically');
+      assert.match(get('managedModelHint').textContent, /SHA-256 校验通过/);
+    } finally {
+      context._prevJ = prevJ;
+      run('j = _prevJ');
+      delete context._prevJ;
+    }
+
+    // index.html repaired pane renders the repaired formula `b`, not the original `a`.
+    indexCtx.repairedStatus = {
+      running: false, report_ready: false, log_tail: [],
+      docs: { 'd.tex': { nodes: { 'f1': { node_id: 'f1', status: 'OK', repaired: true, original: 'x+1', latex: 'x+2', provider: 'test', attempts: 1 } } } },
+    };
+    vm.runInContext('render(repairedStatus)', indexCtx);
+    const repairsHtml = indexNodes.get('repairs').innerHTML;
+    assert.match(repairsHtml, /<span class="del">1<\/span>/);
+    assert.match(repairsHtml, /<span class="add">2<\/span>/);
+  }
+
   console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));
