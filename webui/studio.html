@@ -303,6 +303,7 @@ function showCenter(mode) {
   if (!$("btnDiff").disabled) $("btnDiff").textContent = mode === "diff" ? "返回编辑器" : "查看修复对比";
   if (previewBinding && previewBinding.content !== currentContent()) invalidatePreview("已切换文档版本，请重新编译此版本。");
   if (editor) editor.layout(); if (diffEditor) diffEditor.layout();
+  syncDesktopEditState();
   scheduleEditorContext();
 }
 $("btnDiff").onclick = () => showCenter(diffShown ? "edit" : "diff");
@@ -318,10 +319,46 @@ function currentContent() {
   return diffShown && modModel ? modModel.getValue() : editor.getValue();
 }
 
-function download(name, blob) {
+function blobToBase64(blob) {
+  if (typeof blob?.arrayBuffer === "function") {
+    return blob.arrayBuffer().then(buffer => {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(binary);
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",", 2)[1] || "");
+    reader.onerror = () => reject(new Error("读取导出内容失败。"));
+    reader.readAsDataURL(blob);
+  });
+}
+function browserDownload(name, blob) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  URL.revokeObjectURL(a.href);
+  const href = URL.createObjectURL(blob);
+  a.href = href; a.download = name;
+  if (a.style) a.style.display = "none";
+  if (document.body?.appendChild) document.body.appendChild(a);
+  a.click();
+  if (typeof a.remove === "function") a.remove();
+  else if (a.parentElement?.removeChild) a.parentElement.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(href), 60000);
+}
+function download(name, blob) {
+  const saveFile = window.pywebview?.api?.save_file;
+  if (typeof saveFile === "function") {
+    return blobToBase64(blob)
+      .then(data => saveFile(name, data))
+      .then(result => {
+        if (result?.saved) toast(`已导出「${result.name || name}」。`);
+      })
+      .catch(warn);
+  }
+  browserDownload(name, blob);
 }
 
 $("btnExport").onclick = () => {
@@ -1341,19 +1378,65 @@ function runEditorAction(id){
   if(isNarrowWorkspace()&&agentDrawerOpen)toggleAgentDrawer(false,null,false);
   target.focus();const action=target.getAction?.(id);if(action)return action.run();toast('编辑器尚未就绪，请稍后再试。',true);
 }
+function isNativeEditableTarget(el = document.activeElement) {
+  if (!el) return false;
+  const inMainEditor = !!$("editor")?.contains?.(el) &&
+    !!el.classList?.contains?.("inputarea") &&
+    !el.closest?.(".find-widget");
+  if (inMainEditor) return false;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || !!el.isContentEditable;
+}
+let lastDesktopEditState = null;
+function syncDesktopEditState(force = false) {
+  const push = window.pywebview?.api?.set_edit_state;
+  if (typeof push !== "function") return;
+  const model = editor?.getModel();
+  const available = !!curName && !busy && !loadingDocument && !diffShown;
+  const dirty = isDirty();
+  const canUndo = available && !!model?.canUndo();
+  const canRedo = available && !!model?.canRedo();
+  const nativeEditable = isNativeEditableTarget();
+  const key = `${dirty}|${canUndo}|${canRedo}|${nativeEditable}`;
+  if (!force && key === lastDesktopEditState) return;
+  lastDesktopEditState = key;
+  Promise.resolve(push(dirty, canUndo, canRedo, nativeEditable)).catch(() => {});
+}
 function updateHistoryControls() {
   const model = editor?.getModel();
   const available = !!curName && !busy && !loadingDocument;
   $("btnUndo").disabled = !available || !model?.canUndo();
   $("btnRedo").disabled = !available || !model?.canRedo();
+  syncDesktopEditState();
 }
 function runHistoryAction(direction) {
   updateHistoryControls();
   if ($(direction === "undo" ? "btnUndo" : "btnRedo").disabled) return;
   showCenter("edit");
   editor.focus();
-  return editor.getModel()[direction]();
+  const result = editor.getModel()[direction]();
+  updateSaveState();
+  return result;
 }
+function triggerNativeHistory(direction) {
+  if (direction !== "undo" && direction !== "redo") return false;
+  const openModal = document.querySelector?.("dialog[open]");
+  const nativeEditable = isNativeEditableTarget();
+  if (openModal || nativeEditable) {
+    if (nativeEditable && typeof document.execCommand === "function") {
+      return !!document.execCommand(direction);
+    }
+    return false;
+  }
+  if (!editor?.getModel() || diffShown) return false;
+  updateHistoryControls();
+  if ($(direction === "undo" ? "btnUndo" : "btnRedo").disabled) return false;
+  runHistoryAction(direction);
+  return true;
+}
+window.TeXadaStudioHistory = triggerNativeHistory;
+window.addEventListener("pywebviewready", () => syncDesktopEditState(true));
+document.addEventListener("focusin", () => syncDesktopEditState());
+document.addEventListener("focusout", () => syncDesktopEditState());
 $("btnUndo").onclick = () => runHistoryAction("undo");
 $("btnRedo").onclick = () => runHistoryAction("redo");
 $('btnFind').onclick=()=>runEditorAction('actions.find');$('btnReplace').onclick=()=>runEditorAction('editor.action.startFindReplaceAction');

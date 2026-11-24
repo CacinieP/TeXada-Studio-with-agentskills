@@ -1694,5 +1694,289 @@ class WindowsBundleBuilderTests(unittest.TestCase):
                 sys.argv[:] = saved_argv
 
 
+class DesktopExportPersistenceAndMenuTests(unittest.TestCase):
+    """Issue #81 & #54: 桌面版导出桥接、持久化存储、未保存关窗保护、macOS 原生撤销/重做与 POSIX 管道回收。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = Path(self.tmp.name) / "state"
+        self.state.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_desktop_bridge_save_file_writes_atomically_overwrites_and_rejects_unsafe_inputs(self):
+        import base64
+        import types
+
+        target = Path(self.tmp.name) / "exported.tex"
+        target.write_text("stale content", encoding="utf-8")
+
+        fake_window = types.SimpleNamespace(
+            confirm_close=False,
+            get_current_url=lambda: "http://127.0.0.1:8888/studio?token=abc",
+            create_file_dialog=unittest.mock.MagicMock(return_value=str(target)),
+        )
+        fake_webview = types.SimpleNamespace(FileDialog=types.SimpleNamespace(SAVE=30))
+        bridge = desktop_app._DesktopBridge(fake_webview)
+        bridge._attach(fake_window)
+
+        public_attrs = [name for name in dir(bridge) if not name.startswith("_")]
+        self.assertEqual(sorted(public_attrs), ["save_file", "set_edit_state"],
+                         "js_api 仅可暴露 save_file 与 set_edit_state，不得泄露内部窗口对象")
+
+        payload = "\\documentclass{article}\n\\begin{document}你好\\end{document}\n".encode("utf-8")
+        res = bridge.save_file("paper.tex", base64.b64encode(payload).decode("ascii"))
+        self.assertEqual(res, {"saved": True, "cancelled": False, "name": "exported.tex"})
+        self.assertEqual(target.read_bytes(), payload)
+        fake_window.create_file_dialog.assert_called_once_with(30, save_filename="paper.tex")
+
+        # 用户取消保存返回 cancelled=True 且不写盘
+        fake_window.create_file_dialog.return_value = None
+        cancelled = bridge.save_file("paper.pdf", base64.b64encode(b"%PDF-1.4").decode("ascii"))
+        self.assertEqual(cancelled, {"saved": False, "cancelled": True})
+
+        # 非法路径、非法后缀、非法 base64 与非回环来源必须拒绝
+        for bad_name in ("../evil.tex", "a/b.tex", "a\\b.tex", "script.sh", ""):
+            with self.subTest(bad_name=bad_name), self.assertRaises(ValueError):
+                bridge.save_file(bad_name, base64.b64encode(b"x").decode("ascii"))
+        with self.assertRaises(ValueError):
+            bridge.save_file("ok.md", "not-valid-base64!!!")
+        fake_window.get_current_url = lambda: "https://example.com/studio"
+        with self.assertRaises(RuntimeError):
+            bridge.save_file("ok.tex", base64.b64encode(b"x").decode("ascii"))
+
+    def test_desktop_bridge_syncs_confirm_close_and_sigterm_clears_it(self):
+        import types
+
+        shown = threading.Event()
+        shown.set()
+        fake_window = types.SimpleNamespace(
+            confirm_close=False,
+            events=types.SimpleNamespace(shown=shown),
+            destroy=unittest.mock.MagicMock(),
+        )
+        bridge = desktop_app._DesktopBridge()
+        bridge._attach(fake_window)
+        bridge.set_edit_state(dirty=True, can_undo=True, can_redo=False)
+        self.assertTrue(fake_window.confirm_close)
+        self.assertTrue(bridge._history_enabled("undo"))
+        self.assertFalse(bridge._history_enabled("redo"))
+
+        # SIGTERM 路径必须清除 confirm_close 并立即销毁窗口（保持 #50 有界退出）
+        state = {
+            "bridge": bridge,
+            "window_closer": lambda: desktop_app._close_shown_windows([fake_window]),
+            "shutdown": lambda: None,
+        }
+        desktop_app._terminate_action(signal.SIGTERM, state, exiter=lambda _c: None)
+        self.assertFalse(fake_window.confirm_close)
+        fake_window.destroy.assert_called_once()
+        # 终止中不可被异步 JS 回调重新开启 confirm_close
+        bridge.set_edit_state(dirty=True, can_undo=True, can_redo=True)
+        self.assertFalse(fake_window.confirm_close)
+
+    def test_main_enables_downloads_persistent_storage_and_bridge(self):
+        from collections.abc import MutableMapping
+        import types
+
+        class MutableSettings(MutableMapping):
+            def __init__(self, data):
+                self._data = dict(data)
+            def __getitem__(self, key): return self._data[key]
+            def __setitem__(self, key, value): self._data[key] = value
+            def __delitem__(self, key): del self._data[key]
+            def __iter__(self): return iter(self._data)
+            def __len__(self): return len(self._data)
+
+        fake_settings = MutableSettings({"ALLOW_DOWNLOADS": False})
+        fake_window = types.SimpleNamespace(
+            confirm_close=False,
+            events=types.SimpleNamespace(shown=types.SimpleNamespace()),
+        )
+        fake_webview = types.SimpleNamespace(
+            settings=fake_settings,
+            windows=[],
+            create_window=unittest.mock.MagicMock(return_value=fake_window),
+            start=unittest.mock.MagicMock(),
+        )
+        fake_child = unittest.mock.MagicMock()
+        fake_child.poll.return_value = 0
+        with unittest.mock.patch.object(desktop_app, "BUNDLE_DIR", None), \
+             unittest.mock.patch.object(desktop_app.subprocess, "Popen", return_value=fake_child), \
+             unittest.mock.patch.object(desktop_app, "wait_for_entry", return_value={
+                 "url": "http://127.0.0.1:8888/studio?token=persist-tok",
+                 "pid": 22222,
+                 "running": True,
+             }), \
+             unittest.mock.patch.dict(sys.modules, {"webview": fake_webview}):
+            code = desktop_app.main(["--port", "8888", "--state-dir", str(self.state), "--timeout", "1.0"])
+
+        self.assertEqual(code, 0)
+        self.assertTrue(fake_settings["ALLOW_DOWNLOADS"], "必须开启 ALLOW_DOWNLOADS（兼容 ImmutableDict）")
+        create_kwargs = fake_webview.create_window.call_args.kwargs
+        self.assertIsInstance(create_kwargs.get("js_api"), desktop_app._DesktopBridge)
+        start_kwargs = fake_webview.start.call_args.kwargs
+        self.assertIs(start_kwargs.get("private_mode"), False)
+        expected_storage = self.state / "webview-storage"
+        self.assertEqual(start_kwargs.get("storage_path"), str(expected_storage))
+        self.assertTrue(expected_storage.is_dir())
+        self.assertIn("global.quitConfirmation", start_kwargs.get("localization", {}))
+
+        # 符号链接 webview-storage 必须拒绝
+        if os.name == "posix":
+            sym_state = Path(self.tmp.name) / "sym-state"
+            sym_state.mkdir()
+            (sym_state / "webview-storage").symlink_to(self.tmp.name)
+            with self.assertRaises(RuntimeError):
+                desktop_app._prepare_webview_storage(sym_state)
+
+    def test_macos_edit_history_menu_injects_undo_redo_and_validates_state(self):
+        class FakeMenuItem:
+            def __init__(self, title="", action="", key="", separator=False):
+                self._title = title
+                self._action = action
+                self._key = key
+                self._mask = 0
+                self._target = None
+                self._submenu = None
+                self._separator = separator
+
+            @classmethod
+            def alloc(cls):
+                return cls()
+
+            def initWithTitle_action_keyEquivalent_(self, title, action, key):
+                self._title, self._action, self._key = title, action, key
+                return self
+
+            @classmethod
+            def separatorItem(cls):
+                return cls(separator=True)
+
+            def setTarget_(self, target): self._target = target
+            def setKeyEquivalentModifierMask_(self, mask): self._mask = mask
+            def setSubmenu_(self, sub): self._submenu = sub
+            def submenu(self): return self._submenu
+            def action(self): return self._action
+            def title(self): return self._title
+
+        class FakeMenu:
+            def __init__(self, title=""):
+                self._title = title
+                self._items = []
+            def title(self): return self._title
+            def itemArray(self): return list(self._items)
+            def addItem_(self, item): self._items.append(item)
+            def insertItem_atIndex_(self, item, idx): self._items.insert(idx, item)
+
+        class FakeAppKit:
+            NSObject = object
+            NSMenuItem = FakeMenuItem
+            NSEventModifierFlagCommand = 1 << 20
+            NSEventModifierFlagShift = 1 << 17
+
+        edit_sub = FakeMenu("Edit")
+        edit_sub.addItem_(FakeMenuItem("Copy", "copy:", "c"))
+        edit_top = FakeMenuItem("Edit")
+        edit_top.setSubmenu_(edit_sub)
+        main_menu = FakeMenu("Main")
+        main_menu.addItem_(edit_top)
+        fake_app = unittest.mock.MagicMock()
+        fake_app.mainMenu.return_value = main_menu
+
+        bridge = desktop_app._DesktopBridge()
+        dispatched = []
+        ok1 = desktop_app._install_macos_edit_history_menu(
+            object(), bridge, app=fake_app, appkit=FakeAppKit, dispatcher=lambda _w, d: dispatched.append(d)
+        )
+        ok2 = desktop_app._install_macos_edit_history_menu(
+            object(), bridge, app=fake_app, appkit=FakeAppKit, dispatcher=lambda _w, d: dispatched.append(d)
+        )
+        self.assertTrue(ok1 and ok2)
+        items = edit_sub.itemArray()
+        self.assertEqual(len(items), 4, "重复安装必须幂等")
+        undo_item, redo_item, sep_item, copy_item = items
+        self.assertEqual((undo_item._action, undo_item._key), ("texadaUndo:", "z"))
+        self.assertEqual(undo_item._mask, FakeAppKit.NSEventModifierFlagCommand)
+        self.assertEqual((redo_item._action, redo_item._key), ("texadaRedo:", "Z"))
+        self.assertEqual(redo_item._mask, FakeAppKit.NSEventModifierFlagCommand | FakeAppKit.NSEventModifierFlagShift)
+        self.assertTrue(sep_item._separator)
+        self.assertEqual(copy_item._action, "copy:")
+
+        target = undo_item._target
+        self.assertFalse(target.validateMenuItem_(undo_item))
+        self.assertFalse(target.validateMenuItem_(redo_item))
+        bridge.set_edit_state(dirty=True, can_undo=True, can_redo=False)
+        self.assertTrue(target.validateMenuItem_(undo_item))
+        self.assertFalse(target.validateMenuItem_(redo_item))
+        bridge.set_edit_state(dirty=False, can_undo=False, can_redo=False, native_editable=True)
+        self.assertTrue(target.validateMenuItem_(undo_item))
+        self.assertTrue(target.validateMenuItem_(redo_item))
+        target.texadaUndo_(undo_item)
+        target.texadaRedo_(redo_item)
+        self.assertEqual(dispatched, ["undo", "redo"])
+
+    @unittest.skipUnless(sys.platform == "darwin", "真实 AppKit 菜单校验仅在 macOS 上运行")
+    def test_macos_real_appkit_edit_menu_validates_and_dispatches_cmd_z_and_shift_cmd_z(self):
+        try:
+            import AppKit
+        except ImportError:
+            self.skipTest("未安装 PyObjC AppKit")
+        AppKit.NSApplication.sharedApplication()
+        main_menu = AppKit.NSMenu.alloc().init()
+        edit_top = AppKit.NSMenuItem.alloc().init()
+        edit_sub = AppKit.NSMenu.alloc().initWithTitle_("编辑")
+        edit_sub.addItemWithTitle_action_keyEquivalent_("拷贝", "copy:", "c")
+        edit_top.setSubmenu_(edit_sub)
+        main_menu.addItem_(edit_top)
+
+        class _FakeApp:
+            def mainMenu(self):
+                return main_menu
+
+        bridge = desktop_app._DesktopBridge()
+        called = []
+        self.assertTrue(
+            desktop_app._install_macos_edit_history_menu(
+                object(), bridge, app=_FakeApp(), dispatcher=lambda _w, d: called.append(d)
+            )
+        )
+        items = list(edit_sub.itemArray())
+        edit_sub.update()
+        self.assertFalse(items[0].isEnabled())
+        self.assertFalse(items[1].isEnabled())
+
+        bridge.set_edit_state(dirty=True, can_undo=True, can_redo=True)
+        edit_sub.update()
+        self.assertTrue(items[0].isEnabled())
+        self.assertTrue(items[1].isEnabled())
+
+        ev_undo = AppKit.NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode_(
+            AppKit.NSEventTypeKeyDown, (0, 0), AppKit.NSEventModifierFlagCommand, 0.0, 0, None, "z", "z", False, 6
+        )
+        ev_redo = AppKit.NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode_(
+            AppKit.NSEventTypeKeyDown, (0, 0),
+            AppKit.NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift,
+            0.0, 0, None, "Z", "Z", False, 6
+        )
+        self.assertTrue(main_menu.performKeyEquivalent_(ev_undo))
+        self.assertTrue(main_menu.performKeyEquivalent_(ev_redo))
+        self.assertEqual(called, ["undo", "redo"])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX 管道回收仅在 POSIX 运行")
+    def test_posix_terminate_watchdog_stores_and_closes_wakeup_pipe(self):
+        state = {}
+        installed = desktop_app._install_terminate_watchdog(state, deadline=0.1, os_name="posix")
+        self.assertTrue(installed)
+        self.assertIn("wakeup_pipe", state)
+        read_fd, write_fd = state["wakeup_pipe"]
+        desktop_app._close_terminate_watchdog(state)
+        self.assertNotIn("wakeup_pipe", state)
+        for fd in (read_fd, write_fd):
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+
+
 if __name__ == "__main__":
     unittest.main()
