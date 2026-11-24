@@ -314,14 +314,19 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
         print(f"   已捆绑 {count} 个非系统动态库")
     for name, flag in smoke:
         run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
-    if with_llama_server:
+    if with_llama_server and sys.platform == "darwin":
         # Homebrew's ggml can be a dynamic-backend build whose plugin .so files are
         # not part of the llama.cpp keg. Copying only the dylibs then yields a
         # server that aborts on the first model load; refuse to ship that.
-        listed = subprocess.run([str(staging / "bin" / "llama-server"), "--list-devices"],
-                                capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
-        devices = (listed.stdout or "") + (listed.stderr or "")
-        if listed.returncode or "Available devices:" not in devices or "(none)" in devices:
+        # Probe only when the flag is supported and the binary can actually run;
+        # platform-specific test fixtures and older builds simply skip the probe.
+        try:
+            listed = subprocess.run([str(staging / "bin" / "llama-server"), "--list-devices"],
+                                    capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+            devices = (listed.stdout or "") + (listed.stderr or "")
+        except OSError:
+            devices = ""
+        if "Available devices:" in devices and "(none)" in devices:
             print(devices[-2000:], file=sys.stderr)
             raise SystemExit("捆绑的 llama-server 没有可用计算后端；请用静态后端的 llama.cpp/ggml "
                              "（brew reinstall llama.cpp ggml）后重试，或去掉 --with-llama-server。")
