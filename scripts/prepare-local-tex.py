@@ -73,13 +73,22 @@ For all real numbers $a$ and $b$,
 \begin{proof}
 Expand the left-hand side and collect terms.
 \end{proof}
+Subscripts, limits, integrals, and nested script styles in 11pt:
+$\displaystyle f(x)=\left(\frac{x^2-1}{x-1}\right)$,
+$\displaystyle \int_{0}^{1} x^2\,dx=\frac{1}{3}$,
+$\displaystyle \lim_{x\to 0}\frac{\sin x}{x}=1$,
+$a_{n+1}=q a_n$, $x^{a_{b_c}}$,
+$\scriptstyle \frac{x_1+y_2}{z^2}$, $\scriptscriptstyle \frac{x_1+y_2}{z^2}$.
 \end{document}
 """
 
 LATIN_12PT_SAMPLE = r"""\documentclass[12pt]{article}
 \usepackage{amsmath,amssymb}
 \begin{document}
-Twelve-point article cache verification: $E = mc^2$.
+Twelve-point article cache verification:
+$E = mc^2$, $\int_{0}^{1} x^2\,dx = \frac{1}{3}$,
+$\lim_{x\to 0}\frac{\sin x}{x}=1$, $a_{n+1}=q a_n$, $x^{a_{b_c}}$,
+$\scriptstyle \frac{x_1+y_2}{z^2}$, $\scriptscriptstyle \frac{x_1+y_2}{z^2}$.
 \end{document}
 """
 

@@ -126,7 +126,7 @@ jobs:
               fs.writeFileSync(path.join(process.argv[2], "tpl-" + tpl.id + ".tex"), tpl.content, "utf8");
             }
           ' "$R/webui/static/editor/templates.js" "$WORK"
-          for tex in "$WORK"/tpl-*.tex "$R/samples/docs/welcome.tex" "$R/samples/docs/math-clean.tex" "$R/samples/docs/report-01.tex"; do
+          for tex in "$WORK"/tpl-*.tex "$R/samples/docs/welcome.tex" "$R/samples/docs/clean-control.tex" "$R/samples/docs/math-clean.tex" "$R/samples/docs/math-semantics.tex" "$R/samples/docs/report-01.tex"; do
             base="$(basename "$tex" .tex)"
             env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
               "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$tex"

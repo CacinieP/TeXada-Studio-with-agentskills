@@ -224,7 +224,7 @@ jobs:
               tpl_path = work / f"tpl-{tpl['id']}.tex"
               tpl_path.write_text(tpl["content"], encoding="utf-8")
               offline_sources.append(tpl_path)
-          for sample_name in ("welcome.tex", "math-clean.tex", "report-01.tex"):
+          for sample_name in ("welcome.tex", "clean-control.tex", "math-clean.tex", "math-semantics.tex", "report-01.tex"):
               offline_sources.append(res_dir / "samples" / "docs" / sample_name)
           for tex_file in offline_sources:
               subprocess.run(
