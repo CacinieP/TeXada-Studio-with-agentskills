@@ -454,6 +454,19 @@ def _new_provider(*, skill_selection=False):
     return OpenAICompatibleProvider(VLM_BASE_URL, REPAIR_MODEL, skill_mode="off" if skill_selection else SKILL_MODE)
 
 
+def _model_service_status():
+    """(available, message) for the configured loopback model; never raises."""
+    if not _is_local_mode():
+        return True, ""
+    try:
+        status = _local_runtime().probe()
+    except LocalRuntimeError as error:
+        return False, error.message
+    if status.get("model_available") is False:
+        return False, status.get("message") or "未找到配置的模型"
+    return True, ""
+
+
 def _local_runtime(*, managed=True):
     return LocalRuntime(STUDIO_STATE, base_url=os.environ.get("VLM_BASE_URL") or os.environ.get("VLM_BASE"),
                         model=REPAIR_MODEL, active_model=_managed_models().connection() if managed else None)
@@ -1876,9 +1889,19 @@ def _studio_job(name: str, content: str, job_id: str):
             _append_compiler_log(log, before)
         emit("COMPILE", phase="before", ok=before["ok"])
         planner_summary = None
+        if planner_mode and getattr(provider, "name", "") == "local-openai-compatible":
+            available, reason = _model_service_status()
+            if not available:
+                # A dead endpoint must not silently consume the whole planner budget.
+                with _job_lock:
+                    log.append(f"[studio] 模型服务不可用：{reason}；本次仅执行确定性修复，其余请人工审阅")
+                planner_mode = False
         if planner_mode or skill_selection:
             fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit,
                                                                  skill_selection=skill_selection, use_model_planner=planner_mode)
+            if planner_summary and planner_summary.get("aborted"):
+                with _job_lock:
+                    log.append(f"[studio] 模型调用已中止：{planner_summary['aborted']}")
         else:
             fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
         with _job_lock:

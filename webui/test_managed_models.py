@@ -36,6 +36,24 @@ class SourceResponse:
         return data
 
 
+class ServerLogHintTest(unittest.TestCase):
+    def test_reports_the_last_actionable_error_line(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "model-server.log"
+            path.write_text(
+                "warning: no usable GPU found, --gpu-layers option will be ignored\n"
+                "0.00.041.219 I srv load_model: loading model 'MiniCPM-V-4_7-1B-Q4_K_M.gguf'\n"
+                "src/ggml-backend.cpp:1013: GGML_ASSERT(device) failed\n",
+                encoding="utf-8")
+            hint = managed_models._server_log_hint(path)
+            self.assertIn("GGML_ASSERT", hint)
+            self.assertLessEqual(len(hint), 200)
+
+    def test_missing_log_yields_empty_hint(self):
+        with TemporaryDirectory() as folder:
+            self.assertEqual(managed_models._server_log_hint(Path(folder) / "absent.log"), "")
+
+
 class ManagedDownloadTests(unittest.TestCase):
     def setUp(self):
         directory = TemporaryDirectory()

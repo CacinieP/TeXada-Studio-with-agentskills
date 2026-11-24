@@ -117,6 +117,26 @@ def _matches(path, file):
         return hashlib.file_digest(stream, "sha256").hexdigest() == file.sha256
 
 
+_SERVER_ERROR_HINTS = re.compile(
+    r"(GGML_ASSERT[^\n]*|no backends are loaded[^\n]*|failed to load model[^\n]*"
+    r"|error loading model[^\n]*|unknown model architecture[^\n]*"
+    r"|llama_model_load[^\n]*|error: [^\n]*)",
+    re.IGNORECASE,
+)
+
+
+def _server_log_hint(path, limit=200):
+    """Return the most recent actionable line from model-server.log, if any."""
+    try:
+        data = path.read_bytes()[-65536:]
+    except OSError:
+        return ""
+    matches = _SERVER_ERROR_HINTS.findall(data.decode("utf-8", "replace"))
+    if not matches:
+        return ""
+    return " ".join(matches[-1].split())[:limit]
+
+
 def _reuse_weight(key, file, path):
     root = Path.home() / ".texada" / "models"
     ollama = Path(os.environ.get("OLLAMA_MODELS") or Path.home() / ".ollama/models").expanduser()
@@ -337,7 +357,9 @@ class ManagedModels:
                 except LocalRuntimeError:
                     pass
                 self.closed.wait(0.5)
-            raise ValueError("模型未能启动，请检查可用内存和 model-server.log。")
+            detail = _server_log_hint(self.state / "model-server.log")
+            suffix = f"：{detail}" if detail else "，请检查可用内存和 model-server.log。"
+            raise ValueError("模型未能启动" + suffix)
         finally:
             with self.lock:
                 if self.process is process and self.active is None:

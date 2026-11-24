@@ -241,6 +241,30 @@ class PlannerTest(unittest.TestCase):
             self.assertTrue(any(e["action"] == "PLANNER_REJECTED" for e in result["trace"]))
             self.assertEqual(studio._read_job(result["job_id"])["result"], result)
 
+    def test_unavailable_model_falls_back_to_deterministic_repairs(self):
+        provider = ScriptedProvider()
+        provider.name = "local-openai-compatible"
+        provider.plan_action = Mock(side_effect=AssertionError("model must not be called"))
+        job_id = "8" * 32
+        with tempfile.TemporaryDirectory() as directory, patch.object(studio, "STUDIO_STATE", directory), \
+                patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None,
+                                                   "planner_mode": True}}, clear=True), \
+                patch.object(studio, "_new_provider", return_value=provider), \
+                patch.object(studio, "_model_service_status",
+                             return_value=(False, "服务已连接，但未找到配置的模型。")), \
+                patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}):
+            studio._studio_job("input.tex", "$x+$", job_id)
+            job = studio._read_job(job_id)
+        self.assertFalse(job["result"]["planner_mode"])
+        self.assertIn("模型服务不可用", "\n".join(job["log"]))
+        provider.plan_action.assert_not_called()
+
+    def test_model_service_status_reports_a_missing_model(self):
+        with patch.object(studio, "_local_runtime") as runtime, patch.object(studio, "_is_local_mode", return_value=True):
+            runtime.return_value.probe.return_value = {"model_available": False,
+                                                       "message": "服务已连接，但未找到配置的模型。"}
+            self.assertEqual(studio._model_service_status(), (False, "服务已连接，但未找到配置的模型。"))
+
     def test_job_never_runs_unchosen_checks_after_budget_rejection(self):
         provider = ScriptedProvider()
         provider.plan_action = lambda snapshot, **kwargs: {"action": "run-code", "node_id": "f-001-1", "state_rev": 0, "params": {}}
@@ -313,6 +337,56 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(report["nodes"][0]["state"], "candidate")
         # 2 model planner steps + 1 repair model call = 3 reserved model calls.
         self.assertEqual(report["reserved_model_calls"], 3)
+
+
+class DeadProvider:
+    """Transport-level failure: the service cannot answer at all."""
+
+    name = "dead"
+
+    def __init__(self):
+        self.last_trace = {}
+
+    def fingerprint(self):
+        return {"provider": "dead"}
+
+    def plan_action(self, snapshot, *, timeout=120):
+        self.last_trace = {"model_calls": 1, "reason": "provider_error",
+                           "error": "HTTP 404: model 'minicpm-v4.7:latest' not found"}
+        return None
+
+    def repair_formula(self, node, *, timeout=120):
+        self.last_trace = {"model_calls": 1, "reason": "provider_error"}
+        return None
+
+
+class ProviderFailureTest(unittest.TestCase):
+    def test_repeated_provider_failures_stop_the_planner_and_report_the_cause(self):
+        events = []
+        planner = ConstrainedPlanner(
+            "$x+$", [{"id": "f-001-1", "kind": "formula", "line": 1}],
+            DeadProvider(), Mock(return_value={"status": "RETRY"}),
+            Mock(return_value={"accepted": False}),
+            lambda action, **fields: events.append({"action": action, **fields}))
+        edits, summary = planner.run()
+        self.assertEqual(edits, [])
+        self.assertLessEqual(summary["steps"], 2)
+        self.assertIn("HTTP 404", summary["aborted"])
+        self.assertEqual(summary["abort_reason"], "provider_unavailable")
+        self.assertEqual(summary["nodes"][0]["human_reason"], "provider_unavailable")
+        self.assertIn("PLANNER_ABORTED", [event["action"] for event in events])
+
+    def test_provider_detail_is_recorded_and_redacted(self):
+        from docforensics.vlm import error_detail
+        import urllib.error
+        error = urllib.error.HTTPError(
+            "http://127.0.0.1:11434/v1/chat/completions", 404, "Not Found", {},
+            io.BytesIO(b'{"error": {"message": "model \'minicpm-v4.7:latest\' not found"}}'))
+        detail = error_detail(error)
+        self.assertIn("HTTP 404", detail)
+        self.assertIn("not found", detail)
+        self.assertNotIn("127.0.0.1", error_detail(urllib.error.URLError("http://secret-key@private")))
+        self.assertNotIn("secret", error_detail(RuntimeError("secret-key")))
 
 
 if __name__ == "__main__":

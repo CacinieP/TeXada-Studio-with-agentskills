@@ -33,7 +33,7 @@ DESKTOP = REPO_ROOT / "desktop"
 TECTONIC = Path.home() / ".texada" / "bin" / "tectonic.exe"
 POPPLER_BIN_DEFAULT = Path.home() / ".texada" / "Library" / "bin"
 
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 FILE_VERSION_TUPLE = (0, 1, 2, 0)
 
 LLAMA_WINDOWS_TAG = "b12631"

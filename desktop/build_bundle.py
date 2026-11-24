@@ -314,6 +314,17 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
         print(f"   已捆绑 {count} 个非系统动态库")
     for name, flag in smoke:
         run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
+    if with_llama_server:
+        # Homebrew's ggml can be a dynamic-backend build whose plugin .so files are
+        # not part of the llama.cpp keg. Copying only the dylibs then yields a
+        # server that aborts on the first model load; refuse to ship that.
+        listed = subprocess.run([str(staging / "bin" / "llama-server"), "--list-devices"],
+                                capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+        devices = (listed.stdout or "") + (listed.stderr or "")
+        if listed.returncode or "Available devices:" not in devices or "(none)" in devices:
+            print(devices[-2000:], file=sys.stderr)
+            raise SystemExit("捆绑的 llama-server 没有可用计算后端；请用静态后端的 llama.cpp/ggml "
+                             "（brew reinstall llama.cpp ggml）后重试，或去掉 --with-llama-server。")
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],

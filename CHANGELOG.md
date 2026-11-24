@@ -1,4 +1,10 @@
-# Changelog
+## Unreleased
+
+### Fixed
+
+- **Model runtime: refuse to bundle a backend-less `llama-server`, and report why a managed model failed**: `desktop/build_bundle.py --with-llama-server` now runs `llama-server --list-devices` and aborts the build when no compute backend is registered (Homebrew's dynamic-backend ggml keeps its `libggml-metal.so` / `libggml-cpu-*.so` plugins outside the llama.cpp keg, so copying only the dylibs produced an app whose managed MiniCPM aborted with `GGML_ASSERT(device) failed`). When a managed model still fails to start, `webui/managed_models.py` attaches the last actionable `model-server.log` line instead of a generic memory hint.
+- **A missing or dying model endpoint no longer silently burns the planner budget**: `/api/studio/fix` probes the configured loopback model first; when it is unavailable the job logs `模型服务不可用：…` and continues with deterministic repairs only. Mid-job transport failures now abort planning after two consecutive errors (`provider_unavailable`, with `PLANNER_ABORTED` and `provider_unavailable` node reasons), and provider traces carry a sanitized `error` field (HTTP status plus provider message; URLs, long tokens and API keys are redacted).
+- **Broader offline macro coverage**: `scripts/prepare-local-tex.py` gains a `packages` specimen that pre-warms geometry, hyperref, xcolor, enumitem, mathtools, booktabs, longtable, array, multirow, tabularx, makecell, caption/subcaption, cleveref, float, setspace, fancyhdr, titlesec, parskip, ragged2e, listings, ulem, microtype, etoolbox, csquotes, textcomp, lmodern, bm, mathrsfs, cancel and tikz, and the offline check now names the missing `.sty` files.
 
 ## 0.1.2 — 2026-11-24
 
