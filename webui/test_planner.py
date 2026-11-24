@@ -381,12 +381,57 @@ class ProviderFailureTest(unittest.TestCase):
         import urllib.error
         error = urllib.error.HTTPError(
             "http://127.0.0.1:11434/v1/chat/completions", 404, "Not Found", {},
-            io.BytesIO(b'{"error": {"message": "model \'minicpm-v4.7:latest\' not found"}}'))
+            io.BytesIO(b'{"error": {"message": "model \'minicpm-v4.7:latest\' not found at http://secret@127.0.0.1:11434/v1"}}'))
         detail = error_detail(error)
         self.assertIn("HTTP 404", detail)
         self.assertIn("not found", detail)
+        self.assertIn("<url>", detail)
+        self.assertNotIn("127.0.0.1", detail)
+        self.assertNotIn("secret", detail)
         self.assertNotIn("127.0.0.1", error_detail(urllib.error.URLError("http://secret-key@private")))
         self.assertNotIn("secret", error_detail(RuntimeError("secret-key")))
+
+    def test_local_provider_transport_failures_report_real_cause_not_class_name(self):
+        import socket
+        from local_runtime import make_local_provider
+        from test_local_runtime import FakeModel
+
+        with FakeModel({"error": {"message": "model 'minicpm-v4.7:latest' not found"}}, status=404) as server:
+            provider = make_local_provider(server.base, "minicpm-v4.7:latest")
+            events = []
+            planner = ConstrainedPlanner(
+                "$x+$", [{"id": "f-001-1", "kind": "formula", "line": 1}],
+                provider, Mock(return_value={"status": "RETRY"}),
+                Mock(return_value={"accepted": False}),
+                lambda action, **fields: events.append({"action": action, **fields}),
+            )
+            edits, summary = planner.run()
+            self.assertEqual(edits, [])
+            self.assertLessEqual(summary["steps"], 2)
+            self.assertEqual(summary["abort_reason"], "provider_unavailable")
+            self.assertIn("HTTP 404", summary["aborted"])
+            self.assertIn("minicpm-v4.7:latest", summary["aborted"])
+            self.assertNotIn("LocalRuntimeError", summary["aborted"])
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        dead_port = sock.getsockname()[1]
+        sock.close()
+        dead_provider = make_local_provider(f"http://127.0.0.1:{dead_port}/v1", "minicpm-v4.7:latest")
+        _, dead_summary = ConstrainedPlanner(
+            "$x+$", [{"id": "f-001-1", "kind": "formula", "line": 1}],
+            dead_provider, Mock(return_value={"status": "RETRY"}),
+            Mock(return_value={"accepted": False}),
+            lambda *_a, **_k: None,
+        ).run()
+        self.assertEqual(dead_summary["abort_reason"], "provider_unavailable")
+        self.assertIn("未连接到本机模型", dead_summary["aborted"])
+        self.assertNotIn("LocalRuntimeError", dead_summary["aborted"])
+
+        with FakeModel({"choices": []}, status=200) as malformed_server:
+            malformed_provider = make_local_provider(malformed_server.base, "minicpm-v4.7:latest")
+            self.assertIsNone(malformed_provider.plan_action({"state_rev": 0, "nodes": []}))
+            self.assertEqual(malformed_provider.last_trace["reason"], "bad_response_shape")
 
 
 if __name__ == "__main__":

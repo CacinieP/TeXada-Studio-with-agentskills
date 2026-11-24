@@ -34,7 +34,7 @@ TECTONIC = Path.home() / ".texada" / "bin" / "tectonic.exe"
 POPPLER_BIN_DEFAULT = Path.home() / ".texada" / "Library" / "bin"
 
 APP_VERSION = "0.1.3"
-FILE_VERSION_TUPLE = (0, 1, 2, 0)
+FILE_VERSION_TUPLE = (0, 1, 3, 0)
 
 LLAMA_WINDOWS_TAG = "b12631"
 LLAMA_WINDOWS_ARCHIVE = f"llama-{LLAMA_WINDOWS_TAG}-bin-win-cpu-x64.zip"

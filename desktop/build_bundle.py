@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -32,6 +35,17 @@ TECTONIC = Path.home() / ".texada" / "bin" / "tectonic"
 TEX_CACHE = Path.home() / "Library" / "Caches" / "TectonicProject.Tectonic"
 POPPLER_DATA_VERSION = "0.4.12"
 POPPLER_DATA_SHA256 = "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
+LLAMA_MACOS_TAG = "b12631"
+LLAMA_MACOS_ARCHIVE = f"llama-{LLAMA_MACOS_TAG}-bin-macos-arm64.tar.gz"
+LLAMA_MACOS_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_MACOS_TAG}/{LLAMA_MACOS_ARCHIVE}"
+LLAMA_MACOS_SHA256 = "8de65a20e743b27405f05e6f89c636b879fd040fdd2c9abd4730fc0632ca49a5"
+LLAMA_MACOS_FALLBACK_NOTICE = (
+    f"llama.cpp ({LLAMA_MACOS_TAG})\n"
+    "License: MIT License\n"
+    f"Pinned binary archive: {LLAMA_MACOS_URL}\n"
+    f"SHA256: {LLAMA_MACOS_SHA256}\n"
+    "Upstream repository: https://github.com/ggml-org/llama.cpp\n"
+)
 BRAND_SOURCE = REPO_ROOT / "webui" / "static" / "brand" / "texada-studio-source.png"
 
 PY_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store", "test_*.py", "tests", "*.bak*")
@@ -101,7 +115,177 @@ def seal_app_bundle(app: Path) -> None:
     )
 
 
-SYSTEM_PREFIXES = ("/usr/lib", "/System")
+SYSTEM_PREFIXES = ("/usr/lib", "/System", "/Library/Apple")
+_DYLD_LOADED_RE = re.compile(r"^dyld\[\d+\]:\s+<[^>]+>\s+(.+)$", re.M)
+
+
+def _safe_tar_parts(raw_name: str) -> list[str]:
+    if not raw_name or "\x00" in raw_name or raw_name.startswith(("/", "\\")):
+        raise ValueError(f"拒绝不安全的归档路径:{raw_name!r}")
+    parts = [seg for seg in raw_name.replace("\\", "/").split("/") if seg and seg != "."]
+    for seg in parts:
+        if seg == ".." or ":" in seg:
+            raise ValueError(f"拒绝包含路径穿越的归档路径:{raw_name!r}")
+    return parts
+
+
+def extract_llama_server_tar(
+    payload: bytes,
+    extract_dir: Path,
+    licenses_dir: Path,
+    *,
+    expected_sha256: str | None = None,
+) -> Path:
+    """校验官方 llama.cpp macOS 归档 SHA-256 并安全解包 llama-server 及其 dylib。"""
+    target_sha256 = LLAMA_MACOS_SHA256 if expected_sha256 is None else expected_sha256
+    digest = hashlib.sha256(payload).hexdigest()
+    if digest != target_sha256:
+        raise ValueError(f"llama-server 归档 SHA-256 校验失败:期望 {target_sha256},实际 {digest}")
+
+    extract_root = extract_dir.resolve()
+    if extract_root.exists():
+        shutil.rmtree(extract_root)
+    extract_root.mkdir(parents=True, exist_ok=True)
+    licenses_dir.mkdir(parents=True, exist_ok=True)
+
+    license_bytes: bytes | None = None
+    symlinks: list[tuple[Path, str]] = []
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+        for member in archive.getmembers():
+            parts = _safe_tar_parts(member.name)
+            if not parts or member.isdir():
+                continue
+            if not (member.isfile() or member.issym()):
+                raise ValueError(f"拒绝非常规归档条目:{member.name!r}")
+            dest = Path(os.path.normpath(extract_root.joinpath(*parts)))
+            if not dest.is_relative_to(extract_root):
+                raise ValueError(f"归档条目越界:{member.name!r}")
+            basename = parts[-1]
+            if member.issym():
+                link = member.linkname
+                if not link or "\x00" in link or link.startswith(("/", "\\")):
+                    raise ValueError(f"拒绝绝对路径符号链接:{member.name!r} -> {link!r}")
+                norm_target = Path(os.path.normpath(dest.parent / link))
+                if not norm_target.is_relative_to(extract_root):
+                    raise ValueError(f"拒绝越界符号链接:{member.name!r} -> {link!r}")
+                if basename.endswith(".dylib"):
+                    symlinks.append((dest, link))
+                continue
+            lower = basename.lower()
+            if lower.startswith("license") and license_bytes is None:
+                stream = archive.extractfile(member)
+                if stream is not None:
+                    license_bytes = stream.read()
+                continue
+            if basename == "llama-server" or basename.endswith(".dylib"):
+                stream = archive.extractfile(member)
+                if stream is None:
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(stream.read())
+                os.chmod(dest, 0o755)
+
+    for dest, link in symlinks:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists() or dest.is_symlink():
+            dest.unlink()
+        dest.symlink_to(link)
+
+    servers = sorted(extract_root.rglob("llama-server"))
+    if not servers:
+        raise ValueError("llama.cpp 归档内未找到 llama-server。")
+    (licenses_dir / "llama.cpp-LICENSE.txt").write_bytes(
+        license_bytes if license_bytes is not None else LLAMA_MACOS_FALLBACK_NOTICE.encode("utf-8")
+    )
+    return servers[0]
+
+
+def _uses_external_ggml_plugins(binary: Path) -> bool:
+    """检测本机 llama-server 是否依赖 ggml 外部 libexec 动态后端插件(如 Homebrew 构建)。"""
+    try:
+        dependencies, rpaths = _load_commands(binary)
+    except (subprocess.CalledProcessError, OSError):
+        return False
+    owner_dir = binary.resolve().parent
+    ggml_libs = []
+    has_direct_backend = False
+    for entry in dependencies:
+        name = Path(entry).name
+        if name.startswith(("libggml-metal", "libggml-cpu", "libggml-blas")):
+            has_direct_backend = True
+        elif name.startswith("libggml.") or name == "libggml.dylib":
+            ggml_libs.append(entry)
+    if not ggml_libs:
+        return False
+    for entry in ggml_libs:
+        resolved = _resolve_dep(entry, owner_dir, rpaths=rpaths, bin_dir=owner_dir)
+        if resolved and Path(resolved).is_file():
+            try:
+                if b"/libexec" in Path(resolved).read_bytes():
+                    return True
+            except OSError:
+                pass
+    return not has_direct_backend
+
+
+def _fetch_pinned_llama_tar() -> bytes:
+    cache_file = Path.home() / ".texada" / "cache" / LLAMA_MACOS_ARCHIVE
+    if cache_file.is_file():
+        cached = cache_file.read_bytes()
+        if hashlib.sha256(cached).hexdigest() == LLAMA_MACOS_SHA256:
+            return cached
+    with urllib.request.urlopen(LLAMA_MACOS_URL, timeout=180) as response:
+        payload = response.read()
+    require(hashlib.sha256(payload).hexdigest() == LLAMA_MACOS_SHA256,
+            f"{LLAMA_MACOS_ARCHIVE} 的 SHA-256 校验失败")
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cache_file.with_suffix(".tmp")
+        tmp.write_bytes(payload)
+        os.replace(tmp, cache_file)
+    except OSError:
+        pass
+    return payload
+
+
+def verify_bundled_llama_server(llama_bin: Path, staging: Path) -> None:
+    """确认捆绑的 llama-server 具备可用计算后端且绝不越界加载包外(如 /opt/homebrew)动态库。"""
+    try:
+        listed = subprocess.run(
+            [str(llama_bin), "--list-devices"],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/usr/bin:/bin", "DYLD_PRINT_LIBRARIES": "1"},
+        )
+    except OSError:
+        return
+    stdout = listed.stdout or ""
+    stderr = listed.stderr or ""
+    combined = stdout + "\n" + stderr
+    if "Available devices:" in combined and "(none)" in combined:
+        print(combined[-2000:], file=sys.stderr)
+        raise SystemExit(
+            "捆绑的 llama-server 没有可用计算后端；请使用带静态/直连后端的官方 llama.cpp 归档后重试，"
+            "或去掉 --with-llama-server。"
+        )
+    staging_prefix = str(staging.resolve()) + os.sep
+    leaked = []
+    for raw_path in _DYLD_LOADED_RE.findall(combined):
+        loaded = raw_path.strip()
+        if loaded.startswith(staging_prefix) or loaded.startswith(SYSTEM_PREFIXES):
+            continue
+        try:
+            resolved_loaded = str(Path(loaded).resolve())
+        except OSError:
+            resolved_loaded = loaded
+        if resolved_loaded.startswith(staging_prefix) or resolved_loaded.startswith(SYSTEM_PREFIXES):
+            continue
+        leaked.append(loaded)
+    if leaked:
+        print("\n".join(leaked[:20]), file=sys.stderr)
+        raise SystemExit(
+            f"捆绑的 llama-server 仍依赖包外动态库({leaked[0]})；已拒绝生成不自包含的安装包。"
+        )
 
 
 def _otool(argv: list) -> str:
@@ -294,42 +478,45 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
     if not skip_poppler:
         originals.update(stage_poppler(staging))
         smoke.extend((("pdfinfo", "-v"), ("pdftoppm", "-v")))
-    if with_llama_server:
-        tool = shutil.which("llama-server")
-        require(tool is not None, "未找到 llama-server；请安装所需的 Homebrew 构建依赖")
-        destination = staging / "bin" / "llama-server"
-        shutil.copy2(tool, destination)
-        os.chmod(destination, 0o755)
-        resolved = str(Path(tool).resolve())
-        originals[str(destination)] = resolved
-        license_file = next(
-            (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
-            None,
-        )
-        require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
-        shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
-        smoke.append(("llama-server", "--version"))
-    if originals:
-        count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
-        print(f"   已捆绑 {count} 个非系统动态库")
+    with tempfile.TemporaryDirectory(prefix="texada-llama-") as llama_tmp:
+        if with_llama_server:
+            destination = staging / "bin" / "llama-server"
+            env_tar = os.environ.get("TEXADA_LLAMA_SERVER_TAR", "").strip()
+            tool = None if env_tar else shutil.which("llama-server")
+            if tool is not None and not _uses_external_ggml_plugins(Path(tool).resolve()):
+                shutil.copy2(tool, destination)
+                os.chmod(destination, 0o755)
+                resolved = str(Path(tool).resolve())
+                originals[str(destination)] = resolved
+                license_file = next(
+                    (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
+                    None,
+                )
+                require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
+                shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
+            else:
+                if env_tar:
+                    tar_path = Path(env_tar).expanduser()
+                    require(tar_path.is_file(), f"指定的 llama-server 归档不存在:{tar_path}")
+                    payload = tar_path.read_bytes()
+                else:
+                    if tool is not None:
+                        print("   检测到本机 llama-server 使用外部动态后端插件，改用官方自包含归档…")
+                    else:
+                        print(f"   下载官方自包含 llama-server ({LLAMA_MACOS_TAG})…")
+                    payload = _fetch_pinned_llama_tar()
+                extracted_bin = extract_llama_server_tar(payload, Path(llama_tmp), staging / "licenses")
+                shutil.copy2(extracted_bin, destination)
+                os.chmod(destination, 0o755)
+                originals[str(destination)] = str(extracted_bin.resolve())
+            smoke.append(("llama-server", "--version"))
+        if originals:
+            count = bundle_dylibs(staging / "bin", staging / "tools-lib", originals)
+            print(f"   已捆绑 {count} 个非系统动态库")
     for name, flag in smoke:
         run([str(staging / "bin" / name), flag], env={"PATH": "/usr/bin:/bin"})
     if with_llama_server and sys.platform == "darwin":
-        # Homebrew's ggml can be a dynamic-backend build whose plugin .so files are
-        # not part of the llama.cpp keg. Copying only the dylibs then yields a
-        # server that aborts on the first model load; refuse to ship that.
-        # Probe only when the flag is supported and the binary can actually run;
-        # platform-specific test fixtures and older builds simply skip the probe.
-        try:
-            listed = subprocess.run([str(staging / "bin" / "llama-server"), "--list-devices"],
-                                    capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
-            devices = (listed.stdout or "") + (listed.stderr or "")
-        except OSError:
-            devices = ""
-        if "Available devices:" in devices and "(none)" in devices:
-            print(devices[-2000:], file=sys.stderr)
-            raise SystemExit("捆绑的 llama-server 没有可用计算后端；请用静态后端的 llama.cpp/ggml "
-                             "（brew reinstall llama.cpp ggml）后重试，或去掉 --with-llama-server。")
+        verify_bundled_llama_server(staging / "bin" / "llama-server", staging)
 
     require(TEX_CACHE.is_dir(), "TeX 资源缓存未准备;先运行 scripts/prepare-local-tex.py --download-resources")
     run([sys.executable, str(REPO_ROOT / "scripts" / "prepare-local-tex.py")],

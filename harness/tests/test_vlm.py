@@ -483,6 +483,46 @@ class ProviderRuntimeTest(unittest.TestCase):
             self.assertIsNone(provider.repair_cleanup({"data": {"content": long_doc}}))
         self.assertEqual(provider.max_tokens, 300)
 
+    def test_error_detail_redacts_urls_credentials_and_tokens_in_http_body(self):
+        body = json.dumps({
+            "error": {
+                "message": "upstream http://user:secret@10.0.0.8:8000/v1/chat failed "
+                           "with key my-short-key and token sk-abcdefghijklmnopqrstuvwxyz1234"
+            }
+        }).encode("utf-8")
+        err = urllib.error.HTTPError("https://api.example.com/v1/chat/completions", 502, "Bad Gateway", {}, io.BytesIO(body))
+        detail = vlm.error_detail(err, api_key="my-short-key")
+        self.assertIn("HTTP 502", detail)
+        self.assertIn("<url>", detail)
+        for forbidden in ("secret", "10.0.0.8", "my-short-key", "sk-abcdef"):
+            self.assertNotIn(forbidden, detail)
+
+    def test_structured_decision_separates_malformed_response_shapes_from_transport_errors(self):
+        provider = vlm.OllamaProvider()
+        for raw, expected in (
+            (b"not-json", "bad_response_json"),
+            (b"[]", "bad_response_shape"),
+            (b'{"choices":[]}', "bad_response_shape"),
+            (b'{"choices":[{}]}', "bad_response_shape"),
+        ):
+            with self.subTest(expected=expected, raw=raw), \
+                    patch.object(vlm.urllib.request, "urlopen", return_value=io.BytesIO(raw)):
+                self.assertIsNone(provider.structured_decision("plan_action", {"state_rev": 0}, "sys"))
+                self.assertEqual(provider.last_trace["reason"], expected)
+
+        http_404 = urllib.error.HTTPError(
+            "https://api.example.com/v1/chat/completions", 404, "Not Found", {},
+            io.BytesIO(b'{"error":{"message":"model missing"}}'),
+        )
+        with patch.object(vlm.urllib.request, "urlopen", side_effect=http_404):
+            self.assertIsNone(provider.structured_decision("plan_action", {"state_rev": 0}, "sys"))
+            self.assertEqual(provider.last_trace["reason"], "http_error")
+            self.assertIn("HTTP 404: model missing", provider.last_trace["error"])
+
+        with patch.object(vlm.urllib.request, "urlopen", side_effect=urllib.error.URLError("offline")):
+            self.assertIsNone(provider.structured_decision("plan_action", {"state_rev": 0}, "sys"))
+            self.assertEqual(provider.last_trace["reason"], "network_error")
+
     def test_configuration_and_skill_validation_precede_network(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(vlm.urllib.request, "urlopen") as network:
             with self.assertRaisesRegex(ValueError, "skill_unavailable"):

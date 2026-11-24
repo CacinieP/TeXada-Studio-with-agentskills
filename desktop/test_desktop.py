@@ -1333,6 +1333,146 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                 ],
             )
 
+    def test_extract_llama_server_tar_verifies_sha256_and_rejects_unsafe_entries(self):
+        import hashlib
+        import io
+        import tarfile
+        import build_bundle
+
+        def make_tar(entries):
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+                for name, kind, payload in entries:
+                    info = tarfile.TarInfo(name=name)
+                    if kind == "symlink":
+                        info.type = tarfile.SYMTYPE
+                        info.linkname = payload
+                        tf.addfile(info)
+                    else:
+                        data = payload if isinstance(payload, bytes) else payload.encode("utf-8")
+                        info.size = len(data)
+                        info.mode = 0o755
+                        tf.addfile(info, io.BytesIO(data))
+            return buf.getvalue()
+
+        valid_bytes = make_tar([
+            ("llama-b12631/llama-server", "file", b"\xcf\xfa\xed\xfe-server"),
+            ("llama-b12631/libggml-metal.1.0.0.dylib", "file", b"\xcf\xfa\xed\xfe-metal"),
+            ("llama-b12631/libggml-metal.1.dylib", "symlink", "libggml-metal.1.0.0.dylib"),
+            ("llama-b12631/LICENSE", "file", "MIT License - llama.cpp\n"),
+        ])
+        valid_sha = hashlib.sha256(valid_bytes).hexdigest()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                build_bundle.extract_llama_server_tar(
+                    valid_bytes, root / "bad", root / "lic", expected_sha256="0" * 64
+                )
+            extracted_bin = build_bundle.extract_llama_server_tar(
+                valid_bytes, root / "ok", root / "lic", expected_sha256=valid_sha
+            )
+            self.assertTrue(extracted_bin.is_file())
+            self.assertEqual((extracted_bin.parent / "libggml-metal.1.dylib").resolve(),
+                             (extracted_bin.parent / "libggml-metal.1.0.0.dylib").resolve())
+            self.assertIn("MIT License", (root / "lic" / "llama.cpp-LICENSE.txt").read_text(encoding="utf-8"))
+
+            traversal_bytes = make_tar([("../outside", "file", b"bad")])
+            with self.assertRaises(ValueError):
+                build_bundle.extract_llama_server_tar(
+                    traversal_bytes, root / "trav", root / "lic2",
+                    expected_sha256=hashlib.sha256(traversal_bytes).hexdigest(),
+                )
+
+            escape_link_bytes = make_tar([
+                ("llama-b12631/llama-server", "file", b"ok"),
+                ("llama-b12631/libbad.dylib", "symlink", "../../etc/passwd"),
+            ])
+            with self.assertRaises(ValueError):
+                build_bundle.extract_llama_server_tar(
+                    escape_link_bytes, root / "esc", root / "lic3",
+                    expected_sha256=hashlib.sha256(escape_link_bytes).hexdigest(),
+                )
+
+    def test_verify_bundled_llama_server_rejects_backendless_or_homebrew_leaking_binary(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            staging = Path(tmp) / "Resources"
+            llama_bin = staging / "bin" / "llama-server"
+            llama_bin.parent.mkdir(parents=True)
+            llama_bin.write_bytes(b"stub")
+
+            def fake_run_output(stdout_text, stderr_text=""):
+                return subprocess.CompletedProcess([str(llama_bin), "--list-devices"], 0, stdout_text, stderr_text)
+
+            with unittest.mock.patch.object(
+                build_bundle.subprocess, "run",
+                return_value=fake_run_output("Available devices:\n  (none)\n"),
+            ):
+                with self.assertRaisesRegex(SystemExit, "没有可用计算后端"):
+                    build_bundle.verify_bundled_llama_server(llama_bin, staging)
+
+            leaked_stderr = (
+                f"dyld[99]: <UUID> {staging.resolve()}/tools-lib/libggml.1.0.0.dylib\n"
+                "dyld[99]: <UUID> /opt/homebrew/Cellar/ggml/1.0.0/libexec/libggml-metal.so\n"
+            )
+            with unittest.mock.patch.object(
+                build_bundle.subprocess, "run",
+                return_value=fake_run_output("Available devices:\n  MTL0: Apple M5\n", leaked_stderr),
+            ):
+                with self.assertRaisesRegex(SystemExit, "包外动态库"):
+                    build_bundle.verify_bundled_llama_server(llama_bin, staging)
+
+            clean_stderr = (
+                f"dyld[99]: <UUID> {staging.resolve()}/bin/llama-server\n"
+                f"dyld[99]: <UUID> {staging.resolve()}/tools-lib/libggml-metal.1.0.0.dylib\n"
+                "dyld[99]: <UUID> /System/Library/Frameworks/Metal.framework/Versions/A/Metal\n"
+                "dyld[99]: <UUID> /usr/lib/libSystem.B.dylib\n"
+            )
+            with unittest.mock.patch.object(
+                build_bundle.subprocess, "run",
+                return_value=fake_run_output("Available devices:\n  MTL0: Apple M5\n  BLAS: Accelerate\n", clean_stderr),
+            ):
+                build_bundle.verify_bundled_llama_server(llama_bin, staging)
+
+    def test_uses_external_ggml_plugins_detects_dynamic_backend_loader(self):
+        import build_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            brew_bin = root / "bin" / "llama-server"
+            brew_bin.parent.mkdir(parents=True)
+            brew_bin.write_bytes(b"macho")
+            ggml_lib = root / "lib" / "libggml.1.dylib"
+            ggml_lib.parent.mkdir(parents=True)
+            ggml_lib.write_bytes(b"header /opt/homebrew/Cellar/ggml/1.0.0/libexec footer")
+
+            with unittest.mock.patch.object(
+                build_bundle, "_load_commands",
+                return_value=([str(ggml_lib)], []),
+            ):
+                self.assertTrue(build_bundle._uses_external_ggml_plugins(brew_bin))
+
+            with unittest.mock.patch.object(
+                build_bundle, "_load_commands",
+                return_value=(["@rpath/libggml.1.dylib", "@rpath/libggml-metal.1.dylib", "@rpath/libggml-cpu.1.dylib"], ["@loader_path"]),
+            ):
+                self.assertFalse(build_bundle._uses_external_ggml_plugins(brew_bin))
+
+    def test_desktop_bundle_version_metadata_is_synchronized(self):
+        import plistlib
+        import build_app
+        import build_windows_bundle
+
+        plist = plistlib.loads(build_app.INFO_PLIST.encode("utf-8"))
+        short_ver = plist["CFBundleShortVersionString"]
+        setup_text = (build_windows_bundle.DESKTOP / "setup_bundle.py").read_text(encoding="utf-8")
+        self.assertIn(f'"CFBundleShortVersionString": "{short_ver}"', setup_text)
+        self.assertEqual(build_windows_bundle.APP_VERSION, short_ver)
+        expected_tuple = (*map(int, short_ver.split(".")), 0)
+        self.assertEqual(build_windows_bundle.FILE_VERSION_TUPLE, expected_tuple)
+
 
 class WindowsDesktopAppTests(unittest.TestCase):
     """Windows 进程存活探测、解释器路径、状态目录与 Tectonic 缓存目录契约。"""

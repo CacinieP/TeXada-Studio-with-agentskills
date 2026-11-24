@@ -53,6 +53,45 @@ class ServerLogHintTest(unittest.TestCase):
         with TemporaryDirectory() as folder:
             self.assertEqual(managed_models._server_log_hint(Path(folder) / "absent.log"), "")
 
+    def test_start_failure_ignores_stale_errors_from_previous_runs(self):
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            state = root / "state"
+            state.mkdir()
+            log_path = state / "model-server.log"
+            log_path.write_text("src/ggml-backend.cpp:1013: GGML_ASSERT(device) failed\n", encoding="utf-8")
+            manager = ManagedModels(state)
+            paths = (root / "w.gguf", root / "mmproj.gguf")
+            for item in paths:
+                item.write_bytes(b"stub")
+
+            def silent_crash_popen(*_args, **kwargs):
+                kwargs["stdout"].write(b"0.00.010 I srv load_model: starting\n")
+                kwargs["stdout"].flush()
+                return SimpleNamespace(poll=lambda: 137, terminate=lambda: None, wait=lambda timeout=None: 137)
+
+            with patch("managed_models.find_llama_server", return_value="/bin/llama-server"), \
+                    patch("managed_models.subprocess.run",
+                          return_value=SimpleNamespace(stdout="version: 12631\n", stderr="")), \
+                    patch("managed_models.subprocess.Popen", side_effect=silent_crash_popen):
+                with self.assertRaises(ValueError) as ctx:
+                    manager._start(PROFILES["1b"], paths)
+            self.assertNotIn("GGML_ASSERT", str(ctx.exception))
+            self.assertIn("请检查可用内存", str(ctx.exception))
+
+            def actionable_crash_popen(*_args, **kwargs):
+                kwargs["stdout"].write(b"llama_model_load: error loading model: corrupted tensor\n")
+                kwargs["stdout"].flush()
+                return SimpleNamespace(poll=lambda: 1, terminate=lambda: None, wait=lambda timeout=None: 1)
+
+            with patch("managed_models.find_llama_server", return_value="/bin/llama-server"), \
+                    patch("managed_models.subprocess.run",
+                          return_value=SimpleNamespace(stdout="version: 12631\n", stderr="")), \
+                    patch("managed_models.subprocess.Popen", side_effect=actionable_crash_popen):
+                with self.assertRaises(ValueError) as ctx2:
+                    manager._start(PROFILES["1b"], paths)
+            self.assertIn("corrupted tensor", str(ctx2.exception))
+
 
 class ManagedDownloadTests(unittest.TestCase):
     def setUp(self):

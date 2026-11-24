@@ -1,10 +1,16 @@
-## Unreleased
+# Changelog
+
+## 0.1.3 — 2026-11-24
 
 ### Fixed
 
-- **Model runtime: refuse to bundle a backend-less `llama-server`, and report why a managed model failed**: `desktop/build_bundle.py --with-llama-server` now runs `llama-server --list-devices` and aborts the build when no compute backend is registered (Homebrew's dynamic-backend ggml keeps its `libggml-metal.so` / `libggml-cpu-*.so` plugins outside the llama.cpp keg, so copying only the dylibs produced an app whose managed MiniCPM aborted with `GGML_ASSERT(device) failed`). When a managed model still fails to start, `webui/managed_models.py` attaches the last actionable `model-server.log` line instead of a generic memory hint.
-- **A missing or dying model endpoint no longer silently burns the planner budget**: `/api/studio/fix` probes the configured loopback model first; when it is unavailable the job logs `模型服务不可用：…` and continues with deterministic repairs only. Mid-job transport failures now abort planning after two consecutive errors (`provider_unavailable`, with `PLANNER_ABORTED` and `provider_unavailable` node reasons), and provider traces carry a sanitized `error` field (HTTP status plus provider message; URLs, long tokens and API keys are redacted).
+- **Model runtime: ship self-contained `llama-server` backends on macOS, gate out-of-bundle dylib leaks, and surface fresh startup errors (#90)**: `desktop/build_bundle.py --with-llama-server` detects Homebrew dynamic-backend `ggml` builds (whose `libggml-*.so` plugins live under `/opt/homebrew/.../libexec` and fail under Hardened Runtime or on clean Macs) and stages the SHA-256-pinned official `llama.cpp` `b12631` macOS arm64 runtime (`libggml-metal`, `libggml-blas`, `libggml-cpu` linked directly into `tools-lib`), then verifies `llama-server --list-devices` under `DYLD_PRINT_LIBRARIES=1` to reject both `(none)` backends and any out-of-bundle library load. When a managed model fails to start, `webui/managed_models.py` scans only the `model-server.log` bytes written during that launch attempt so stale errors from earlier runs are never misreported.
+- **A missing or dying model endpoint no longer silently burns the planner budget (#91)**: `/api/studio/fix` probes the configured loopback model first; when it is unavailable the job logs `模型服务不可用：…` and continues with deterministic repairs only. Mid-job transport failures now abort planning after two consecutive errors (`provider_unavailable`, with `PLANNER_ABORTED` and `provider_unavailable` node reasons) while keeping malformed JSON/choice envelopes in `bad_response_json` / `bad_response_shape`, and both `LocalProvider` and `OpenAICompatibleProvider` record sanitized HTTP status + provider messages (redacting URLs, credentials, and long tokens).
 - **Broader offline macro coverage**: `scripts/prepare-local-tex.py` gains a `packages` specimen that pre-warms geometry, hyperref, xcolor, enumitem, mathtools, booktabs, longtable, array, multirow, tabularx, makecell, caption/subcaption, cleveref, float, setspace, fancyhdr, titlesec, parskip, ragged2e, listings, ulem, microtype, etoolbox, csquotes, textcomp, lmodern, bm, mathrsfs, cancel and tikz, and the offline check now names the missing `.sty` files.
+
+### Changed
+
+- Bump desktop bundle metadata to `0.1.3` (macOS `CFBundleShortVersionString` `0.1.3`, build `8`; Windows `0.1.3.0`).
 
 ## 0.1.2 — 2026-11-24
 

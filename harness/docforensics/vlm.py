@@ -200,8 +200,8 @@ def _usage(value):
             if isinstance(value.get(key), int) and not isinstance(value[key], bool) and value[key] >= 0}
 
 
-_URL_TEXT = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://\\S+")
-_LONG_TOKEN = re.compile(r"[A-Za-z0-9_\\-]{24,}")
+_URL_TEXT = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://\S+")
+_LONG_TOKEN = re.compile(r"[A-Za-z0-9_-]{24,}")
 
 
 def _sanitize_detail(text, api_key=None, limit=200):
@@ -235,6 +235,8 @@ def error_detail(error, api_key=None, limit=200):
         detail = f"HTTP {error.code}" + (": " + message if message else "")
     elif isinstance(error, urllib.error.URLError):
         detail = "network error (" + type(error.reason).__name__ + ")"
+    elif isinstance(getattr(error, "provider_detail", None), str) and error.provider_detail:
+        detail = error.provider_detail
     else:
         detail = type(error).__name__
     return _sanitize_detail(detail, api_key, limit)
@@ -601,20 +603,41 @@ class OpenAICompatibleProvider:
                 return None
             try:
                 response = self._chat(_canonical(snapshot), system=system, examples=[], timeout=timeout)
-                choice = response["choices"][0]
-                message = choice["message"]
-                content = message["content"]
+            except _ResponseTooLarge:
+                trace["reason"] = "response_too_large"
+                return None
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                trace["reason"] = "bad_response_json"
+                return None
+            except urllib.error.HTTPError as exc:
+                trace["reason"] = "http_error"
+                trace["error"] = error_detail(exc, self._api_key)
+                return None
             except (TimeoutError, socket.timeout):
                 trace["reason"] = "timeout"
                 return None
-            except _ResponseTooLarge:
-                trace["reason"] = "response_too_large"
+            except urllib.error.URLError as exc:
+                trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except Exception as error:
                 trace["reason"] = "provider_error"
                 trace["error"] = error_detail(error, self._api_key)
                 return None
+            if not isinstance(response, dict):
+                trace["reason"] = "bad_response_shape"
+                return None
             trace["usage"] = _usage(response.get("usage"))
+            try:
+                choice = response["choices"][0]
+                message = choice["message"]
+                content = message["content"]
+            except (KeyError, IndexError, TypeError):
+                trace["reason"] = "bad_response_shape"
+                return None
+            if not isinstance(choice, dict) or not isinstance(message, dict):
+                trace["reason"] = "bad_response_shape"
+                return None
             if message.get("refusal") or choice.get("finish_reason") in {"content_filter", "length"}:
                 trace["reason"] = "refused_or_incomplete_response"
                 return None
