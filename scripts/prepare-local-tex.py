@@ -8,13 +8,24 @@ import subprocess
 import tempfile
 
 SAMPLE = r"""\documentclass[UTF8,fontset=fandol]{ctexart}
-\usepackage{amsmath,amssymb,graphicx,booktabs}
+\usepackage{amsmath,amssymb,amsthm,graphicx,booktabs}
+\usepackage[margin=2.5cm]{geometry}
+\newtheorem{theorem}{定理}
 \begin{document}
-\title{TeXada Studio 本地文档}\author{本地工作区}\date{}\maketitle
+\title{TeXada Studio 本地文档}\author{本地工作区}\date{\today}\maketitle
+\tableofcontents
 \section{Local document 中文标题}
 \subsection{Text styles 中文小节}
 \textbf{Bold} \textit{Italic} \texttt{Code}.
+\begin{theorem}[示例定理]
 本地文档排版测试。\[x^2+1\]
+\end{theorem}
+\begin{proof}
+展开即可。
+\end{proof}
+\begin{enumerate}
+  \item 填空：\underline{\hspace{2cm}}。
+\end{enumerate}
 \[\int_0^1 x^2\,dx=\frac{1}{3},\qquad
   \sum_{n=1}^{N} n=\frac{N(N+1)}{2},\qquad \sqrt{a^2+b^2}\]
 \[
@@ -40,6 +51,78 @@ In display, text, script, and scriptscript styles:
 \end{document}
 """
 
+LATIN_11PT_SAMPLE = r"""\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm,graphicx,booktabs}
+\usepackage[margin=2.2cm]{geometry}
+\newtheorem{theorem}{Theorem}
+\title{English Article Cache Check}
+\author{TeXada Studio}
+\date{\today}
+\begin{document}
+\maketitle
+\begin{abstract}
+Offline cache verification for 11pt article, amsthm, geometry, and math styles.
+\end{abstract}
+\section{Main Result}
+\begin{theorem}
+For all real numbers $a$ and $b$,
+\begin{equation}
+  (a+b)^2 = a^2 + 2ab + b^2
+\end{equation}
+\end{theorem}
+\begin{proof}
+Expand the left-hand side and collect terms.
+\end{proof}
+\end{document}
+"""
+
+LATIN_12PT_SAMPLE = r"""\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb}
+\begin{document}
+Twelve-point article cache verification: $E = mc^2$.
+\end{document}
+"""
+
+BEAMER_SAMPLE = r"""\documentclass[UTF8,fontset=fandol]{ctexbeamer}
+\usepackage{amsmath,amssymb}
+\title{报告标题}
+\author{报告人}
+\date{\today}
+\begin{document}
+\begin{frame}
+  \titlepage
+\end{frame}
+\begin{frame}{目录}
+  \tableofcontents
+\end{frame}
+\section{背景}
+\begin{frame}{核心公式}
+  \begin{itemize}
+    \item 要点一
+  \end{itemize}
+  \begin{equation}
+    E = mc^2
+  \end{equation}
+\end{frame}
+\end{document}
+"""
+
+
+def build_specimens():
+    latin10 = SAMPLE.replace(r"\documentclass[UTF8,fontset=fandol]{ctexart}", r"\documentclass{article}")
+    for chinese in sorted((
+        "本地文档", "本地工作区", "中文标题", "中文小节", "本地文档排版测试。",
+        "定理", "示例定理", "展开即可。", "填空：", "。",
+    ), key=len, reverse=True):
+        latin10 = latin10.replace(chinese, "Local text")
+    return (
+        ("chinese", SAMPLE),
+        ("latin10", latin10),
+        ("latin11", LATIN_11PT_SAMPLE),
+        ("latin12", LATIN_12PT_SAMPLE),
+        ("beamer", BEAMER_SAMPLE),
+    )
+
 
 def main():
     parser = argparse.ArgumentParser(description="检查或准备本机 TeX 缓存。默认完全离线。")
@@ -51,10 +134,7 @@ def main():
         return 2
     with tempfile.TemporaryDirectory(prefix="texada-tex-check-") as folder:
         directory = Path(folder)
-        latin = SAMPLE.replace(r"\documentclass[UTF8,fontset=fandol]{ctexart}", r"\documentclass{article}")
-        for chinese in sorted(("本地文档", "本地工作区", "中文标题", "中文小节", "本地文档排版测试。"), key=len, reverse=True):
-            latin = latin.replace(chinese, "Local text")
-        for name, content in (("chinese", SAMPLE), ("latin", latin)):
+        for name, content in build_specimens():
             source = directory / (name + ".tex")
             source.write_text(content, encoding="utf-8")
             command = [compiler, "--untrusted", "-o", folder]
@@ -63,7 +143,7 @@ def main():
             command.append(str(source))
             try:
                 result = subprocess.run(command, cwd=directory, timeout=900 if args.download_resources else 120,
-                                        capture_output=True, text=True)
+                                        capture_output=True, text=True, encoding="utf-8", errors="replace")
             except (OSError, subprocess.TimeoutExpired):
                 print("TeX 资源检查未完成；请检查编译器与网络后重试。")
                 return 2
@@ -72,7 +152,7 @@ def main():
                 print(log[-5000:])
                 print("本机 TeX 资源尚未齐备。可显式运行 --download-resources 准备，之后重新离线检查。")
                 return 1
-    print("本机中文、公式、表格与多页 PDF 资源已就绪。日常预览无需联网。")
+    print("本机中文、公式、表格、内置模板与多页 PDF 资源已就绪。日常预览无需联网。")
     return 0
 
 

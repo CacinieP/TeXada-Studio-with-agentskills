@@ -39,6 +39,41 @@ class SampleContractTest(unittest.TestCase):
     def test_report_total_is_a_deterministic_candidate(self):
         self.check_sample("report-01.tex", ["RETRY"], 1)
 
+    def test_chinese_samples_use_portable_fandol_fontset(self):
+        for name in ("exam-01.tex", "report-01.tex"):
+            with self.subTest(sample=name):
+                source = (ROOT / "samples" / "docs" / name).read_text(encoding="utf-8")
+                self.assertIn(r"\documentclass[UTF8,fontset=fandol]{ctexart}", source)
+                self.assertNotIn("Noto Sans CJK SC", source)
+
+    def test_all_builtin_templates_pass_analysis_with_zero_false_positives(self):
+        import importlib.util
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is required to evaluate templates.js")
+        proc = subprocess.run(
+            [node, "-e", "const t=require(process.argv[1]); console.log(JSON.stringify(t.list()));",
+             str(ROOT / "webui" / "static" / "editor" / "templates.js")],
+            check=True, capture_output=True, text=True, encoding="utf-8",
+        )
+        templates = json.loads(proc.stdout)
+        self.assertGreaterEqual(len(templates), 5)
+        for tpl in templates:
+            with self.subTest(template=tpl["id"]):
+                problems = studio._analyze(tpl["content"])
+                self.assertEqual(problems, [], f"template {tpl['id']} triggered unexpected problems: {problems}")
+
+        spec = importlib.util.spec_from_file_location("prepare_local_tex", ROOT / "scripts" / "prepare-local-tex.py")
+        prep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(prep)
+        combined = "\n".join(body for _, body in prep.build_specimens())
+        for needle in ("ctexart", "ctexbeamer", r"\documentclass[11pt]{article}", r"\documentclass[12pt]{article}",
+                       "amsthm", "geometry", "booktabs", "graphicx"):
+            self.assertIn(needle, combined, f"prepare-local-tex.py must pre-warm {needle}")
+
 
 class LatexSampleCatalogTest(unittest.TestCase):
     """Published teaching examples: extraction and candidate handling, not truth."""
