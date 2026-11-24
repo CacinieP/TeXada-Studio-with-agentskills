@@ -209,7 +209,33 @@ jobs:
           blank_bytes = (out_dir / "blank.png").read_bytes()
           if cjk_bytes == blank_bytes:
               raise SystemExit("Bundled Windows Poppler dropped all CJK glyphs!")
-          print("Isolated Windows CJK compile, Poppler render, llama-server, and frozen verifier OK.")
+
+          # Verify all 5 built-in templates and representative samples compile strictly offline.
+          tpl_json = subprocess.run(
+              [
+                  "node", "-e",
+                  "const t=require(require('path').resolve(process.argv[1])); console.log(JSON.stringify(t.list()));",
+                  str(res_dir / "webui" / "static" / "editor" / "templates.js"),
+              ],
+              capture_output=True, text=True, encoding="utf-8", check=True,
+          ).stdout
+          offline_sources = []
+          for tpl in json.loads(tpl_json):
+              tpl_path = work / f"tpl-{tpl['id']}.tex"
+              tpl_path.write_text(tpl["content"], encoding="utf-8")
+              offline_sources.append(tpl_path)
+          for sample_name in ("welcome.tex", "clean-control.tex", "math-clean.tex", "math-semantics.tex", "report-01.tex"):
+              offline_sources.append(res_dir / "samples" / "docs" / sample_name)
+          for tex_file in offline_sources:
+              subprocess.run(
+                  [str(res_dir / "bin" / "tectonic.exe"), "--untrusted", "--only-cached", "-o", str(out_dir), str(tex_file)],
+                  env=iso_env,
+                  check=True,
+              )
+              pdf_path = out_dir / (tex_file.stem + ".pdf")
+              assert pdf_path.is_file() and pdf_path.stat().st_size > 0, f"{pdf_path} missing"
+              print("offline template/sample compile OK:", tex_file.stem)
+          print("Isolated Windows CJK compile, templates/samples offline compile, Poppler render, llama-server, and frozen verifier OK.")
           PY
 
       - name: Sign executable with Authenticode certificate

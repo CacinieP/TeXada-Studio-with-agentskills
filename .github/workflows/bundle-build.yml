@@ -118,6 +118,22 @@ jobs:
             exit 1
           fi
 
+          # Verify all 5 built-in templates and representative samples compile strictly offline.
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const list = require(path.resolve(process.argv[1])).list();
+            for (const tpl of list) {
+              fs.writeFileSync(path.join(process.argv[2], "tpl-" + tpl.id + ".tex"), tpl.content, "utf8");
+            }
+          ' "$R/webui/static/editor/templates.js" "$WORK"
+          for tex in "$WORK"/tpl-*.tex "$R/samples/docs/welcome.tex" "$R/samples/docs/clean-control.tex" "$R/samples/docs/math-clean.tex" "$R/samples/docs/math-semantics.tex" "$R/samples/docs/report-01.tex"; do
+            base="$(basename "$tex" .tex)"
+            env -i HOME="$ISOLATED_HOME" PATH=/usr/bin:/bin \
+              "$R/bin/tectonic" --untrusted --only-cached -o "$WORK/out" "$tex"
+            test -s "$WORK/out/$base.pdf"
+            echo "offline template/sample compile OK: $base"
+          done
+
       - name: Sign the app with Developer ID Application
         if: steps.detect.outputs.has_signing == 'true'
         run: |
