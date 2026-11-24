@@ -272,6 +272,25 @@ class ReportEvidenceTest(unittest.TestCase):
         provider.repair_formula.assert_not_called()
         self.assertTrue(any(e.get("action") == "REPAIR_SKIPPED" for e in events))
 
+    def test_run_verify_and_run_audit_use_utf8_and_windows_create_no_window(self):
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append((Path(cmd[1]).name, kwargs))
+            return Mock(returncode=0, stdout='{"id":"x","status":"OK","reason":""}\n', stderr="")
+
+        with patch.object(pipeline.sys, "platform", "win32"), \
+                patch.object(pipeline.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(pipeline.subprocess, "run", side_effect=fake_run):
+            self.assertEqual(pipeline.run_verify("x^2")["status"], "OK")
+            self.assertEqual(pipeline.run_audit({"id": "t", "rows": [["项目", "金额"]]})["status"], "OK")
+        self.assertEqual([name for name, _ in seen], ["verify.py", "audit_table.py"])
+        for name, kwargs in seen:
+            with self.subTest(script=name):
+                self.assertEqual(kwargs.get("encoding"), "utf-8")
+                self.assertEqual(kwargs.get("errors"), "replace")
+                self.assertEqual(kwargs.get("creationflags"), 0x08000000)
+
 
 if __name__ == "__main__":
     unittest.main()

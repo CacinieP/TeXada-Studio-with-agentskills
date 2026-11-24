@@ -1384,6 +1384,66 @@ class StudioTrackARepairPipelineTest(unittest.TestCase):
             with self.subTest(binary=name):
                 self.assertEqual(kwargs.get("creationflags"), 0x08000000)
 
+    def test_source_compile_error_matches_windows_drive_and_backslash_paths(self):
+        win_source = Path(r"C:\Users\Demo\builds\main.tex")
+        for line_text in (
+            r"error: C:\Users\Demo\builds\main.tex:12: Undefined control sequence.",
+            r"error: c:\users\demo\builds\main.tex:12: Undefined control sequence.",
+            r"error: .\main.tex:12: Undefined control sequence.",
+            "error: ./main.tex:12: Undefined control sequence.",
+        ):
+            with self.subTest(line_text=line_text):
+                loc = studio._source_compile_error(line_text, win_source, 40)
+                self.assertEqual(loc, {"line": 12, "message": "Undefined control sequence."})
+
+    def test_studio_compile_preserves_stdout_diagnostics_when_stderr_has_warnings(self):
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(
+                returncode=1,
+                stdout=b"error: main.tex:4: Missing $ inserted.\n",
+                stderr=b"warning: minor font note\n",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_state, \
+                patch.object(studio, "STUDIO_STATE", temp_state), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            res = studio._studio_compile("a\nb\nc\n$broken\n", "note.tex", "warn-stdout")
+        self.assertFalse(res["compile_ok"])
+        self.assertIn("warning: minor font note", res["log"])
+        self.assertIn("Missing $ inserted.", res["log"])
+        self.assertEqual(res["diagnostic"], {"line": 4, "message": "Missing $ inserted."})
+
+    def test_checker_subprocesses_use_utf8_and_windows_no_window_flag(self):
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append((Path(cmd[1]).name, kwargs))
+            if Path(cmd[1]).name == "verify.py":
+                return SimpleNamespace(returncode=0, stdout='{"id":"argv","status":"OK","reason":""}\n', stderr="")
+            return SimpleNamespace(returncode=0, stdout='{"id":"t-studio","status":"OK","reason":""}\n', stderr="")
+
+        with patch.object(studio._sys, "platform", "win32"), \
+                patch.object(studio.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            self.assertEqual(studio._verify_formula("x^2+1")["status"], "OK")
+            self.assertEqual(studio._verify_table_grid([["项目", "金额"], ["A", "1"], ["合计", "1"]])["status"], "OK")
+        self.assertEqual([name for name, _ in seen], ["verify.py", "audit_table.py"])
+        for name, kwargs in seen:
+            with self.subTest(script=name):
+                self.assertEqual(kwargs.get("encoding"), "utf-8")
+                self.assertEqual(kwargs.get("errors"), "replace")
+                self.assertEqual(kwargs.get("creationflags"), 0x08000000)
+
+    def test_local_provider_preserves_custom_skill_root(self):
+        import local_runtime
+
+        custom_root = Path(ROOT) / "skills"
+        provider = local_runtime.make_local_provider(
+            "http://127.0.0.1:18081/v1", "minicpm-v4.7-1b-q4_k_m",
+            skill_mode="on", skill_root=custom_root,
+        )
+        self.assertEqual(provider.skill_root, custom_root)
+
 
 if __name__ == '__main__':
     unittest.main()
