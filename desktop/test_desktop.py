@@ -1307,6 +1307,7 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                  unittest.mock.patch.object(build_bundle.shutil, "which", side_effect=fake_which), \
                  unittest.mock.patch.object(build_bundle, "run", side_effect=fake_run), \
                  unittest.mock.patch.object(build_bundle, "install_poppler_data"), \
+                 unittest.mock.patch.object(build_bundle, "verify_bundled_llama_server"), \
                  unittest.mock.patch.object(build_bundle, "bundle_dylibs", side_effect=fake_bundle_dylibs):
                 build_bundle.stage_resources(staging, skip_poppler=False, with_llama_server=True)
 
@@ -1411,6 +1412,20 @@ class BundleAndIconHygieneTests(unittest.TestCase):
                 return_value=fake_run_output("Available devices:\n  (none)\n"),
             ):
                 with self.assertRaisesRegex(SystemExit, "没有可用计算后端"):
+                    build_bundle.verify_bundled_llama_server(llama_bin, staging)
+
+            with unittest.mock.patch.object(
+                build_bundle.subprocess, "run",
+                side_effect=OSError("Exec format error"),
+            ):
+                with self.assertRaises(SystemExit):
+                    build_bundle.verify_bundled_llama_server(llama_bin, staging)
+
+            with unittest.mock.patch.object(
+                build_bundle.subprocess, "run",
+                return_value=subprocess.CompletedProcess([str(llama_bin), "--list-devices"], -6, "", "GGML_ASSERT failed\n"),
+            ):
+                with self.assertRaises(SystemExit):
                     build_bundle.verify_bundled_llama_server(llama_bin, staging)
 
             leaked_stderr = (

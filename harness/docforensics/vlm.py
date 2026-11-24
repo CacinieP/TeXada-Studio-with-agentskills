@@ -519,8 +519,9 @@ class OpenAICompatibleProvider:
                 trace["reason"] = "http_error"
                 trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
@@ -613,8 +614,9 @@ class OpenAICompatibleProvider:
                 trace["reason"] = "http_error"
                 trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
@@ -755,8 +757,9 @@ class OpenAICompatibleProvider:
                 trace["reason"] = "http_error"
                 trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
@@ -873,8 +876,9 @@ class OpenAICompatibleProvider:
                 trace["reason"] = "http_error"
                 trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"

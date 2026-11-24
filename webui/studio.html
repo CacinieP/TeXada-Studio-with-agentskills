@@ -520,7 +520,7 @@ function renderJobLog(status) {
 }
 
 function lineStyle(l) {
-  if (/拒绝|失败|出错|✗/.test(l)) return `<span class="err">${esc(l)}</span>`;
+  if (/拒绝|失败|出错|不可用|已中止|✗/.test(l)) return `<span class="err">${esc(l)}</span>`;
   if (/✓|REPAIRED|完成/.test(l)) return `<span class="ok">${esc(l)}</span>`;
   if (/^\/[studio|doc-]/.test(l) || /^\[/.test(l)) return `<span class="hl">${esc(l)}</span>`;
   return esc(l);

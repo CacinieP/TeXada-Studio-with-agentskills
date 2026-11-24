@@ -1889,21 +1889,26 @@ def _studio_job(name: str, content: str, job_id: str):
             _append_compiler_log(log, before)
         emit("COMPILE", phase="before", ok=before["ok"])
         planner_summary = None
-        if planner_mode and getattr(provider, "name", "") == "local-openai-compatible":
+        use_model = True
+        if getattr(provider, "name", "") == "local-openai-compatible":
             available, reason = _model_service_status()
             if not available:
-                # A dead endpoint must not silently consume the whole planner budget.
+                # A dead endpoint must not silently consume the planner or repair budget.
                 with _job_lock:
                     log.append(f"[studio] 模型服务不可用：{reason}；本次仅执行确定性修复，其余请人工审阅")
+                use_model = False
                 planner_mode = False
+                skill_selection = False
         if planner_mode or skill_selection:
             fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit,
                                                                  skill_selection=skill_selection, use_model_planner=planner_mode)
             if planner_summary and planner_summary.get("aborted"):
                 with _job_lock:
                     log.append(f"[studio] 模型调用已中止：{planner_summary['aborted']}")
-        else:
+        elif use_model:
             fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
+        else:
+            fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit, use_model=False)
         with _job_lock:
             log.append(f"[studio] 共应用 {len(edits)} 处修复")
             log.append(f"[studio] 编译修复后版本…")

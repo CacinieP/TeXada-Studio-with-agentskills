@@ -130,10 +130,17 @@ PACKAGE_SAMPLE = r"""\documentclass{article}
 \hypersetup{hidelinks}
 \usetikzlibrary{arrows.meta,positioning}
 \begin{document}
-Common packages used by ordinary course and math documents.
+Common packages used by ordinary course and math documents:
+\textbf{Bold}, \textit{Italic}, \textsf{Sans}, \texttt{Mono}, and \enquote{quoted}.
 \begin{theorem}
-For every $n\ge 1$, $\sum_{k=1}^{n} k=\frac{n(n+1)}{2}$.
+For every $n\ge 1$, $\sum_{k=1}^{n} k=\frac{n(n+1)}{2}$, with
+$\mathscr{L}_{\mathscr{A}} + \bm{x} + \bm{\alpha} + \cancel{y}$ (see \cref{tab:packages}).
 \end{theorem}
+\begin{figure}[H]
+\centering
+\subcaptionbox{Left}{A}\quad\subcaptionbox{Right}{B}
+\caption{Subcaptions}
+\end{figure}
 \begin{table}[H]
 \centering
 \begin{tabularx}{0.6\linewidth}{lrX}\toprule Item & Value & Note \\\midrule

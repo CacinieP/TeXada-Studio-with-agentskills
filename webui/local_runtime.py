@@ -119,12 +119,12 @@ def local_json_request(url, payload=None, *, timeout=120):
         raise LocalRuntimeError("local_model_http_error", f"本机模型服务返回 HTTP {code}。", 502,
                                 provider_detail=detail) from None
     except (TimeoutError, socket.timeout):
-        raise LocalRuntimeError("local_model_timeout", "本机模型响应超时，请缩小输入或检查服务。", 504) from None
+        msg = "本机模型响应超时，请缩小输入或检查服务。"
+        raise LocalRuntimeError("local_model_timeout", msg, 504, provider_detail=msg) from None
     except urllib.error.URLError as exc:
         code = "local_model_timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "local_model_unavailable"
         message = "本机模型响应超时。" if code.endswith("timeout") else "未连接到本机模型，请先启动服务并检查地址。"
-        raise LocalRuntimeError(code, message, 503,
-                                provider_detail=None if code.endswith("timeout") else message) from None
+        raise LocalRuntimeError(code, message, 503, provider_detail=message) from None
     except OSError:
         raise LocalRuntimeError("local_model_unavailable", "无法连接本机模型服务。", 503,
                                 provider_detail="无法连接本机模型服务。") from None
@@ -608,7 +608,9 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
                 return local_json_request(self.endpoint, payload, timeout=timeout)
             except LocalRuntimeError as exc:
                 if exc.code == "local_model_timeout":
-                    raise TimeoutError(exc.message) from None
+                    err = TimeoutError(exc.message)
+                    err.provider_detail = exc.provider_detail or exc.message
+                    raise err from None
                 if exc.code == "model_response_too_large":
                     raise _ResponseTooLarge() from None
                 if exc.code == "invalid_model_response":

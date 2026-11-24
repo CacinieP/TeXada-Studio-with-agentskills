@@ -257,15 +257,15 @@ def verify_bundled_llama_server(llama_bin: Path, staging: Path) -> None:
             text=True,
             env={"PATH": "/usr/bin:/bin", "DYLD_PRINT_LIBRARIES": "1"},
         )
-    except OSError:
-        return
+    except OSError as exc:
+        raise SystemExit(f"无法执行捆绑的 llama-server({llama_bin}):{exc}") from None
     stdout = listed.stdout or ""
     stderr = listed.stderr or ""
     combined = stdout + "\n" + stderr
-    if "Available devices:" in combined and "(none)" in combined:
+    if listed.returncode != 0 or "Available devices:" not in combined or "(none)" in combined:
         print(combined[-2000:], file=sys.stderr)
         raise SystemExit(
-            "捆绑的 llama-server 没有可用计算后端；请使用带静态/直连后端的官方 llama.cpp 归档后重试，"
+            "捆绑的 llama-server 没有可用计算后端或探测失败；请使用带静态/直连后端的官方 llama.cpp 归档后重试，"
             "或去掉 --with-llama-server。"
         )
     staging_prefix = str(staging.resolve()) + os.sep
@@ -483,16 +483,15 @@ def stage_resources(staging: Path, skip_poppler: bool, with_llama_server: bool =
             destination = staging / "bin" / "llama-server"
             env_tar = os.environ.get("TEXADA_LLAMA_SERVER_TAR", "").strip()
             tool = None if env_tar else shutil.which("llama-server")
-            if tool is not None and not _uses_external_ggml_plugins(Path(tool).resolve()):
-                shutil.copy2(tool, destination)
+            resolved_tool = Path(tool).resolve() if tool is not None else None
+            license_file = (
+                next((parent / "LICENSE" for parent in resolved_tool.parents[:3] if (parent / "LICENSE").is_file()), None)
+                if resolved_tool is not None else None
+            )
+            if resolved_tool is not None and license_file is not None and not _uses_external_ggml_plugins(resolved_tool):
+                shutil.copy2(resolved_tool, destination)
                 os.chmod(destination, 0o755)
-                resolved = str(Path(tool).resolve())
-                originals[str(destination)] = resolved
-                license_file = next(
-                    (parent / "LICENSE" for parent in Path(resolved).parents[:3] if (parent / "LICENSE").is_file()),
-                    None,
-                )
-                require(license_file is not None, "未找到 llama.cpp 的 LICENSE")
+                originals[str(destination)] = str(resolved_tool)
                 shutil.copy2(license_file, staging / "licenses" / "llama.cpp-LICENSE.txt")
             else:
                 if env_tar:
@@ -535,7 +534,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="构建自包含 TeXada Studio.app")
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "dist")
     parser.add_argument("--skip-poppler", action="store_true", help="不捆绑 Poppler(PDF 导入/预览仍需系统安装)")
-    parser.add_argument("--with-llama-server", action="store_true", help="捆绑 Homebrew llama.cpp 运行时")
+    parser.add_argument("--with-llama-server", action="store_true", help="捆绑自包含 llama.cpp 运行时")
     args = parser.parse_args(argv)
     args.output = args.output.expanduser().resolve()  # py2app 子进程以 desktop/ 为 cwd,必须绝对路径
     require(sys.platform == "darwin", "自包含包仅支持 macOS")

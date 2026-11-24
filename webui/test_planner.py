@@ -242,22 +242,32 @@ class PlannerTest(unittest.TestCase):
             self.assertEqual(studio._read_job(result["job_id"])["result"], result)
 
     def test_unavailable_model_falls_back_to_deterministic_repairs(self):
-        provider = ScriptedProvider()
-        provider.name = "local-openai-compatible"
-        provider.plan_action = Mock(side_effect=AssertionError("model must not be called"))
-        job_id = "8" * 32
-        with tempfile.TemporaryDirectory() as directory, patch.object(studio, "STUDIO_STATE", directory), \
-                patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None,
-                                                   "planner_mode": True}}, clear=True), \
-                patch.object(studio, "_new_provider", return_value=provider), \
-                patch.object(studio, "_model_service_status",
-                             return_value=(False, "服务已连接，但未找到配置的模型。")), \
-                patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}):
-            studio._studio_job("input.tex", "$x+$", job_id)
-            job = studio._read_job(job_id)
-        self.assertFalse(job["result"]["planner_mode"])
-        self.assertIn("模型服务不可用", "\n".join(job["log"]))
-        provider.plan_action.assert_not_called()
+        for flags in (
+            {"planner_mode": True, "skill_selection": False},
+            {"planner_mode": False, "skill_selection": False},
+            {"planner_mode": False, "skill_selection": True},
+        ):
+            provider = ScriptedProvider()
+            provider.name = "local-openai-compatible"
+            for method in ("plan_action", "select_skill", "repair_formula", "repair_table", "repair_cleanup"):
+                setattr(provider, method, Mock(side_effect=AssertionError(f"{method} must not be called")))
+            job_id = "8" * 32
+            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(studio, "STUDIO_STATE", directory), \
+                    patch.dict(studio._jobs, {job_id: {"done": False, "log": [], "result": None, **flags}}, clear=True), \
+                    patch.object(studio, "_new_provider", return_value=provider), \
+                    patch.object(studio, "_model_service_status",
+                                 return_value=(False, "服务已连接，但未找到配置的模型。")), \
+                    patch.object(studio, "_studio_compile", return_value={"ok": True, "png": None}):
+                studio._studio_job("input.tex", "$x+$", job_id)
+                job = studio._read_job(job_id)
+            self.assertIsNone(job.get("error"))
+            self.assertFalse(job["result"]["planner_mode"])
+            self.assertFalse(job["result"]["skill_selection"])
+            self.assertEqual(job["result"]["model_calls"], 0)
+            self.assertIn("模型服务不可用", "\n".join(job["log"]))
+            for method in ("plan_action", "select_skill", "repair_formula", "repair_table", "repair_cleanup"):
+                getattr(provider, method).assert_not_called()
 
     def test_model_service_status_reports_a_missing_model(self):
         with patch.object(studio, "_local_runtime") as runtime, patch.object(studio, "_is_local_mode", return_value=True):
@@ -432,6 +442,45 @@ class ProviderFailureTest(unittest.TestCase):
             malformed_provider = make_local_provider(malformed_server.base, "minicpm-v4.7:latest")
             self.assertIsNone(malformed_provider.plan_action({"state_rev": 0, "nodes": []}))
             self.assertEqual(malformed_provider.last_trace["reason"], "bad_response_shape")
+
+    def test_skill_selection_and_repair_transport_failures_also_abort_planner(self):
+        import copy
+        load_catalog = studio.load_catalog
+
+        class DeadSelectionAndRepairProvider(DeadProvider):
+            def select_skill(self, snapshot, *, timeout=120):
+                self.last_trace = {"model_calls": 1, "reason": "http_error", "error": "HTTP 503: overloaded"}
+                return None
+
+            def repair_formula(self, node, *, timeout=120):
+                self.last_trace = {"model_calls": 1, "reason": "network_error", "error": "network error (ConnectionRefusedError)"}
+                return None
+
+        events = []
+        nodes = [{"id": f"f-00{i}-1", "kind": "formula", "line": i, "latex": "x+"} for i in range(1, 5)]
+        _, sel_summary = ConstrainedPlanner(
+            "$x+$", copy.deepcopy(nodes), DeadSelectionAndRepairProvider(),
+            Mock(return_value={"status": "RETRY"}), Mock(return_value={"accepted": False}),
+            lambda action, **fields: events.append({"action": action, **fields}),
+            skill_selection=True, catalog=load_catalog(), use_model_planner=False,
+        ).run()
+        self.assertEqual(sel_summary["abort_reason"], "provider_unavailable")
+        self.assertIn("HTTP 503", sel_summary["aborted"])
+        self.assertEqual(sel_summary["selection_calls"], 2)
+        self.assertTrue(all(n["human_reason"] == "provider_unavailable" for n in sel_summary["nodes"]))
+
+        repair_provider = DeadSelectionAndRepairProvider()
+        _, rep_summary = ConstrainedPlanner(
+            "$x+$", copy.deepcopy(nodes), repair_provider,
+            Mock(return_value={"status": "RETRY"}),
+            lambda node, timeout: (repair_provider.repair_formula(node, timeout=timeout),
+                                   {"accepted": False, "model_calls": 1})[1],
+            lambda *_a, **_k: None,
+            use_model_planner=False,
+        ).run()
+        self.assertEqual(rep_summary["abort_reason"], "provider_unavailable")
+        self.assertIn("ConnectionRefusedError", rep_summary["aborted"])
+        self.assertLessEqual(rep_summary["reserved_model_calls"], 2)
 
 
 if __name__ == "__main__":
