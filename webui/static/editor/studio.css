@@ -190,7 +190,7 @@ kbd { font:10px/1.5 ui-monospace,Menlo,monospace;color:#7e9ab9;white-space:nowra
 #joblog .ok { color:var(--success); } #joblog .err { color:var(--error); } #joblog .hl { color:#81b6f2; }
 .prob { display:block;width:100%;text-align:left;padding:7px 10px;border:0;border-left:2px solid var(--error);background:#102b46;border-radius:3px;margin:5px 0;cursor:pointer;font-size:11px;color:#bad5f0; }
 .prob:hover { background:#15385a; }
-.prob.t { border-left-color:var(--warning); } .prob.fixed { border-left-color:var(--success); }
+.prob.t { border-left-color:var(--warning); } .prob.c { border-left-color:var(--accent); } .prob.fixed { border-left-color:var(--success); }
 .prob .loc { color:#7297bd;font-size:10px; }
 .prob-reason,.prob-source { display:block;margin-top:4px;overflow-wrap:anywhere; }
 .prob:focus-visible { outline:2px solid #9fd8ff;outline-offset:1px; }
