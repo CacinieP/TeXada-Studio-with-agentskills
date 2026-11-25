@@ -20,6 +20,7 @@ models/
 
 # 提交包产物
 dist/
+dist-app/
 .repo_memory/
 
 # Local evaluation traces and scratch evidence may contain document text.

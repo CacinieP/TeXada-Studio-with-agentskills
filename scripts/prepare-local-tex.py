@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -117,6 +118,53 @@ BEAMER_SAMPLE = r"""\documentclass[UTF8,fontset=fandol]{ctexbeamer}
 """
 
 
+PACKAGE_SAMPLE = r"""\documentclass{article}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm,mathrsfs,cancel}
+\usepackage{geometry,graphicx,xcolor,booktabs,longtable,array,multirow,tabularx,makecell}
+\usepackage{caption,subcaption,float,setspace,fancyhdr,titlesec,parskip,ragged2e}
+\usepackage{enumitem,listings,ulem,microtype,etoolbox,csquotes,textcomp,lmodern,tikz}
+\usepackage{hyperref,url,xurl}
+\usepackage{cleveref}
+\newtheorem{theorem}{Theorem}[section]
+\geometry{margin=2.2cm}
+\hypersetup{hidelinks}
+\usetikzlibrary{arrows.meta,positioning}
+\begin{document}
+Common packages used by ordinary course and math documents:
+\textbf{Bold}, \textit{Italic}, \textsf{Sans}, \texttt{Mono}, and \enquote{quoted}.
+\begin{theorem}
+For every $n\ge 1$, $\sum_{k=1}^{n} k=\frac{n(n+1)}{2}$, with
+$\mathscr{L}_{\mathscr{A}} + \bm{x} + \bm{\alpha} + \cancel{y}$ (see \cref{tab:packages}).
+\end{theorem}
+\begin{figure}[H]
+\centering
+\subcaptionbox{Left}{A}\quad\subcaptionbox{Right}{B}
+\caption{Subcaptions}
+\end{figure}
+\begin{table}[H]
+\centering
+\begin{tabularx}{0.6\linewidth}{lrX}\toprule Item & Value & Note \\\midrule
+A & 2 & first \\ B & 3 & second \\\bottomrule
+\end{tabularx}
+\caption{A local table}\label{tab:packages}
+\end{table}
+\begin{tikzpicture}[baseline]
+  \draw[-{Stealth}] (0,0) -- (2,0) node[right] {$x$};
+  \draw[-{Stealth}] (0,0) -- (0,2) node[above] {$y$};
+\end{tikzpicture}
+\begin{enumerate}[label=(\alph*)]
+  \item First item.
+  \item Second item with \textcolor{red}{colour} and \sout{strike}.
+\end{enumerate}
+\begin{lstlisting}[language=Python]
+print("hello")
+\end{lstlisting}
+\end{document}
+"""
+
+MISSING_PACKAGE = re.compile(r"File `([^'#\s]+)' not found")
+
+
 def build_specimens():
     latin10 = SAMPLE.replace(r"\documentclass[UTF8,fontset=fandol]{ctexart}", r"\documentclass{article}")
     for chinese in sorted((
@@ -130,6 +178,7 @@ def build_specimens():
         ("latin11", LATIN_11PT_SAMPLE),
         ("latin12", LATIN_12PT_SAMPLE),
         ("beamer", BEAMER_SAMPLE),
+        ("packages", PACKAGE_SAMPLE),
     )
 
 
@@ -159,6 +208,9 @@ def main():
             log = (result.stdout or "") + (result.stderr or "")
             if result.returncode or "Missing character:" in log or not source.with_suffix(".pdf").is_file():
                 print(log[-5000:])
+                missing = sorted(set(MISSING_PACKAGE.findall(log)))
+                if missing:
+                    print("离线缓存缺少宏包：" + "、".join(missing))
                 print("本机 TeX 资源尚未齐备。可显式运行 --download-resources 准备，之后重新离线检查。")
                 return 1
     print("本机中文、公式、表格、内置模板与多页 PDF 资源已就绪。日常预览无需联网。")

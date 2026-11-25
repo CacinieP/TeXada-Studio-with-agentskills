@@ -89,7 +89,7 @@ PDF 预览需要 Tectonic 和 Poppler。Tectonic 支持 macOS、Linux 与 Window
 .venv/bin/python scripts/prepare-local-tex.py
 ```
 
-第二个命令重新使用缓存检查。准备脚本只覆盖它的固定样本；引入其他宏包、字体或文档类的文档，仍可能需要单独准备相应资源。正常 Studio 编译使用 `--only-cached`，缺资源时保留错误信息，不会隐式补下载。
+第二个命令重新使用缓存检查。准备脚本覆盖中文、10/11/12pt 英文、Beamer 与公式样本，并额外加载常用宏包样本：geometry、hyperref、xcolor、enumitem、mathtools、booktabs、longtable、array、multirow、tabularx、makecell、caption/subcaption、cleveref、float、setspace、fancyhdr、titlesec、parskip、ragged2e、listings、ulem、microtype、etoolbox、csquotes、textcomp、lmodern、bm、mathrsfs、cancel 与 tikz。只用这些依赖的普通文档可离线编译。其他宏包、字体或文档类仍需在联网状态重跑 `--download-resources`；正常 Studio 编译使用 `--only-cached`，缺包时保留错误信息并在检查脚本里列出缺失的 `.sty`，不会隐式补下载。
 
 本次机器已完成固定中文/公式/表格两页样本的资源准备并生成 PDF，离线检查还覆盖了 Fandol 中文、标题和粗斜体。OCR 默认文档使用 `ctexart` 的通用 Fandol 字体集，避免依赖特定 macOS 中文字体。这只证明已检查样本的依赖可用，不代表任意 TeX 工程都能离线编译。
 

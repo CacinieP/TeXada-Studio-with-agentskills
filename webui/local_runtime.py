@@ -39,9 +39,10 @@ MAX_TEXT_CHARS = 200_000
 
 
 class LocalRuntimeError(ValueError):
-    def __init__(self, code: str, message: str, status: int = 400):
+    def __init__(self, code: str, message: str, status: int = 400, *, provider_detail: str | None = None):
         super().__init__(message)
         self.code, self.message, self.status = code, message, status
+        self.provider_detail = provider_detail
 
 
 def validate_base_url(value: str) -> str:
@@ -101,16 +102,32 @@ def local_json_request(url, payload=None, *, timeout=120):
         raise
     except urllib.error.HTTPError as exc:
         code = exc.code
-        exc.close()
-        raise LocalRuntimeError("local_model_http_error", f"本机模型服务返回 HTTP {code}。", 502) from None
+        provider_msg = ""
+        try:
+            body = exc.read(4096).decode("utf-8", "replace")
+            err_payload = json.loads(body)
+            if isinstance(err_payload, dict):
+                candidate = err_payload.get("error")
+                if isinstance(candidate, dict):
+                    candidate = candidate.get("message")
+                provider_msg = candidate if isinstance(candidate, str) else ""
+        except Exception:
+            provider_msg = ""
+        finally:
+            exc.close()
+        detail = f"HTTP {code}" + (f": {provider_msg}" if provider_msg else "")
+        raise LocalRuntimeError("local_model_http_error", f"本机模型服务返回 HTTP {code}。", 502,
+                                provider_detail=detail) from None
     except (TimeoutError, socket.timeout):
-        raise LocalRuntimeError("local_model_timeout", "本机模型响应超时，请缩小输入或检查服务。", 504) from None
+        msg = "本机模型响应超时，请缩小输入或检查服务。"
+        raise LocalRuntimeError("local_model_timeout", msg, 504, provider_detail=msg) from None
     except urllib.error.URLError as exc:
         code = "local_model_timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "local_model_unavailable"
         message = "本机模型响应超时。" if code.endswith("timeout") else "未连接到本机模型，请先启动服务并检查地址。"
-        raise LocalRuntimeError(code, message, 503) from None
+        raise LocalRuntimeError(code, message, 503, provider_detail=message) from None
     except OSError:
-        raise LocalRuntimeError("local_model_unavailable", "无法连接本机模型服务。", 503) from None
+        raise LocalRuntimeError("local_model_unavailable", "无法连接本机模型服务。", 503,
+                                provider_detail="无法连接本机模型服务。") from None
     if len(raw) > MAX_RESPONSE_BYTES:
         raise LocalRuntimeError("model_response_too_large", "模型响应超过大小限制。", 502)
     try:
@@ -496,7 +513,7 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
     Imported lazily so image import tests need only the Python standard library.
     The calling app has already added its harness path before creating providers.
     """
-    from docforensics.vlm import OpenAICompatibleProvider, _canonical, _hash, _minicpm_json_examples
+    from docforensics.vlm import OpenAICompatibleProvider, _ResponseTooLarge, _canonical, _hash, _minicpm_json_examples
     from docforensics.skills_runtime import DEFAULT_SKILL_ROOT, file_sha256, load_skill
 
     base = validate_base_url(base)
@@ -587,6 +604,17 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
                 payload["max_tokens"] = min(self.max_tokens, 64)
             self.last_trace["prompt_sha256"] = _hash(_canonical(payload["messages"]))
             self.last_trace.update(model_called=True, model_calls=1)
-            return local_json_request(self.endpoint, payload, timeout=timeout)
+            try:
+                return local_json_request(self.endpoint, payload, timeout=timeout)
+            except LocalRuntimeError as exc:
+                if exc.code == "local_model_timeout":
+                    err = TimeoutError(exc.message)
+                    err.provider_detail = exc.provider_detail or exc.message
+                    raise err from None
+                if exc.code == "model_response_too_large":
+                    raise _ResponseTooLarge() from None
+                if exc.code == "invalid_model_response":
+                    raise json.JSONDecodeError(exc.message, "", 0) from None
+                raise
 
     return LocalProvider()

@@ -8,6 +8,7 @@ retains orchestration and verification in either mode.
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import time
@@ -197,6 +198,48 @@ def _usage(value):
         return {}
     return {key: value[key] for key in ("prompt_tokens", "completion_tokens", "total_tokens")
             if isinstance(value.get(key), int) and not isinstance(value[key], bool) and value[key] >= 0}
+
+
+_URL_TEXT = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://\S+")
+_LONG_TOKEN = re.compile(r"[A-Za-z0-9_-]{24,}")
+
+
+def _sanitize_detail(text, api_key=None, limit=200):
+    """Strip URLs, obvious tokens and the configured credential, then bound length."""
+    text = _URL_TEXT.sub("<url>", text)
+    if api_key:
+        text = text.replace(api_key, "[redacted]")
+    text = _LONG_TOKEN.sub("[redacted]", text)
+    return " ".join(text.split())[:limit]
+
+
+def error_detail(error, api_key=None, limit=200):
+    """Small, credential-free category for traces and job logs.
+
+    Free-form transport text may echo credentials or private endpoints, so only
+    the HTTP status and a sanitized provider message are kept; other exceptions
+    contribute their class name.
+    """
+    if isinstance(error, urllib.error.HTTPError):
+        message = ""
+        try:
+            body = error.read(4096).decode("utf-8", "replace")
+            payload = json.loads(body)
+            if isinstance(payload, dict):
+                candidate = payload.get("error")
+                if isinstance(candidate, dict):
+                    candidate = candidate.get("message")
+                message = candidate if isinstance(candidate, str) else ""
+        except Exception:
+            message = ""
+        detail = f"HTTP {error.code}" + (": " + message if message else "")
+    elif isinstance(error, urllib.error.URLError):
+        detail = "network error (" + type(error.reason).__name__ + ")"
+    elif isinstance(getattr(error, "provider_detail", None), str) and error.provider_detail:
+        detail = error.provider_detail
+    else:
+        detail = type(error).__name__
+    return _sanitize_detail(detail, api_key, limit)
 
 
 def _chat_endpoint(base):
@@ -472,17 +515,21 @@ class OpenAICompatibleProvider:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 trace["reason"] = "bad_response_json"
                 return None
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as exc:
                 trace["reason"] = "http_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except Exception:
+            except Exception as error:
                 trace["reason"] = "provider_error"
+                trace["error"] = error_detail(error, self._api_key)
                 return None
             if not isinstance(response, dict):
                 trace["reason"] = "bad_response_shape"
@@ -557,19 +604,42 @@ class OpenAICompatibleProvider:
                 return None
             try:
                 response = self._chat(_canonical(snapshot), system=system, examples=[], timeout=timeout)
-                choice = response["choices"][0]
-                message = choice["message"]
-                content = message["content"]
-            except (TimeoutError, socket.timeout):
-                trace["reason"] = "timeout"
-                return None
             except _ResponseTooLarge:
                 trace["reason"] = "response_too_large"
                 return None
-            except Exception:
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                trace["reason"] = "bad_response_json"
+                return None
+            except urllib.error.HTTPError as exc:
+                trace["reason"] = "http_error"
+                trace["error"] = error_detail(exc, self._api_key)
+                return None
+            except (TimeoutError, socket.timeout) as exc:
+                trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
+                return None
+            except urllib.error.URLError as exc:
+                trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
+                trace["error"] = error_detail(exc, self._api_key)
+                return None
+            except Exception as error:
                 trace["reason"] = "provider_error"
+                trace["error"] = error_detail(error, self._api_key)
+                return None
+            if not isinstance(response, dict):
+                trace["reason"] = "bad_response_shape"
                 return None
             trace["usage"] = _usage(response.get("usage"))
+            try:
+                choice = response["choices"][0]
+                message = choice["message"]
+                content = message["content"]
+            except (KeyError, IndexError, TypeError):
+                trace["reason"] = "bad_response_shape"
+                return None
+            if not isinstance(choice, dict) or not isinstance(message, dict):
+                trace["reason"] = "bad_response_shape"
+                return None
             if message.get("refusal") or choice.get("finish_reason") in {"content_filter", "length"}:
                 trace["reason"] = "refused_or_incomplete_response"
                 return None
@@ -683,17 +753,21 @@ class OpenAICompatibleProvider:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 trace["reason"] = "bad_response_json"
                 return None
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as exc:
                 trace["reason"] = "http_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except Exception:
+            except Exception as error:
                 trace["reason"] = "provider_error"
+                trace["error"] = error_detail(error, self._api_key)
                 return None
             finally:
                 self.max_tokens = saved_max_tokens
@@ -798,17 +872,21 @@ class OpenAICompatibleProvider:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 trace["reason"] = "bad_response_json"
                 return None
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as exc:
                 trace["reason"] = "http_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except (TimeoutError, socket.timeout):
+            except (TimeoutError, socket.timeout) as exc:
                 trace["reason"] = "timeout"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
             except urllib.error.URLError as exc:
                 trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout)) else "network_error"
+                trace["error"] = error_detail(exc, self._api_key)
                 return None
-            except Exception:
+            except Exception as error:
                 trace["reason"] = "provider_error"
+                trace["error"] = error_detail(error, self._api_key)
                 return None
             finally:
                 self.max_tokens = saved_max_tokens

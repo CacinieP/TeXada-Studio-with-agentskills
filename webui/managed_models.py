@@ -117,6 +117,32 @@ def _matches(path, file):
         return hashlib.file_digest(stream, "sha256").hexdigest() == file.sha256
 
 
+_SERVER_ERROR_HINTS = re.compile(
+    r"(GGML_ASSERT[^\n]*|no backends are loaded[^\n]*|failed to load model[^\n]*"
+    r"|error loading model[^\n]*|unknown model architecture[^\n]*"
+    r"|llama_model_load[^\n]*|error: [^\n]*)",
+    re.IGNORECASE,
+)
+
+
+def _server_log_hint(path, start_offset=0, limit=200):
+    """Return the most recent actionable line written since start_offset, if any."""
+    try:
+        size = path.stat().st_size
+        if size <= start_offset:
+            return ""
+        offset = max(start_offset, size - 65536)
+        with path.open("rb") as stream:
+            stream.seek(offset)
+            data = stream.read(65536)
+    except OSError:
+        return ""
+    matches = _SERVER_ERROR_HINTS.findall(data.decode("utf-8", "replace"))
+    if not matches:
+        return ""
+    return " ".join(matches[-1].split())[:limit]
+
+
 def _reuse_weight(key, file, path):
     root = Path.home() / ".texada" / "models"
     ollama = Path(os.environ.get("OLLAMA_MODELS") or Path.home() / ".ollama/models").expanduser()
@@ -305,6 +331,7 @@ class ManagedModels:
             self._terminate()
             self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
             log_path = self.state / "model-server.log"
+            log_offset = _size(log_path)
             flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
             fd = os.open(log_path, flags, 0o600)
             try:
@@ -337,7 +364,9 @@ class ManagedModels:
                 except LocalRuntimeError:
                     pass
                 self.closed.wait(0.5)
-            raise ValueError("模型未能启动，请检查可用内存和 model-server.log。")
+            detail = _server_log_hint(self.state / "model-server.log", start_offset=log_offset)
+            suffix = f"：{detail}" if detail else "，请检查可用内存和 model-server.log。"
+            raise ValueError("模型未能启动" + suffix)
         finally:
             with self.lock:
                 if self.process is process and self.active is None:

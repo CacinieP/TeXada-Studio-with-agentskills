@@ -54,7 +54,7 @@
 
 | 组件 | 许可证 |
 | --- | --- |
-| `llama.cpp`(可选:macOS 经 Homebrew 构建;Windows 锁定官方 `llama-b12631-bin-win-cpu-x64.zip`,SHA256 `8b3639c62c6c41b8134797ea9beedd6b6c26caad6a1ed99a3d5a2802262923d7`) | MIT;随包附 `Resources/licenses/llama.cpp-LICENSE.txt`,作为独立进程调用。模型权重由用户在设置面板按需下载 |
+| `llama.cpp`(可选:macOS 优先直连后端的本机 `llama.cpp`,若本机为 Homebrew 动态后端插件构建或未安装则锁定官方 `llama-b12631-bin-macos-arm64.tar.gz`,SHA256 `8de65a20e743b27405f05e6f89c636b879fd040fdd2c9abd4730fc0632ca49a5`;Windows 锁定官方 `llama-b12631-bin-win-cpu-x64.zip`,SHA256 `8b3639c62c6c41b8134797ea9beedd6b6c26caad6a1ed99a3d5a2802262923d7`) | MIT;随包附 `Resources/licenses/llama.cpp-LICENSE.txt`,作为独立进程调用。模型权重由用户在设置面板按需下载 |
 | Monaco 0.52.2(已 vendored) | MIT |
 | 本项目代码/文档/合成样本 | AGPL-3.0-only(见 LICENSE、THIRD_PARTY_NOTICES.md) |
 
