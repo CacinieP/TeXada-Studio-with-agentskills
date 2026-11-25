@@ -431,6 +431,9 @@ class LocalRuntimeTest(unittest.TestCase):
         self.assertEqual(len(run_mock.call_args_list), 2)
         for call in run_mock.call_args_list:
             self.assertEqual(call.kwargs.get("creationflags"), 0x08000000)
+        pdfinfo_call = run_mock.call_args_list[0]
+        self.assertEqual(pdfinfo_call.kwargs.get("encoding"), "utf-8")
+        self.assertEqual(pdfinfo_call.kwargs.get("errors"), "replace")
 
 
 if __name__ == "__main__":

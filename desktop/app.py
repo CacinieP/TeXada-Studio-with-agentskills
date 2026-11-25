@@ -276,6 +276,27 @@ def launcher_env(source=None):
     return env
 
 
+def _seed_missing_file(entry: Path, destination: Path) -> bool:
+    if entry.is_symlink() or not entry.is_file():
+        return False
+    if destination.exists() or destination.is_symlink():
+        return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.parent / f".{destination.name}.tmp-{os.getpid()}-{secrets.token_hex(6)}"
+    try:
+        shutil.copyfile(entry, staging)
+        try:
+            os.link(staging, destination)
+        except FileExistsError:
+            return False
+        except OSError:
+            if not destination.exists():
+                os.replace(staging, destination)
+    finally:
+        staging.unlink(missing_ok=True)
+    return True
+
+
 def seed_tex_cache(source=None, target=None, copier=None):
     """Seed a fresh cache or add immutable bundle resources missing after an upgrade."""
     source = Path(source) if source is not None else TEX_CACHE_SOURCE
@@ -288,25 +309,14 @@ def seed_tex_cache(source=None, target=None, copier=None):
     copied = False
     for entry in (source / "bundles" / "data").glob("*/*"):
         digest = entry.parent.name
-        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest) or not entry.is_file():
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
             continue
-        destination = target / entry.relative_to(source)
-        if destination.exists():
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        staging = destination.parent / f".{destination.name}.tmp-{os.getpid()}-{secrets.token_hex(6)}"
-        try:
-            shutil.copyfile(entry, staging)
-            try:
-                os.link(staging, destination)
-            except FileExistsError:
-                continue
-            except OSError:
-                if not destination.exists():
-                    os.replace(staging, destination)
-        finally:
-            staging.unlink(missing_ok=True)
-        copied = True
+        if _seed_missing_file(entry, target / entry.relative_to(source)):
+            copied = True
+    for pattern in ("bundles/data/*.index", "bundles/data/*.prefetch", "bundles/hashes/*", "formats/*.fmt"):
+        for entry in source.glob(pattern):
+            if _seed_missing_file(entry, target / entry.relative_to(source)):
+                copied = True
     return copied
 
 

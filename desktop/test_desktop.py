@@ -142,6 +142,32 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual((target / relative / "other").read_bytes(), b"already cached")
             self.assertFalse(desktop_app.seed_tex_cache(source, target))
 
+    def test_seed_tex_cache_seeds_missing_index_hashes_and_formats_into_existing_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp) / "source", Path(tmp) / "target"
+            digest = "b" * 64
+            (source / "bundles" / "data" / digest).mkdir(parents=True)
+            (source / "bundles" / "hashes").mkdir(parents=True)
+            (source / "formats").mkdir(parents=True)
+            (source / "bundles" / "data" / digest / "tikz.sty").write_bytes(b"tikz")
+            (source / "bundles" / "data" / f"{digest}.index").write_bytes(b"index-data")
+            (source / "bundles" / "data" / "bundle.prefetch").write_bytes(b"prefetch-data")
+            (source / "bundles" / "hashes" / "default_bundle").write_bytes(b"hash-data")
+            (source / "formats" / f"{digest}-latex-33.fmt").write_bytes(b"fmt-data")
+
+            # Simulate an already-existing incomplete cache directory (e.g. failed prior run).
+            target.mkdir()
+            (target / "formats").mkdir()
+            (target / "formats" / f"{digest}-latex-33.fmt").write_bytes(b"existing-fmt")
+
+            self.assertTrue(desktop_app.seed_tex_cache(source, target))
+            self.assertEqual((target / "bundles" / "data" / digest / "tikz.sty").read_bytes(), b"tikz")
+            self.assertEqual((target / "bundles" / "data" / f"{digest}.index").read_bytes(), b"index-data")
+            self.assertEqual((target / "bundles" / "data" / "bundle.prefetch").read_bytes(), b"prefetch-data")
+            self.assertEqual((target / "bundles" / "hashes" / "default_bundle").read_bytes(), b"hash-data")
+            self.assertEqual((target / "formats" / f"{digest}-latex-33.fmt").read_bytes(), b"existing-fmt")
+            self.assertFalse(desktop_app.seed_tex_cache(source, target))
+
 
 class BuildTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "darwin", "应用包生成仅支持 macOS")

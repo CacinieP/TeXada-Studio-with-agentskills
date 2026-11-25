@@ -1444,6 +1444,33 @@ class StudioTrackARepairPipelineTest(unittest.TestCase):
         )
         self.assertEqual(provider.skill_root, custom_root)
 
+    def test_compile_latex_and_run_pipeline_use_utf8_and_no_window_flag(self):
+        with tempfile.TemporaryDirectory() as render_dir, \
+                patch.object(studio, "RENDER", render_dir), \
+                patch.object(studio._sys, "platform", "win32"), \
+                patch.object(studio.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(studio.subprocess, "run",
+                             return_value=SimpleNamespace(returncode=1, stdout="", stderr="")) as run_mock:
+            self.assertIsNone(studio._compile_latex("x+1", "n1", "orig"))
+        self.assertEqual(run_mock.call_args.kwargs.get("encoding"), "utf-8")
+        self.assertEqual(run_mock.call_args.kwargs.get("errors"), "replace")
+        self.assertEqual(run_mock.call_args.kwargs.get("creationflags"), 0x08000000)
+
+        fake_proc = SimpleNamespace(stdout=iter(()), wait=lambda: 0, returncode=0)
+        with tempfile.TemporaryDirectory() as state_dir, \
+                patch.object(studio, "STATE", state_dir), \
+                patch.object(studio._sys, "platform", "win32"), \
+                patch.object(studio.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(studio.subprocess, "Popen", return_value=fake_proc) as popen_mock:
+            studio._run_pipeline(False)
+            for _ in range(50):
+                if studio._run["done"]:
+                    break
+                time.sleep(0.01)
+        self.assertEqual(popen_mock.call_args.kwargs.get("encoding"), "utf-8")
+        self.assertEqual(popen_mock.call_args.kwargs.get("errors"), "replace")
+        self.assertEqual(popen_mock.call_args.kwargs.get("creationflags"), 0x08000000)
+
 
 if __name__ == '__main__':
     unittest.main()
