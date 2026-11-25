@@ -482,6 +482,110 @@ class ProviderFailureTest(unittest.TestCase):
         self.assertIn("ConnectionRefusedError", rep_summary["aborted"])
         self.assertLessEqual(rep_summary["reserved_model_calls"], 2)
 
+    def test_nonplanner_apply_fixes_aborts_after_two_transport_failures_and_keeps_deterministic(self):
+        class DyingProvider:
+            name = "test-dying"
+            model = "broken-model"
+
+            def __init__(self):
+                self.calls = 0
+                self.last_trace = {}
+
+            def repair_formula(self, node, **_kwargs):
+                self.calls += 1
+                self.last_trace = {"model_calls": 1, "reason": "http_error",
+                                   "error": "HTTP 503: backend overloaded"}
+                return None
+
+            def repair_table(self, node, **_kwargs):
+                self.calls += 1
+                self.last_trace = {"model_calls": 1, "reason": "http_error",
+                                   "error": "HTTP 503: backend overloaded"}
+                return None
+
+            def repair_cleanup(self, node, **_kwargs):
+                self.calls += 1
+                self.last_trace = {"model_calls": 1, "reason": "http_error",
+                                   "error": "HTTP 503: backend overloaded"}
+                return None
+
+        source = (
+            "First $\\frac1}{2}$ and second $\\frac3}{4}$.\n"
+            "Third deterministic $\\frac{1}{2$ still fixes.\n"
+            "\\begin{tabular}{lr}\n"
+            "项目 & 金额 \\\\\n"
+            "A & 10 \\\\\n"
+            "B & 20 \\\\\n"
+            "合计 & 99 \\\\\n"
+            "\\end{tabular}\n"
+            "\\begin{tabular}{lr}\n"
+            "项目 & 金额 \\\\\n"
+            "A & 10 \\\\\n"
+            "B & 20 \\\\\n"
+            "合计 \\\\\n"
+            "\\end{tabular}\n"
+            "\\textbf{unclosed\n"
+        )
+        provider = DyingProvider()
+        guard = studio._ProviderAbortGuard()
+        log, events = [], []
+        fixed, edits = studio._apply_fixes(
+            source, log, provider=provider,
+            emit=lambda action, **fields: events.append({"action": action, **fields}),
+            use_model=True, provider_guard=guard,
+        )
+        self.assertEqual(provider.calls, 2, "must abort after 2 consecutive transport failures")
+        self.assertEqual(guard.aborted, "HTTP 503: backend overloaded")
+        self.assertIn(r"\frac{1}{2}", fixed, "deterministic formula repair must still run after abort")
+        self.assertIn(r"合计 & 30 \\", fixed, "deterministic table recompute must still run after abort")
+        self.assertTrue(any("HTTP 503: backend overloaded" in line for line in log))
+        self.assertTrue(any("模型调用已中止" in line for line in log))
+        self.assertTrue(any(e["action"] == "PROVIDER_ABORTED" for e in events))
+
+    def test_studio_job_surfaces_model_warning_on_preflight_and_nonplanner_abort(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as temp_state:
+            with patch.object(studio, "STUDIO_STATE", temp_state), \
+                    patch.object(studio, "_studio_compile",
+                                 return_value={"ok": True, "compile_ok": True, "log": "", "pdf": None, "png": None}):
+                # Case 1: local preflight detects missing model.
+                preflight_provider = SimpleNamespace(
+                    name="local-openai-compatible", model="missing-model",
+                    fingerprint=lambda: {"provider": "local-openai-compatible"},
+                    repair_formula=lambda *_a, **_k: self.fail("must not call dead local model"),
+                )
+                jid1 = "a" * 16
+                studio._jobs[jid1] = {"done": False, "name": "doc.tex", "created_at": 0, "log": [],
+                                      "result": None, "planner_mode": False, "skill_selection": False}
+                with patch.object(studio, "_new_provider", return_value=preflight_provider), \
+                        patch.object(studio, "_model_service_status",
+                                     return_value=(False, "服务已连接，但未找到配置的模型。")):
+                    studio._studio_job("doc.tex", "$x^{a+1 + y$", jid1)
+                res1 = studio._jobs[jid1]["result"]
+                self.assertIn("模型服务不可用", res1["model_warning"])
+                self.assertIn("未找到配置的模型", res1["model_warning"])
+
+                # Case 2: non-planner mid-job abort surfaces sanitized model_warning.
+                class MidJobFailProvider:
+                    name = "remote-openai"
+                    model = "m"
+                    last_trace = {"model_calls": 1, "reason": "timeout", "error": "TimeoutError"}
+
+                    def fingerprint(self):
+                        return {"provider": self.name}
+
+                    def repair_formula(self, *_a, **_k):
+                        return None
+
+                jid2 = "b" * 16
+                studio._jobs[jid2] = {"done": False, "name": "doc.tex", "created_at": 0, "log": [],
+                                      "result": None, "planner_mode": False, "skill_selection": False}
+                with patch.object(studio, "_new_provider", return_value=MidJobFailProvider()):
+                    studio._studio_job("doc.tex", r"$\frac1}{2}$ and $\frac3}{4}$", jid2)
+                res2 = studio._jobs[jid2]["result"]
+                self.assertIn("模型调用已中止", res2["model_warning"])
+                self.assertIn("TimeoutError", res2["model_warning"])
+
 
 if __name__ == "__main__":
     unittest.main()

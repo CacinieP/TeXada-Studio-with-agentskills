@@ -1426,6 +1426,39 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     const repairsHtml = indexNodes.get('repairs').innerHTML;
     assert.match(repairsHtml, /<span class="del">1<\/span>/);
     assert.match(repairsHtml, /<span class="add">2<\/span>/);
+
+    // applyResult surfaces model_warning / planner.aborted directly in reviewHint (both unchanged & diff).
+    const warnSource = { name: 'warn.tex', content: '$x^{a+1 + y$', sha256: hash('$x^{a+1 + y$') };
+    context.testEditor.setValue(warnSource.content);
+    run('curName = "warn.tex"; showCenter("edit");');
+    context.warnUnchangedRes = {
+      requires_review: true,
+      fixed_content: warnSource.content,
+      original_sha256: warnSource.sha256,
+      candidate_sha256: warnSource.sha256,
+      edits: [],
+      compile_before: { ok: true, compile_ok: true, status: 'OK' },
+      compile_after: { ok: true, compile_ok: true, status: 'OK' },
+      problems_after: [{ id: 'f-1', type: 'formula', line: 1, status: 'RETRY', reason: 'unclosed' }],
+      model_warning: '模型服务不可用：服务已连接，但未找到配置的模型。；本次仅执行确定性修复，其余请人工审阅',
+    };
+    await run('applyResult(warnUnchangedRes)');
+    assert.match(get('reviewHint').textContent, /模型服务不可用：服务已连接，但未找到配置的模型/);
+
+    const warnFixed = '$x^{a+1} + y$';
+    context.warnDiffRes = {
+      requires_review: true,
+      fixed_content: warnFixed,
+      original_sha256: warnSource.sha256,
+      candidate_sha256: hash(warnFixed),
+      edits: [{ line: 1, before: 'x^{a+1 + y', after: 'x^{a+1} + y', skill: 'doc-formula-verify' }],
+      compile_before: { ok: false, compile_ok: false, status: 'FAIL' },
+      compile_after: { ok: true, compile_ok: true, status: 'OK' },
+      problems_after: [],
+      planner: { aborted: 'HTTP 503: overloaded', nodes: [] },
+    };
+    await run('applyResult(warnDiffRes)');
+    assert.match(get('reviewHint').textContent, /模型调用已中止：HTTP 503: overloaded/);
   }
 
   console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');

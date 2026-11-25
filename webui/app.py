@@ -197,7 +197,8 @@ def _run_pipeline(fresh: bool):
     env = {**os.environ, "PYTHONPATH": os.path.join(REPO, "harness")}
     try:
         p = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, text=True, bufsize=1)
+                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                             bufsize=1, **_subprocess_window_kwargs())
     except OSError:
         _run.update(done=True, code=1)
         raise
@@ -249,7 +250,8 @@ def _compile_latex(latex: str, node_id: str, tag: str):
             f.write(tex)
         try:
             r = subprocess.run([_tectonic_command(), "--untrusted", "--only-cached", "-o", d, texf],
-                               capture_output=True, text=True, timeout=120, **_subprocess_window_kwargs())
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=120, **_subprocess_window_kwargs())
         except (OSError, subprocess.SubprocessError):
             return None
         pdf = os.path.join(d, "f.pdf")
@@ -390,7 +392,7 @@ from decimal import Decimal, localcontext
 _sys.path.insert(0, os.path.join(REPO, "harness"))
 from docforensics import anchor_guard  # noqa: E402
 from docforensics.vlm import OpenAICompatibleProvider  # noqa: E402
-from docforensics.planner import ConstrainedPlanner  # noqa: E402
+from docforensics.planner import ConstrainedPlanner, PROVIDER_FAILURES  # noqa: E402
 from docforensics.skill_selection import load_catalog  # noqa: E402
 from docforensics.handoff import FormulaHandoffClient, HandoffError, CHECKPOINT  # noqa: E402
 from docforensics.tex_context import analyze_math, check_math_grids, extract_math, mask_opaque  # noqa: E402
@@ -1110,11 +1112,42 @@ def _check_formula_candidate(original, candidate, *, node_id, attempt, emit, rem
     return {"accepted": accepted, "check": check, "scope": scope, "anchor": anchor, "reason": reason}
 
 
-def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True, skip_ordinals=()):
+class _ProviderAbortGuard:
+    """Stop non-planner model calls after consecutive transport-level failures."""
+
+    def __init__(self, limit: int = 2):
+        self.limit = limit
+        self.failures = 0
+        self.aborted: str | None = None
+
+    def note(self, trace, *, failed: bool) -> bool:
+        reason = trace.get("reason") if isinstance(trace, dict) else None
+        if failed and reason in PROVIDER_FAILURES:
+            self.failures += 1
+            if self.failures >= self.limit:
+                detail = trace.get("error") if isinstance(trace, dict) else None
+                self.aborted = detail or reason
+                return True
+        elif not failed or reason:
+            self.failures = 0
+        return False
+
+
+def _format_provider_failure(trace) -> str:
+    reason = (trace.get("reason") if isinstance(trace, dict) else None) or "no_valid_candidate"
+    detail = trace.get("error") if isinstance(trace, dict) else None
+    if isinstance(detail, str) and detail and detail != reason:
+        return f"{reason}（{detail}）"
+    return reason
+
+
+def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True, skip_ordinals=(),
+                 provider_guard=None):
     provider = provider if provider is not None else PROVIDER
     if use_model and provider is None:
         provider = _new_provider()
     emit = emit or (lambda action, **fields: None)
+    guard = provider_guard if provider_guard is not None else _ProviderAbortGuard()
     edits, replacements = [], []
     fp = (_formula_problems(content, emit) if use_model and not skip_ordinals
           else _formula_problems(content, emit, deterministic_only=not use_model, skip_ordinals=skip_ordinals))
@@ -1158,7 +1191,7 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True,
             else:
                 previous_candidate, rejection_reason = deterministic, _formula_rejection_feedback(outcome)
                 feedback_check = outcome["check"]
-        for attempt in (() if ok or verifier_unavailable or not use_model else (1, 2)):
+        for attempt in (() if ok or verifier_unavailable or not use_model or guard.aborted else (1, 2)):
             log.append(f"[doc-formula-verify] {p['id']} L{p['line']} RETRY → 模型文本修复（第 {attempt} 次）")
             context = _formula_repair_context(attempt, feedback_check, previous_candidate, rejection_reason)
             emit("PROVIDER_START", node_id=p["id"], attempt=attempt, original=latex, repair_context=context)
@@ -1171,10 +1204,15 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True,
             if not isinstance(cand, str) or not cand.strip():
                 previous_candidate = None
                 rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
-                log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选：{rejection_reason}")
+                log.append(f"[doc-formula-verify] {p['id']} 模型未返回有效候选：{_format_provider_failure(provider_trace)}")
                 emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
                      candidate=cand, reason=rejection_reason)
+                if guard.note(provider_trace, failed=True):
+                    log.append(f"[studio] 模型调用已中止：{guard.aborted}；剩余节点仅执行确定性修复")
+                    emit("PROVIDER_ABORTED", reason="provider_unavailable", detail=guard.aborted)
+                    break
                 continue
+            guard.note(provider_trace, failed=False)
             if assess_candidate(latex, cand).get("method") == "unchanged":
                 emit("CANDIDATE_REJECTED", node_id=p["id"], attempt=attempt,
                      candidate=cand, reason="model_abstained")
@@ -1210,12 +1248,15 @@ def _apply_fixes(content: str, log, *, provider=None, emit=None, use_model=True,
     for start, end, replacement in sorted(replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
 
-    content, table_edits = _apply_table_fixes(content, log, emit, provider=provider, use_model=use_model)
-    content, cl_edits = _apply_cleanup_fixes(content, log, emit, provider=provider, use_model=use_model)
+    content, table_edits = _apply_table_fixes(content, log, emit, provider=provider,
+                                              use_model=use_model, provider_guard=guard)
+    content, cl_edits = _apply_cleanup_fixes(content, log, emit, provider=provider,
+                                             use_model=use_model, provider_guard=guard)
     return content, edits + table_edits + cl_edits
 
 
-def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
+def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False, provider_guard=None):
+    guard = provider_guard if provider_guard is not None else _ProviderAbortGuard()
     edits = []
     tp = _table_problems(content)
     emit("TABLE_CHECK", problems=tp, model_calls=0)
@@ -1245,9 +1286,11 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
     for start, end, replacement in sorted(table_replacements, reverse=True):
         content = content[:start] + replacement + content[end:]
 
-    if use_model and provider is not None and callable(getattr(provider, "repair_table", None)):
+    if use_model and provider is not None and callable(getattr(provider, "repair_table", None)) and not guard.aborted:
         model_replacements = []
         for tbl in _extract_repairable_tables(content):
+            if guard.aborted:
+                break
             previous_candidate, rejection_reason = None, None
             feedback_check = tbl["check"]
             seen = set()
@@ -1271,9 +1314,15 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
                 if not isinstance(cand_rows, list) or not cand_rows:
                     previous_candidate = None
                     rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
+                    log.append(f"[doc-table-audit] {tbl['id']} 模型未返回有效候选：{_format_provider_failure(provider_trace)}")
                     emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
                          candidate=cand_rows, reason=rejection_reason)
+                    if guard.note(provider_trace, failed=True):
+                        log.append(f"[studio] 模型调用已中止：{guard.aborted}；剩余节点仅执行确定性修复")
+                        emit("PROVIDER_ABORTED", reason="provider_unavailable", detail=guard.aborted)
+                        break
                     continue
+                guard.note(provider_trace, failed=False)
                 scope = assess_table_candidate(tbl["rows"], cand_rows, expected=tbl["expected"])
                 if scope.get("reason") == "unchanged_candidate":
                     emit("CANDIDATE_REJECTED", node_id=tbl["id"], attempt=attempt,
@@ -1319,7 +1368,8 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False):
     return content, edits
 
 
-def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True):
+def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True, provider_guard=None):
+    guard = provider_guard if provider_guard is not None else _ProviderAbortGuard()
     report = inspect_tex_cleanup(content)
     if not report["problems"]:
         return content, []
@@ -1340,7 +1390,7 @@ def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True):
                      provider="deterministic-cleanup", model_calls=0)
             log.append(f"[latex-cleanup] 确定性清理 {len(public_edits)} 处零宽格式噪声")
             return det, public_edits
-    if not use_model or provider is None or not callable(getattr(provider, "repair_cleanup", None)):
+    if not use_model or provider is None or guard.aborted or not callable(getattr(provider, "repair_cleanup", None)):
         return content, []
     previous_candidate, rejection_reason = None, None
     seen = set()
@@ -1358,9 +1408,15 @@ def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True):
         if not isinstance(cand, str) or not cand.strip():
             previous_candidate = None
             rejection_reason = provider_trace.get("reason") or "no_valid_candidate"
+            log.append(f"[latex-cleanup] 模型未返回有效候选：{_format_provider_failure(provider_trace)}")
             emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
                  candidate=cand, reason=rejection_reason)
+            if guard.note(provider_trace, failed=True):
+                log.append(f"[studio] 模型调用已中止：{guard.aborted}；其余请人工审阅")
+                emit("PROVIDER_ABORTED", reason="provider_unavailable", detail=guard.aborted)
+                break
             continue
+        guard.note(provider_trace, failed=False)
         if cand == content:
             emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
                  candidate=cand, reason="model_abstained")
@@ -1890,12 +1946,14 @@ def _studio_job(name: str, content: str, job_id: str):
         emit("COMPILE", phase="before", ok=before["ok"])
         planner_summary = None
         use_model = True
+        model_warning = None
         if getattr(provider, "name", "") == "local-openai-compatible":
             available, reason = _model_service_status()
             if not available:
                 # A dead endpoint must not silently consume the planner or repair budget.
+                model_warning = f"模型服务不可用：{reason}；本次仅执行确定性修复，其余请人工审阅"
                 with _job_lock:
-                    log.append(f"[studio] 模型服务不可用：{reason}；本次仅执行确定性修复，其余请人工审阅")
+                    log.append(f"[studio] {model_warning}")
                 use_model = False
                 planner_mode = False
                 skill_selection = False
@@ -1903,10 +1961,14 @@ def _studio_job(name: str, content: str, job_id: str):
             fixed, edits, planner_summary = _apply_planned_fixes(content, log, provider=provider, emit=emit,
                                                                  skill_selection=skill_selection, use_model_planner=planner_mode)
             if planner_summary and planner_summary.get("aborted"):
+                model_warning = f"模型调用已中止：{planner_summary['aborted']}"
                 with _job_lock:
-                    log.append(f"[studio] 模型调用已中止：{planner_summary['aborted']}")
+                    log.append(f"[studio] {model_warning}")
         elif use_model:
-            fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit)
+            guard = _ProviderAbortGuard()
+            fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit, provider_guard=guard)
+            if guard.aborted:
+                model_warning = f"模型调用已中止：{guard.aborted}"
         else:
             fixed, edits = _apply_fixes(content, log, provider=provider, emit=emit, use_model=False)
         with _job_lock:
@@ -1924,6 +1986,7 @@ def _studio_job(name: str, content: str, job_id: str):
                           "problems_after": problems_after,
                           "model": getattr(provider, "model", REPAIR_MODEL) if model_calls else None,
                           "configured_model": getattr(provider, "model", REPAIR_MODEL), "model_calls": model_calls,
+                          "model_warning": model_warning,
                           "provider": provider.name if model_calls else "deterministic-checks",
                           "skill_mode": "selected" if skill_selection else SKILL_MODE,
                           "skill_selection": skill_selection, "planner_mode": planner_mode, "planner": planner_summary,

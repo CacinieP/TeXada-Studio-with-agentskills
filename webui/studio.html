@@ -494,7 +494,14 @@ $("btnFix").onclick = async () => {
       $("joblog").scrollTop = 1e9;
       done = s.done;
       if(s.done&&s.error){toast('修复任务未完成：'+s.error,true);$('joblog').innerHTML+=("<br>"+lineStyle(s.error));toggleBottomPanel('log',true,$('btnFix'));return;}
-      if (s.done && s.result) await applyResult(s.result, source);
+      if (s.done && s.result) {
+        await applyResult(s.result, source);
+        const warning = s.result.model_warning || (s.result.planner?.aborted ? `模型调用已中止：${s.result.planner.aborted}` : "");
+        if (warning) {
+          toast(warning, true);
+          if (!(s.result.problems_after || []).length) toggleBottomPanel("log", true, $("btnFix"));
+        }
+      }
     }
   } catch(e){warn(e);$('joblog').innerHTML+='<br>'+lineStyle(e.message);toggleBottomPanel('log',true,$('btnFix'));}
   finally {
@@ -542,6 +549,9 @@ async function applyResult(res, source = null) {
   await validateCandidate(res, source);
   if (!sourceMatches(source)) throw new Error("原文或文件已变化；候选已过期。");
   const unchanged = res.fixed_content === source.content;
+  const modelWarning = typeof res.model_warning === "string" && res.model_warning
+    ? res.model_warning
+    : (res.planner?.aborted ? `模型调用已中止：${res.planner.aborted}` : "");
   clearCompileLocation();
   lastResult = res; lastCandidateSource = unchanged ? null : source;
   if (unchanged) {
@@ -558,9 +568,10 @@ async function applyResult(res, source = null) {
     const compiled = res.compile_after.compile_ok ?? res.compile_after.ok;
     $("compile").textContent = failed ? "原文编译未通过" : compiled ? "原文编译通过" : "原文编译未检查";
     $("preview").textContent = "本次没有需要审阅的差异。";
-    $("reviewHint").textContent = problems.length
+    const baseHint = problems.length
       ? `未生成修改。还有 ${problems.length} 项待核对。`
       : failed ? "未生成修改。原文编译未通过，请查看诊断。" : "检查完成，未生成修改。";
+    $("reviewHint").textContent = modelWarning ? `${baseHint} ${modelWarning}` : baseHint;
     if (failed) {
       showCompileFailure(failed, source.content);
     } else {
@@ -574,7 +585,8 @@ async function applyResult(res, source = null) {
   $("btnAccept").disabled = false; $("btnReject").disabled = false; $("btnReport").disabled = false;
   const humanRequests = (res.planner?.nodes || []).filter(n => n.state === "human").length;
   $("reviewHint").textContent = "候选已生成。左侧为原文，右侧为候选；请核对含义后采用。" +
-    (humanRequests ? ` 规划器请求人工核对 ${humanRequests} 个节点；详情见报告事件。` : "");
+    (humanRequests ? ` 规划器请求人工核对 ${humanRequests} 个节点；详情见报告事件。` : "") +
+    (modelWarning ? ` ${modelWarning}` : "");
   disposeDiff();
   modModel = monaco.editor.createModel(res.fixed_content, "latex");
   origModel = monaco.editor.createModel(source.content, "latex");

@@ -324,6 +324,8 @@ class ManagedDownloadTests(unittest.TestCase):
 
         self.assertEqual(popen_mock.call_args.kwargs.get("creationflags"), 0x08000000)
         self.assertEqual(run_mock.call_args.kwargs.get("creationflags"), 0x08000000)
+        self.assertEqual(run_mock.call_args.kwargs.get("encoding"), "utf-8")
+        self.assertEqual(run_mock.call_args.kwargs.get("errors"), "replace")
 
 
 if __name__ == "__main__":
