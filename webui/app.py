@@ -181,9 +181,16 @@ app.mount(MONACO_PREFIX, MonacoStaticFiles(
     directory=os.path.join(os.path.dirname(__file__), "static", "monaco", "0.52.2")
 ), name="monaco")
 
+class _RevalidatingStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Public assets contain only application code and branding, never user documents.
 for _asset_name in ("brand", "editor"):
-    app.mount(f"/static/{_asset_name}", StaticFiles(
+    app.mount(f"/static/{_asset_name}", _RevalidatingStaticFiles(
         directory=os.path.join(os.path.dirname(__file__), "static", _asset_name)
     ), name=_asset_name)
 
@@ -405,9 +412,11 @@ from docforensics.formula_repair import (  # noqa: E402
 from docforensics.table_repair import assess_table_candidate  # noqa: E402
 from docforensics.tex_cleanup import (  # noqa: E402
     assess_cleanup_candidate,
+    assess_zero_width_cleanup,
     cleanup_edits,
     deterministic_cleanup_candidate,
     inspect_tex_cleanup,
+    strip_zero_width_candidate,
 )
 from docforensics.__main__ import repair_model_default  # noqa: E402
 
@@ -448,8 +457,9 @@ def _new_provider(*, skill_selection=False):
         runtime = _local_runtime()
         config = runtime.get_config()
         active = _managed_models().connection()
-        managed_1b = (active is not None and active["model"] == config["model"] == PROFILES["1b"].model
-                      and active["base_url"] == config["base_url"])
+        managed_1b = config["model"] == PROFILES["1b"].model and (
+            active is None or active["base_url"] == config["base_url"]
+        )
         return make_local_provider(config["base_url"], config["model"],
                                    skill_mode="off" if skill_selection else SKILL_MODE,
                                    constrain_planner=managed_1b)
@@ -559,6 +569,24 @@ def _append_compiler_log(log, outcome) -> None:
             log.append(text)
 
 
+def _redact_build_paths(text: str, directory: Path) -> str:
+    """Strip internal STUDIO_STATE build directory prefixes from compiler logs."""
+    if not text:
+        return text
+    prefixes = []
+    for candidate in (directory, directory.resolve()):
+        raw = str(candidate).rstrip("/\\")
+        posix = candidate.as_posix().rstrip("/")
+        for item in (raw + "\\", raw + "/", posix + "/", raw, posix):
+            if len(item) > 3 and item not in prefixes:
+                prefixes.append(item)
+    prefixes.sort(key=len, reverse=True)
+    cleaned = text
+    for prefix in prefixes:
+        cleaned = cleaned.replace(prefix, "")
+    return cleaned
+
+
 def _studio_compile(content: str, name: str, tag: str):
     """Compile in an isolated build directory; page images are generated lazily."""
     document_text(content)
@@ -581,14 +609,14 @@ def _studio_compile(content: str, name: str, tag: str):
             log = "编译超过 120 秒，已停止。请检查文档或本机 TeX 缓存。"
             for stream in (exc.stdout, exc.stderr):
                 if stream:
-                    log += "\n" + _subprocess_text(stream)[-1200:]
+                    log += "\n" + _redact_build_paths(_subprocess_text(stream), directory)[-1200:]
             return {**result, "log": log}
         except OSError:
             return {**result, "log": "Tectonic not found; install it or set TECTONIC（本机缺少编译器）。"}
         stderr_text = _subprocess_text(run.stderr)
         stdout_text = _subprocess_text(run.stdout)
         output = "\n".join(part for part in (stderr_text, stdout_text) if part.strip()) or stderr_text or stdout_text
-        log = output[-2400:]
+        log = _redact_build_paths(output, directory)[-2400:]
         if run.returncode != 0 or not (directory / "main.pdf").is_file():
             diagnostic = _source_compile_error(output, texf, content.count("\n") + 1)
             return {**result, "log": log or "未生成 PDF；请检查本机 TeX 缓存和文档语法。",
@@ -1368,6 +1396,38 @@ def _apply_table_fixes(content, log, emit, *, provider=None, use_model=False, pr
     return content, edits
 
 
+def _cleanup_checker_reason(problems):
+    parts = []
+    for item in problems or ():
+        kind = item.get("kind", "cleanup")
+        line = item.get("line")
+        target = item.get("command") or item.get("environment")
+        detail = f"{kind}({target})" if target else kind
+        parts.append(f"L{line}:{detail}" if line else detail)
+    return "; ".join(parts)[:512] or "cleanup"
+
+
+def _fallback_zero_width_cleanup(content, log, emit):
+    det = strip_zero_width_candidate(content)
+    if det is None:
+        return content, []
+    scope = assess_zero_width_cleanup(content, det)
+    if not scope["allowed"]:
+        return content, []
+    c_edits = cleanup_edits(content, det)
+    emit("DETERMINISTIC_REPAIR", node_id="cleanup-document",
+         candidate_edits=len(c_edits), model_calls=0)
+    emit("CANDIDATE_ACCEPTED", node_id="cleanup-document", attempt=0,
+         reason=scope["reason"], check={"status": "OK"},
+         provider="deterministic-cleanup", model_calls=0)
+    public_edits = [{k: e[k] for k in ("line", "before", "after", "skill")} for e in c_edits]
+    for e in public_edits:
+        emit("CANDIDATE_EDIT", node_id="cleanup-document", **e,
+             provider="deterministic-cleanup", model_calls=0)
+    log.append(f"[latex-cleanup] 确定性清理 {len(public_edits)} 处零宽格式噪声")
+    return det, public_edits
+
+
 def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True, provider_guard=None):
     guard = provider_guard if provider_guard is not None else _ProviderAbortGuard()
     report = inspect_tex_cleanup(content)
@@ -1391,15 +1451,17 @@ def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True, p
             log.append(f"[latex-cleanup] 确定性清理 {len(public_edits)} 处零宽格式噪声")
             return det, public_edits
     if not use_model or provider is None or guard.aborted or not callable(getattr(provider, "repair_cleanup", None)):
-        return content, []
+        return _fallback_zero_width_cleanup(content, log, emit)
+    working_content = strip_zero_width_candidate(content) or content
+    checker_reason = _cleanup_checker_reason(report["problems"])
     previous_candidate, rejection_reason = None, None
     seen = set()
     for attempt in (1, 2):
-        context = _formula_repair_context(attempt, {"status": "RETRY", "reason": report["problems"][0]["kind"]},
+        context = _formula_repair_context(attempt, {"status": "RETRY", "reason": checker_reason},
                                           previous_candidate, rejection_reason)
         emit("PROVIDER_START", node_id="cleanup-document", attempt=attempt, repair_context=context)
         cand = provider.repair_cleanup({"id": "cleanup-document",
-                                        "data": {"content": content, "repair_context": context}})
+                                        "data": {"content": working_content, "repair_context": context}})
         provider_trace = getattr(provider, "last_trace", {})
         if not isinstance(provider_trace, dict):
             provider_trace = {"reason": "trace_unavailable", "model_calls": None}
@@ -1417,7 +1479,11 @@ def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True, p
                 break
             continue
         guard.note(provider_trace, failed=False)
-        if cand == content:
+        if cand in {content, working_content} and working_content == content:
+            emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
+                 candidate=cand, reason="model_abstained")
+            break
+        if cand == working_content and working_content != content:
             emit("CANDIDATE_REJECTED", node_id="cleanup-document", attempt=attempt,
                  candidate=cand, reason="model_abstained")
             break
@@ -1439,7 +1505,7 @@ def _apply_cleanup_fixes(content, log, emit, *, provider=None, use_model=True, p
             log.append(f"[latex-cleanup] 模型结构清洗修复 ✓（共 {len(public_edits)} 处）")
             return cand, public_edits
         previous_candidate, rejection_reason = cand, scope["reason"]
-    return content, []
+    return _fallback_zero_width_cleanup(content, log, emit)
 
 
 def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False, use_model_planner=True):
@@ -1581,8 +1647,9 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                     or not callable(getattr(provider, "repair_cleanup", None))):
                 return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_budget_or_unavailable"},
                         "model_calls": 0, "stop": True}
-            first_kind = (node.get("check", {}).get("problems") or [{"kind": "cleanup"}])[0].get("kind", "cleanup")
-            context = _formula_repair_context(attempt, {"status": "RETRY", "reason": first_kind},
+            checker_reason = _cleanup_checker_reason(node.get("check", {}).get("problems"))
+            working_cleanup = strip_zero_width_candidate(content) or content
+            context = _formula_repair_context(attempt, {"status": "RETRY", "reason": checker_reason},
                                               cleanup_feedback["previous_candidate"],
                                               cleanup_feedback["rejection_reason"])
             emit("PROVIDER_START", node_id=node["id"], attempt=attempt, repair_context=context)
@@ -1590,7 +1657,7 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
             if skill_selection:
                 repair_options["loaded_skill"] = node["loaded_skill"]
             cand = provider.repair_cleanup(
-                {"id": node["id"], "data": {"content": content, "repair_context": context}},
+                {"id": node["id"], "data": {"content": working_cleanup, "repair_context": context}},
                 **repair_options,
             )
             provider_trace = getattr(provider, "last_trace", {})
@@ -1606,7 +1673,7 @@ def _apply_planned_fixes(content, log, *, provider, emit, skill_selection=False,
                 emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt, candidate=cand, reason=reason)
                 cleanup_feedback.update(previous_candidate=None, rejection_reason=reason)
                 return {"accepted": False, "check": {"status": "RETRY", "reason": reason}, "model_calls": 1}
-            if cand == content:
+            if cand in {content, working_cleanup}:
                 emit("CANDIDATE_REJECTED", node_id=node["id"], attempt=attempt, candidate=cand, reason="model_abstained")
                 return {"accepted": False, "check": {"status": "NEEDS_HUMAN", "reason": "model_abstained"},
                         "model_calls": 1, "stop": True}

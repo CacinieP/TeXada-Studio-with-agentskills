@@ -290,6 +290,107 @@ class LocalRuntimeTest(unittest.TestCase):
                 proposal = provider.plan_action({"state_rev": 5, "nodes": snapshot["nodes"][2:]})
                 self.assertEqual((proposal["action"], proposal["node_id"]), ("request-human", "f-003-1"))
 
+    def test_managed_1b_constrains_skill_selection_and_cleanup_table_json_schemas(self):
+        harness = str(Path(__file__).resolve().parents[1] / "harness")
+        with patch.object(sys, "path", [harness, *sys.path]):
+            from docforensics.skill_selection import load_catalog
+
+            catalog = [cap.public() for cap in load_catalog().values()]
+            provider = make_local_provider("http://127.0.0.1:18147", "minicpm-v4.7-1b-q4_k_m",
+                                           constrain_planner=True)
+            for kind, expected_skill in (("formula", "doc-formula-verify"),
+                                         ("table", "doc-table-audit"),
+                                         ("cleanup", "latex-cleanup"),
+                                         ("unknown", None)):
+                snap = {"state_rev": 7, "node": {"id": f"{kind}-1", "kind": kind, "line": 1}, "catalog": catalog}
+                with self.subTest(kind=kind), patch("local_runtime.local_json_request") as request:
+                    request.return_value = {"choices": [{"message": {"content": '{"choice":0}'}, "finish_reason": "stop"}]}
+                    proposal = provider.select_skill(snap)
+                    self.assertEqual(proposal["skill_id"], expected_skill)
+                    self.assertEqual(proposal["state_rev"], 7)
+                    payload = request.call_args.args[1]
+                    schema = payload["response_format"]["json_schema"]["schema"]
+                    self.assertEqual(schema["properties"]["choice"]["enum"], [0])
+
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {"choices": [{"message": {"content": '{"choice":3}'}, "finish_reason": "stop"}]}
+                self.assertIsNone(provider.select_skill({
+                    "state_rev": 8, "node": {"id": "table-document", "kind": "table", "line": 1}, "catalog": catalog,
+                }))
+
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {"choices": [{"message": {"content": '{"content":"\\\\section{A}\\n"}'}, "finish_reason": "stop"}]}
+                self.assertEqual(provider.repair_cleanup({"id": "cleanup-document", "data": {"content": "\\section{A\n"}}), "\\section{A}\n")
+                cleanup_schema = request.call_args.args[1]["response_format"]["json_schema"]
+                self.assertTrue(cleanup_schema["strict"])
+                self.assertEqual(cleanup_schema["schema"]["required"], ["content"])
+                self.assertFalse(cleanup_schema["schema"]["additionalProperties"])
+
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {"choices": [{"message": {"content": '{"rows":[["项目","金额"],["A","1"],["合计","1"]]}'}, "finish_reason": "stop"}]}
+                self.assertEqual(
+                    provider.repair_table({"id": "t-1", "data": {"rows": [["项目", "金额"], ["A", "1"], ["合计"]]}}),
+                    [["项目", "金额"], ["A", "1"], ["合计", "1"]],
+                )
+                table_schema = request.call_args.args[1]["response_format"]["json_schema"]
+                self.assertTrue(table_schema["strict"])
+                self.assertEqual(table_schema["schema"]["required"], ["rows"])
+                self.assertFalse(table_schema["schema"]["additionalProperties"])
+
+            from docforensics.skill_selection import load_catalog, load_selected_skill
+
+            cleanup_skill = load_selected_skill(load_catalog()["latex-cleanup"])
+            table_skill = load_selected_skill(load_catalog()["doc-table-audit"])
+            multi_doc = (
+                "\\documentclass{article}\n"
+                "\\author{TeXada Studio\n"
+                "\\begin{document}\n"
+                "\\section{实验记录\n"
+                "正文段落。\n"
+                "\\begin{itemize}\n"
+                "\\item 第一项\n"
+                "\\item 第二项\n\n"
+                "\\section{结论}\n"
+                "总结。\n"
+                "\\end{document}\n"
+            )
+            with patch("local_runtime.local_json_request") as request:
+                self.assertIsNone(provider.repair_cleanup({"id": "c", "data": {"content": multi_doc}}, loaded_skill=table_skill))
+                self.assertEqual(provider.last_trace["reason"], "wrong_loaded_skill")
+                request.assert_not_called()
+
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {
+                    "choices": [{"message": {"content": '{"item_0":0,"item_1":0,"item_2":0}'}, "finish_reason": "stop"}]
+                }
+                repaired = provider.repair_cleanup(
+                    {"id": "cleanup-document", "data": {"content": multi_doc}},
+                    loaded_skill=cleanup_skill,
+                )
+                self.assertIn("\\author{TeXada Studio}\n", repaired)
+                self.assertIn("\\section{实验记录}\n", repaired)
+                self.assertIn("\\end{itemize}\n", repaired)
+                self.assertTrue(repaired.endswith("\\end{document}\n"))
+                self.assertTrue(provider.last_trace["skill_loaded"])
+                self.assertEqual(provider.last_trace["skill_id"], "latex-cleanup")
+                choice_schema = request.call_args.args[1]["response_format"]["json_schema"]
+                self.assertEqual(choice_schema["name"], "studio_cleanup_choices")
+                self.assertEqual(choice_schema["schema"]["required"], ["item_0", "item_1", "item_2"])
+
+            nested_envs = (
+                "\\begin{document}\n"
+                "\\begin{center}\n"
+                "\\begin{itemize}\n"
+                "\\item 条目\n"
+                "\\end{document}\n"
+            )
+            with patch("local_runtime.local_json_request") as request:
+                request.return_value = {
+                    "choices": [{"message": {"content": '{"item_0":0,"item_1":0}'}, "finish_reason": "stop"}]
+                }
+                nested_fixed = provider.repair_cleanup({"id": "c", "data": {"content": nested_envs}})
+                self.assertIn("\\end{itemize}\n\\end{center}\n\\end{document}\n", nested_fixed)
+
     def test_invalid_http_and_response_shapes_are_explicit(self):
         for response, status, expected in ((b"not json", 200, "invalid_model_response"),
                                            ([], 200, "invalid_model_response"),

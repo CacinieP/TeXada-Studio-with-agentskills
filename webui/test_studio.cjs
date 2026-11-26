@@ -1461,5 +1461,191 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
     assert.match(get('reviewHint').textContent, /模型调用已中止：HTTP 503: overloaded/);
   }
 
+  // CUA bug-hunt regressions: expired diff disposal, restoreJob read-only summary/report,
+  // loadFile problem reset, Undo/Redo state + shortcuts, and settings save connection preservation.
+  {
+    const prevJ = run('j');
+    const prevDownload = run('download');
+    const prevAnalyze = run('analyze');
+    try {
+      // 1. Source edit after candidate generation disposes expired diff and returns to edit view.
+      let onModelChange = null;
+      const liveEditor = editor('line 1');
+      liveEditor.onDidChangeModelContent = fn => { onModelChange = fn; };
+      context.liveEditor = liveEditor;
+      run('editor = liveEditor; curName = "expire.tex"; savedContent = "line 1"; showCenter("edit");');
+      run('editor.onDidChangeModelContent(() => { if (lastCandidateSource && !sourceMatches(lastCandidateSource)) invalidateCandidate("原文已编辑，候选已过期；请重新生成。"); if (!loadingDocument) invalidatePreview(); updateSaveState(); scheduleEditorContext(); });');
+      context.expireCandidate = {
+        requires_review: true,
+        fixed_content: 'line 1 fixed',
+        original_sha256: hash('line 1'),
+        candidate_sha256: hash('line 1 fixed'),
+        edits: [{ line: 1, before: 'line 1', after: 'line 1 fixed', skill: 'doc-formula-verify' }],
+        compile_before: { ok: false, compile_ok: false },
+        compile_after: { ok: true, compile_ok: true },
+        problems_after: [],
+      };
+      await run('applyResult(expireCandidate)');
+      assert.equal(run('diffShown'), true);
+      liveEditor.setValue('line 1 edited by user');
+      onModelChange();
+      assert.equal(run('diffShown'), false, 'expired candidate must exit diff view');
+      assert.equal(run('diffEditor'), null, 'expired candidate must dispose stale diff editor');
+      assert.equal(get('btnDiff').disabled, true);
+      assert.equal(get('tab-diff').getAttribute('aria-disabled'), 'true');
+
+      // 2. restoreJob updates read-only Agent summary and report target even when source changed or already decided.
+      let exportedReport = null;
+      context.captureHistReport = (name, blob) => { exportedReport = { name, blob }; };
+      run('download = captureHistReport');
+      const histResult = {
+        requires_review: true,
+        fixed_content: 'historical fixed',
+        original_sha256: hash('historical original'),
+        candidate_sha256: hash('historical fixed'),
+        model: 'minicpm-v4.7-1b-q4_k_m',
+        model_calls: 2,
+        elapsed_seconds: 1.5,
+        skill_mode: 'on',
+        scope: 'TeX 数学片段语法与简单表格合计；不验证数学结论或 OCR 忠实度',
+        edits: [{ line: 3, before: '$a+$', after: '$a+1$', skill: 'doc-formula-verify' }],
+        compile_before: { ok: false, compile_ok: false },
+        compile_after: { ok: true, compile_ok: true },
+        problems_after: [],
+      };
+      context.restoreMismatchWire = async (url) => {
+        if (String(url).startsWith('/api/studio/fixstatus')) {
+          return { done: true, name: 'past-doc.tex', log: ['[studio] done'], result: histResult };
+        }
+        if (String(url).startsWith('/api/studio/file?')) {
+          return { content: 'modified past-doc content' };
+        }
+        return { files: ['past-doc.tex'], problems: [] };
+      };
+      context._pageRestoreJob = pageRestoreJob;
+      run('j = restoreMismatchWire; savedContent = editor.getValue();');
+      await run('_pageRestoreJob("abcd1234", "past-doc.tex")');
+      assert.equal(get('btnAccept').disabled, true, 'mismatched historical job cannot be adopted');
+      assert.equal(get('btnReport').disabled, false, 'mismatched historical job still allows exporting its audit report');
+      assert.match(get('reviewHint').textContent, /当前原文与历史任务不同/);
+      get('btnReport').onclick();
+      assert.equal(exportedReport.name, 'past-doc.audit.md');
+      assert.match(await exportedReport.blob.text(), /文档：past-doc\.tex[\s\S]*minicpm-v4\.7-1b-q4_k_m/);
+
+      // 3. loadFile resets stale problem count/items immediately before async analyze completes.
+      run('renderProblems([{type:"formula",status:"RETRY",line:2,latex:"x+"}])');
+      assert.equal(String(get('probCount').textContent), '1');
+      let finishSwitchFile;
+      context.pendingSwitchWire = () => new Promise(resolve => { finishSwitchFile = resolve; });
+      run('j = pendingSwitchWire; analyze = async () => {}; compilePreview = async () => {}; loadFiles = async () => {}; savedContent = editor.getValue();');
+      const switchPromise = run('loadFile("fresh.tex", true)');
+      assert.equal(String(get('probCount').textContent), '0', 'switching files immediately clears previous document problem count');
+      assert.equal(run('problemsSource'), null);
+      finishSwitchFile({ content: 'clean fresh doc' });
+      await switchPromise;
+
+      // 4. Adopting a candidate focuses editor, and Undo/Redo (including ⌘Z / ⌘⇧Z outside .inputarea) re-syncs analyze & reviewHint.
+      let analyzeRuns = 0;
+      context.countingAnalyze = async () => { analyzeRuns++; };
+      context.decisionWire = async () => ({
+        job_id: 'eeeeeeeeeeeeeeee',
+        decision: 'accept',
+        original_sha256: hash('before adopt'),
+        candidate_sha256: hash('after adopt'),
+      });
+      liveEditor.setValue('before adopt');
+      run('j = decisionWire; analyze = countingAnalyze; curName = "undo-sync.tex"; savedContent = "before adopt";');
+      context.adoptSyncResult = {
+        job_id: 'eeeeeeeeeeeeeeee',
+        requires_review: true,
+        fixed_content: 'after adopt',
+        original_sha256: hash('before adopt'),
+        candidate_sha256: hash('after adopt'),
+        edits: [{ line: 1, before: 'before adopt', after: 'after adopt', skill: 'latex-cleanup' }],
+        compile_before: { ok: false, compile_ok: false },
+        compile_after: { ok: true, compile_ok: true },
+        problems_after: [],
+      };
+      await run('applyResult(adoptSyncResult)');
+      analyzeRuns = 0;
+      liveEditor.focused = false;
+      await get('btnAccept').onclick();
+      assert.equal(liveEditor.focused, true, 'accepting candidate focuses editor');
+      assert.equal(analyzeRuns, 1);
+      context.document.activeElement = get('btnAgent');
+      let prevented = false;
+      documentListeners.get('keydown')({ key: 'z', metaKey: true, shiftKey: false, preventDefault() { prevented = true; } });
+      assert.equal(prevented, true, '⌘Z outside inputarea triggers document undo');
+      assert.equal(liveEditor.getValue(), 'before adopt');
+      assert.equal(analyzeRuns, 2, 'undo re-runs analyze to keep problem count synchronized');
+      assert.match(get('reviewHint').textContent, /已撤销候选采用/);
+      prevented = false;
+      documentListeners.get('keydown')({ key: 'Z', metaKey: true, shiftKey: true, preventDefault() { prevented = true; } });
+      assert.equal(prevented, true, '⌘⇧Z outside inputarea triggers document redo');
+      assert.equal(liveEditor.getValue(), 'after adopt');
+      assert.equal(analyzeRuns, 3, 'redo re-runs analyze to keep problem count synchronized');
+      assert.match(get('reviewHint').textContent, /已采用候选到编辑器/);
+
+      // 5. Probing a draft then clicking Save Settings preserves verified 已连接 status.
+      run('displayConfig({base_url:"http://127.0.0.1:8080/v1",model:"MiniCPM-V-4.7-1B",local_mode:true,model_available:null,tools:{}})');
+      get('modelBaseUrl').value = 'http://127.0.0.1:53058/v1';
+      get('modelName').value = 'minicpm-v4.7-1b-q4_k_m';
+      context.probeSaveWire = async (url, options) => {
+        if (String(url).includes('/probe?')) return { model_available: true };
+        if (String(url).includes('/settings?')) {
+          const body = JSON.parse(options.body);
+          return { ...body, local_mode: true, model_available: null, tools: {} };
+        }
+        return { local_mode: true, model_available: null, tools: {} };
+      };
+      run('j = probeSaveWire');
+      await get('btnTestModel').onclick();
+      await get('btnSettingsSave').onclick();
+      assert.equal(get('modelIndicator').dataset.state, 'connected', 'saving a verified draft keeps 已连接 status');
+      assert.match(get('modelConnectionStatus').textContent, /已连接/);
+
+      // 6. Round-2 CUA polish: loadFile resets scrollTop & cursor, #btnRefreshJobs is not 100% width,
+      // Command Palette Enter swallows trailing keyup and openOutline focuses first section item.
+      let scrolledTo = null;
+      liveEditor.setScrollTop = top => { scrolledTo = top; };
+      liveEditor.setPosition({ lineNumber: 18, column: 4 });
+      context.scrollResetWire = async () => ({ content: '\\section{一}\n正文\n\\section{二}\n内容\n' });
+      run('j = scrollResetWire; analyze = async () => {}; compilePreview = async () => {}; loadFiles = async () => {}; savedContent = editor.getValue();');
+      await run('loadFile("scroll-reset.tex", true)');
+      assert.equal(scrolledTo, 0, 'loadFile resets Monaco scrollTop to 0');
+      assert.equal(liveEditor.getPosition().lineNumber, 1, 'loadFile resets cursor line to 1');
+      assert.equal(liveEditor.getPosition().column, 1, 'loadFile resets cursor column to 1');
+
+      assert.doesNotMatch(stylesheet, /\.panel\s+\.light-button\s*\{[^}]*width\s*:\s*100%/, 'nested .light-button inside h4 must not inherit width:100%');
+      assert.match(html, /stickyScroll\s*:\s*\{\s*enabled\s*:\s*false\s*\}/, 'Monaco stickyScroll disabled to avoid overlapping short LaTeX documents');
+
+      run('openCommandPalette()');
+      get('commandInput').value = '转到章节';
+      get('commandInput').listeners.get('input')();
+      let enterUpPrevented = false;
+      documentListeners.get('keydown')({ key: 'Enter', preventDefault() {}, stopPropagation() {} });
+      assert.equal(get('outlineDialog').open, true, 'Enter in Command Palette opens outlineDialog');
+      let syntheticClickPrevented = false;
+      documentListeners.get('click')?.({ detail: 0, target: get('outlineDialog'), preventDefault() { syntheticClickPrevented = true; }, stopPropagation() {} });
+      assert.equal(syntheticClickPrevented, true, 'synthetic Enter-keyup click (detail===0) on newly focused dialog button is swallowed');
+      documentListeners.get('keyup')?.({ key: 'Enter', preventDefault() { enterUpPrevented = true; }, stopPropagation() {} });
+      assert.equal(enterUpPrevented, true, 'trailing Enter keyup after Command Palette execution is swallowed');
+      assert.equal(get('outlineDialog').open, true, 'outlineDialog stays open after trailing Enter keyup');
+      let arrowDownPrevented = false;
+      get('outlineDialog').listeners.get('keydown')?.({ key: 'ArrowDown', preventDefault() { arrowDownPrevented = true; } });
+      assert.equal(arrowDownPrevented, true, 'ArrowDown cycles focus between section buttons inside outlineDialog');
+      run('closeDialog("outlineDialog")');
+    } finally {
+      delete context._pageRestoreJob;
+      context._prevJ = prevJ;
+      context._prevDownload = prevDownload;
+      context._prevAnalyze = prevAnalyze;
+      run('editor = testEditor; j = _prevJ; download = _prevDownload; analyze = _prevAnalyze;');
+      delete context._prevJ;
+      delete context._prevDownload;
+      delete context._prevAnalyze;
+    }
+  }
+
   console.log('PASS: pinned local Monaco; all prior review/race/source/PDF guards; OCR request/review lifecycle, cancellation, stale results and retry; outline/preferences/statistics/cache; closed-by-default Agent/problems/log; activity actions; automatic candidate review; explicit/background checks; durable failure/history logs; mobile drawer/navigation Tab/Escape/backdrop/problem focus; mobile search reachability; collapsed mobile preview CSS cascade; export menu dismissal/disabled capability; commands behind closed panels; visible three-state model status and isolated draft probing; no device identifiers; brand assets and critical CSS.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(testWatchdog));

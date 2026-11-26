@@ -7,9 +7,11 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from docforensics.tex_cleanup import (  # noqa: E402
     assess_cleanup_candidate,
+    assess_zero_width_cleanup,
     cleanup_edits,
     deterministic_cleanup_candidate,
     inspect_tex_cleanup,
+    strip_zero_width_candidate,
 )
 
 
@@ -128,6 +130,63 @@ class TexCleanupInspectionTests(unittest.TestCase):
         edits = cleanup_edits(source, good)
         self.assertEqual(len(edits), 1)
         self.assertLessEqual(edits[0]["end"], ranges[0][0])
+
+    def test_unexpected_math_close_does_not_suppress_unclosed_command_detection_and_repair(self):
+        source = (
+            "\\documentclass{ctexart}\n"
+            "\\title{实验}\n"
+            "\\author{TeXada Studio\n"
+            "\\begin{document}\n"
+            "\\\n"
+            "\\int_0^1 x\\,dx\n"
+            "\\]\n"
+            "\\end{document}\n"
+        )
+        report = inspect_tex_cleanup(source)
+        self.assertEqual([p["kind"] for p in report["problems"]], ["unclosed_command_brace"])
+        self.assertEqual(report["problems"][0]["command"], "author")
+        self.assertEqual(report["problems"][0]["line"], 3)
+
+        repaired = source.replace("\\author{TeXada Studio\n", "\\author{TeXada Studio}\n")
+        verdict = assess_cleanup_candidate(source, repaired)
+        self.assertTrue(verdict["allowed"], verdict)
+        edits = cleanup_edits(source, repaired)
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0]["line"], 3)
+
+        # Unclosed math still protects trailing multiline prose braces from false positives.
+        multiline_before_unclosed_math = "\\textbf{第一行\n$\\frac{a}{b$ 第二行}\n"
+        self.assertEqual(inspect_tex_cleanup(multiline_before_unclosed_math)["problems"], [])
+
+    def test_zero_width_fallback_candidate_preserves_protected_regions_when_structural_deficits_coexist(self):
+        source = (
+            "\\author{TeXada Studio\n"
+            "正文\u200b段落 $x+1$ 结束\ufeff。\n"
+            "% 注释保留 \u200b\n"
+            "\\begin{itemize}\n"
+            "\\item 条目\n"
+        )
+        self.assertIsNone(deterministic_cleanup_candidate(source))
+        stripped = strip_zero_width_candidate(source)
+        expected = (
+            "\\author{TeXada Studio\n"
+            "正文段落 $x+1$ 结束。\n"
+            "% 注释保留 \u200b\n"
+            "\\begin{itemize}\n"
+            "\\item 条目\n"
+        )
+        self.assertEqual(stripped, expected)
+        verdict = assess_zero_width_cleanup(source, stripped)
+        self.assertTrue(verdict["allowed"], verdict)
+        self.assertFalse(assess_zero_width_cleanup(source, stripped.replace("段落", "改写"))["allowed"])
+        self.assertFalse(assess_zero_width_cleanup(source, stripped.replace("$x+1$", "$x+2$"))["allowed"])
+        edits = cleanup_edits(source, stripped)
+        self.assertEqual(len(edits), 2)
+        self.assertTrue(all(edit["line"] == 2 for edit in edits))
+        rebuilt = source
+        for edit in sorted(edits, key=lambda item: (item["start"], item["end"]), reverse=True):
+            rebuilt = rebuilt[:edit["start"]] + edit["after"] + rebuilt[edit["end"]:]
+        self.assertEqual(rebuilt, stripped)
 
 
 if __name__ == "__main__":
