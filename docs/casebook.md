@@ -1,6 +1,6 @@
 # 案例手册
 
-所有命令从仓库根目录执行，使用 Python 3.11+ 虚拟环境。安装与 Studio 启动见 [README](../README.md)，实现契约见 [Skills 技术报告](skills-technical-report.md)。
+所有命令从仓库根目录执行，使用 Python 3.11+ 虚拟环境。安装与 Studio 启动见 [README](../README.md)，实现契约见 [Skills 技术报告](architecture/skills-technical-report.md)。
 
 ## 选择入口
 

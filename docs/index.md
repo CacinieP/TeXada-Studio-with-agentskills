@@ -1,53 +1,49 @@
-# 文档导航
+# 文档总索引
 
-从[首页快速开始](../README.md)运行无需模型的示例，再按目标进入下列文档。
+本目录按**日常使用、版本发布、系统架构、验证评测、协作打包**五类整理全部项目文档。
 
-| 目标 | 入口 | 能找到什么 |
+## 一、用户手册与本地部署
+
+| 目标 | 推荐入口 | 说明 |
 | --- | --- | --- |
-| 了解 TeXada 系列 | [系列说明](texada-series.md) · [Math Agent](https://github.com/CacinieP/TeXada-the-Math-Agent) | MiniCPM 驱动的两个工具、手动 LaTeX 交接和迭代计划 |
-| 启用本机 MiniCPM | [本机连接](local-studio.md#本机模型连接) · [4.7 适配说明](minicpm-v47.md) | 本地权重/端点；旧 ModelBest profile 的显式兼容与验收范围 |
-| 看完整操作 | [B站视频](https://www.bilibili.com/video/BV16Kan6rEGv/) · [连续实录与证据](dynamic-demo.md) | 源码编辑、候选审阅、完整等待与导出 |
-| 本地运行与排错 | [README](../README.md) · [English](../README.en.md) · [排错](troubleshooting.md) · [桌面窗口](../desktop/README.md) | 安装、启动、[配置](../README.md#配置)（模型服务、可选工具、TeX 资源）、macOS / Windows 桌面包与常见故障 |
-| 选择样本 | [样本目录](../samples/README.md) · [案例手册](casebook.md) | `.tex`、结构化输入、逐例预期 |
-| 使用 CLI | [Harness 手册](../harness/README.md) | 输入结构、参数、报告和续跑 |
-| 复现检查器行为 | [27 个检查案例](../samples/evaluation/README.md) | 运行命令、预期状态与结果解释 |
-| 比较 Skill 指令 | [研究协议](../samples/research/README.md) · [先导实验解读](skills-pilot-analysis.md) | 三组对照、来源、候选和人工复核 |
-| 理解 Skill 设计 | [Skills 技术报告](skills-technical-report.md) · [架构](architecture.md) | 职责划分、指令契约、工具执行、候选回判与对照实验 |
-| 使用当前 Skill | [AgentSkills 使用指南](agent-skills.md) | Studio 操作入口、任务路由、当前能力与运行时加载范围 |
-| 核对公式修复质量 | [修复质量记录](formula-repair-quality.md) | Math Agent 参考、保真范围、对照指标与复现方法 |
-| 查看已有验证 | [当前验证](current-validation.md) · [历史验证](validation.md) · [编译记录](evaluation-results/studio-latex/README.md) | 版本、输入、环境和结果 |
-| 修改项目 | [贡献说明](../CONTRIBUTING.md) · [路线图](roadmap.md) | 开发约定、相关测试和后续工作 |
-| 部署与维护 | [部署手册](../deploy/README.md) · [安全说明](../SECURITY.md) | 配置、升级、数据备份和信任边界 |
-| 源码分发 | [源码包与校验](source-package.md) | 固定提交、文件清单与 SHA256 核验 |
+| 日常下载安装与功能上手 | **[用户手册（README）](../README.md)** · **[English Manual](../README.en.md)** | 桌面端安装、界面导览、模板/编译/识图/审阅修复、模型配置与快捷键 |
+| 源码启动、命令行与数据目录 | [本地部署与开发指南](local-studio.md) | 虚拟环境、启动器参数、离线 TeX 预热、回归测试与本地 API |
+| 排查安装、连接、编译或保存异常 | [安装与使用排错](troubleshooting.md) | 401 会话、模型连接、PDF 预览、OCR 页数与版本冲突排查 |
+| 在外部 Agent 中接入本仓库 Skill | [AgentSkills 使用指南](agent-skills.md) | 7 个技能包的职责边界、运行时白名单与外部调用方式 |
 
-## 当前复现状态
+## 二、版本发布与变更日志（`docs/changelog/` & `docs/releases/`）
 
-当前本地复现见[2026-11-04 验证记录](current-validation.md)。遇到安装、模型或资源问题，先查[排错说明](troubleshooting.md)。历史演示与实验保留原日期、模型和环境，不能代替当前版本的复现。
+- **总览与流水账**：[版本发布与变更日志总览](changelog/README.md) · [完整 CHANGELOG](changelog/CHANGELOG.md) · [latex-cleanup 子模块版本记录](../skills/latex-cleanup/CHANGELOG.md)
+- **正式版发布说明**：[v0.1.4（最新）](releases/v0.1.4.md) · [v0.1.3](releases/v0.1.3.md) · [v0.1.2](releases/v0.1.2.md) · [v0.1.1](releases/v0.1.1.md) · [v0.1.0](releases/v0.1.0.md)
+- **早期预发布与准备记录**：[v0.2.0-beta.4](releases/v0.2.0-beta.4.md) · [开源发布清单](open-source-release.md) · [开源准备度](open-source-readiness.md) · [发布计划](launch-plan.md) · [迁移记录](repository-migration.md) · [隐私扫描记录](security-scan-notes.md)
 
-## 项目、技术与发布
+## 三、系统架构与专题设计（`docs/architecture/`）
 
-- 项目介绍：[项目报告](project-report.md)、[微信公众号文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)、[技术文章](technical-article.md)、[发布清单](open-source-release.md)。
-- 发布准备：[v0.1.4 发布说明](releases/v0.1.4.md)、[v0.1.3 发布说明](releases/v0.1.3.md)、[v0.1.2 发布说明](releases/v0.1.2.md)、[v0.1.1 发布说明](releases/v0.1.1.md)、[v0.1.0 发布说明](releases/v0.1.0.md)、[开源清单](open-source-release.md)、[准备度记录](open-source-readiness.md)、[发布与传播计划](launch-plan.md)、[早期草案](releases/v0.1.0-alpha.1-draft.md)。
-- 维护记录：[CHANGELOG](../CHANGELOG.md)、[迁移记录](repository-migration.md)、[隐私扫描记录](security-scan-notes.md)。
-- 引用项目：[CITATION.cff](../CITATION.cff)，同时注明所用提交号。
+- **总体架构**：**[系统架构与设计总览](architecture/README.md)**（双平台桌面壳、FastAPI 工作区宿主、AgentSkills 零信任守卫、托管模型与 MiniCPM 1B 结构化约束）
+- **核心专题设计**：
+  - [AgentSkills 技术设计报告](architecture/skills-technical-report.md)：四态检查器协议、Skill 指纹与 CLI 事件续跑机制
+  - [受限 Agent 规划器设计](architecture/constrained-planner.md)：默认关闭的 12 步状态机、动作掩码与审计日志
+  - [白名单多 Skill 动态选择设计](architecture/skill-selection.md)：`capability.json` 元数据预检、先验后载与拒绝降级
+  - [单公式 Math Agent 交接协议](architecture/formula-handoff.md)：码点范围转换、四元组版本绑定与幂等审阅确认
+  - [图片与 PDF 识别导入管线设计](architecture/ocr-pipeline.md)：Studio 受保护导入流程与独立 OCR 实验 CLI 的职责分界
+  - [深海蓝视觉工作区交互设计](architecture/visual-workspace.md)：五栏连续布局、按需展开抽屉与无障碍交互基线
+  - [早期立项提案导引](architecture/proposal.md) · [CLI Harness 手册](../harness/README.md) · [桌面端打包说明](../desktop/README.md)
 
-演示原始证据从[演示页](demo.md)和[连续实录页](dynamic-demo.md)进入。历史报告保留各自的输入、环境和时间条件；当前操作方式以 README 和模块手册为准。
+## 四、验证记录、复现案例与实验归档
+
+- **当前验证与质量边界**：[当前验证记录](current-validation.md) · [E2E 发行验收摘要](evaluation-results/e2e-release-01/SUMMARY.md) · [公式修复质量记录](formula-repair-quality.md) · [本地修复受控验证](local-repair-controlled-validation.md)
+- **复现案例与样本说明**：[案例手册](casebook.md) · [样本总览](../samples/README.md) · [27 例检查器契约](../samples/evaluation/README.md) · [评测结果归档索引](evaluation-results/README.md)
+- **专题历史档案**：[MiniCPM-V 4.7 记录](minicpm-v47.md)（[实机证据](minicpm-v47-evidence.md)）· [Jev 转换权重溯源](jev-source-evidence.md) · [外部公式评测协议](external-formula-evaluation-protocol.md) · [Skill 先导实验分析](skills-pilot-analysis.md) · [项目报告](project-report.md) · [技术文章](technical-article.md) · [系列背景](texada-series.md) · [演示归档](demo.md)（[动态演示](dynamic-demo.md)）· [本地验收](local-studio-acceptance.md) · [编辑器打磨验收](editor-polish-acceptance.md) · [研究笔记](research-notes.md) · [历史验证总表](validation.md)
+
+## 五、打包、协作与路线图
+
+- [可复核源码包](source-package.md) · [参与贡献](../CONTRIBUTING.md) · [安全策略](../SECURITY.md) · [求助支持](../SUPPORT.md) · [第三方许可证声明](../THIRD_PARTY_NOTICES.md) · [桌面捆绑组件审计](../desktop/licenses-audit.md) · [路线图](roadmap.md)
 
 ## 变更时同步哪些文档
 
-| 改动 | 同步检查 |
+| 变更内容 | 需同步更新的文档 |
 | --- | --- |
-| 依赖、启动或配置 | 中英文 README、部署、排错 |
-| 输入契约与检查器 | Skill、案例定义、案例手册、技术报告 |
-| CLI 状态、重试或报告 | Harness 手册与相关回归 |
-| Skill 请求与研究协议 | 研究说明、架构、技术报告 |
-| Studio 交互 | README、案例手册；需要时更新演示 |
-| 版本与发布 | CHANGELOG、发布清单、首页状态 |
-
-每个主题保留一个主要说明，其他页面链接到它。新增结果另存运行目录；文档引用准确的输入和结果，不覆盖既有实验记录。
-
-- [Studio 受限 Agent 规划实验](studio-constrained-planner.md)：默认关闭、宿主预算与动作约束、成对离线/实时评测。
-
-- [Studio 公式/表格 Skill 选择实验](studio-skill-selection.md)：独立默认关闭的选择开关、能力 schema/version、先验证再加载与拒绝路径。
-
-- [Studio 单公式 Math Agent 交接 v1](studio-formula-handoff.md)：默认关闭、Unicode范围和revision/hash绑定、幂等及人工accept/reject。
+| 桌面安装、界面交互、常用配置或快捷键 | [`README.md`](../README.md)、[`README.en.md`](../README.en.md)；涉及命令参数或排错时同步 [`local-studio.md`](local-studio.md) 与 [`troubleshooting.md`](troubleshooting.md) |
+| 系统分层、模型约束、检查器或 Skill 协议 | [`architecture/README.md`](architecture/README.md) 及对应 `architecture/*.md`、[`agent-skills.md`](agent-skills.md)、[`harness/README.md`](../harness/README.md) |
+| 版本发布、打包变更或新校验基线 | [`changelog/CHANGELOG.md`](changelog/CHANGELOG.md)、[`changelog/README.md`](changelog/README.md)、`releases/vX.Y.Z.md` 与 [`current-validation.md`](current-validation.md) |
+| 新增样本、评测运行或契约调整 | [`samples/README.md`](../samples/README.md)、[`casebook.md`](casebook.md) 及 [`evaluation-results/`](evaluation-results/README.md) 对应归档 |

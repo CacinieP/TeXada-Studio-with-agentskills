@@ -5,7 +5,7 @@
 ## 开发流程
 
 1. Fork 并 clone 仓库，创建 `fix/`、`feat/` 或 `docs/` 分支。
-2. 按 [README](README.md)准备虚拟环境，用最小合成输入复现问题。
+2. 按[本地部署与开发指南](docs/local-studio.md)准备虚拟环境，用最小合成输入复现问题。
 3. 修改实现并运行相关检查，命令见下表。
 4. 运行 `git diff --check`，检查暂存文件后提交 PR。
 

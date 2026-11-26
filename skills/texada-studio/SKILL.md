@@ -59,7 +59,7 @@ Studio 是 Python/FastAPI 本机服务与浏览器中的 Monaco 编辑器，不�
 
 受限规划、自动 Skill 选择和单公式交接属于单独的可选功能。沿用用户选择，不为普通编辑自动开启。
 单公式交接仅处理符合条件的 `$...$` 正文，需保持完整来源范围与审阅绑定，见
-[交接协议](../../docs/studio-formula-handoff.md)。
+[交接协议](../../docs/architecture/formula-handoff.md)。
 
 完成后简述文档名、实际改动、是否已保存、已执行的检查和剩余问题。仅在真正生成并检查后提供 PDF；
 不把 fixture、缓存结果或一次 smoke 测试描述为真实模型准确率。

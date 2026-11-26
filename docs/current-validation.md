@@ -29,7 +29,7 @@
 - 新规则在上述结构修复组中避免了模型请求，收益是宿主流程改进；after 的零 HTTP 不是模型推理准确率评测。
 - 小型合成对照、单次本机 OCR 和页面 smoke 不能推广为数学正确率、任意文档准确率或跨平台验收。
 - 当前构建与字体/页面转换核对以 Apple Silicon macOS 为主；Linux CI 验证软件回归，不能替代 Linux 桌面与模型实测。
-- 历史 Chrome 与本机 1B 转写记录保留其日期和提交，见[本地验收](local-studio-acceptance.md)、[视觉验收](texada-visual-implementation.md)与[历史验证](validation.md)。
+- 历史 Chrome 与本机 1B 转写记录保留其日期和提交，见[本地验收](local-studio-acceptance.md)、[视觉验收](architecture/visual-workspace.md)与[历史验证](validation.md)。
 
 源码 ZIP 只含已提交的 Git tree，附完整提交与文件摘要，不包含 `.git` 历史、CI 配置、运行文档、模型、虚拟环境或本机工具。仓库维护使用完整 checkout；普通源码包使用者按 README 准备运行环境。
 

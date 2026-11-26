@@ -1,5 +1,7 @@
 # Changelog
 
+> 中文版本矩阵、各版本独立发布说明与子模块变更索引见 **[版本发布与变更日志总览](README.md)**；最新正式版说明见 **[TeXada Studio v0.1.4](../releases/v0.1.4.md)**。
+
 ## 0.1.4 — 2026-11-26
 
 ### Fixed
@@ -101,7 +103,7 @@
 ### Distribution and validation
 
 - Set the macOS app build number to 4; short version remains 0.2.0.
-- 587 local Python tests and four JavaScript suites pass. Full observations and limitations: [beta.4 acceptance](docs/evaluation-results/beta4-acceptance-01/README.md). One synthetic page and agent review do not establish OCR accuracy or independent human adjudication.
+- 587 local Python tests and four JavaScript suites pass. Full observations and limitations: [beta.4 acceptance](../evaluation-results/beta4-acceptance-01/README.md). One synthetic page and agent review do not establish OCR accuracy or independent human adjudication.
 
 ## Earlier development log
 
@@ -160,7 +162,7 @@
 - Preserve rejected candidates, original table rows, process exit codes and bounded response excerpts in reports.
 - Remove embedded deployment credentials, private paths and an unlicensed textbook extract from distributed source and reachable history.
 
-Historical runtime results remain in [validation records](docs/validation.md); previous media are listed in the [demo archive](docs/demo.md).
+Historical runtime results remain in [validation records](../validation.md); previous media are listed in the [demo archive](../demo.md).
 
 ## Local 35B profile and experiment archive (2026-11-08)
 

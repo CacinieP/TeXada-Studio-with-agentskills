@@ -2,7 +2,7 @@
 
 方向：科研与教育中的 LaTeX 文档质检　更新：2026-09-29
 
-[项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skills 技术报告](skills-technical-report.md)
+[项目仓库](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [B站实机演示](https://www.bilibili.com/video/BV16Kan6rEGv/) · [Skills 技术报告](architecture/skills-technical-report.md)
 
 原创部分采用 AGPL-3.0-only，第三方资源保留各自许可。
 
@@ -28,7 +28,7 @@ Studio 的执行顺序是源码提取、规则检查、必要的公式候选生�
 - **能够复算的合计直接计算。** 简单表格使用 Decimal，按输入位数设置精度；格式不支持时列为人工项。重算以数据行正确为前提。
 - **每次候选都留记录。** 原检查、请求、被拒绝的候选和失败原因按序保存。CLI 依据输入及执行上下文哈希复用结果，内容或配置变化就重新检查。
 
-公式模型请求默认读取并校验 `doc-formula-verify/SKILL.md`，把完整文件内容加入系统消息，公式数据放在独立的用户消息中。`off` 模式保留基础提示、模型参数、检查器和调用预算，供对照实验使用。Python 负责节点选择、工具执行和最多两次候选尝试；模型负责返回文本候选。六个 Skill 的实际入口见[技术报告](skills-technical-report.md)，整体数据流见[架构](architecture.md)。
+公式模型请求默认读取并校验 `doc-formula-verify/SKILL.md`，把完整文件内容加入系统消息，公式数据放在独立的用户消息中。`off` 模式保留基础提示、模型参数、检查器和调用预算，供对照实验使用。Python 负责节点选择、工具执行和最多两次候选尝试；模型负责返回文本候选。六个 Skill 的实际入口见[技术报告](architecture/skills-technical-report.md)，整体数据流见[架构](architecture/README.md)。
 
 Monaco 0.52.2 资源由本站提供。修复候选先进入差异视图；文档切换会清理旧 diff 并拦截过期结果。Studio 为各任务分别保存事件、结果及编译目录，重启后可按任务 ID 读取完成结果；中断任务需要新建。
 

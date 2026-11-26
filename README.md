@@ -1,140 +1,198 @@
-# TeXada Studio 本地版
+# TeXada Studio 用户手册
 
-在自己的电脑上编辑 LaTeX、识别图片或 PDF、检查公式和简单表格。查看修复差异，审阅后保存，再编译和导出。
+[English Manual](README.en.md) · [下载最新版 v0.1.4](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest) · [版本变更记录](docs/changelog/README.md) · [排错指南](docs/troubleshooting.md) · [系统架构](docs/architecture/README.md) · [全部文档](docs/index.md)
 
-这是在浏览器中打开的本地工作台。源码、文档与运行记录保存在本机；图片识别和模型候选使用你配置的本机模型服务。
+**TeXada Studio** 是一款完全运行在你自己电脑上的 **本地 LaTeX 写作、图片/PDF 识别导入与智能审阅工作台**。
 
-[English](README.en.md) · [开始使用](#开始使用) · [配置](#配置) · [完整指南](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [文档导航](docs/index.md)
+它将 LaTeX 源码编辑、离线中文 PDF 编译预览、公式与表格语法检查、左右对比审阅修复整合在同一个窗口中。所有文稿、编译过程与本地 AI 模型推理均留在你的电脑上，**无需联网、不上传任何云端服务器**。
 
-![TeXada Studio：本地 LaTeX 源码与中文 PDF 双栏工作区](assets/studio-workspace.png)
+![TeXada Studio 工作区总览](docs/images/studio-overview.png)
 
-当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
+---
 
-当前面向本地单用户，最新发行版见 [v0.1.4 发布说明](docs/releases/v0.1.4.md)（同时提供 macOS Apple Silicon 公证安装包与 Windows x64 自包含便携包）。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
+## 快速安装与启动
 
-## 这版可以做什么
+普通用户推荐直接下载官方打包好的**自包含桌面版**——软件内部已自带离线 LaTeX 编译器（Tectonic 与 30 余个常用宏包、Fandol 中文字体）、PDF 渲染工具与本地模型运行引擎，**无需提前安装 TeX Live、Homebrew 或 Python 环境**。
 
-| 工作 | 操作 |
-| --- | --- |
-| 管理文档 | 导入或新建 `.tex`，保存、重命名、删除；已保存的修改在刷新后保留 |
-| 识别资料 | 导入 PNG、JPEG、WebP 或 PDF，每次最多识别 5 页；支持起始页选择、按页剔除/拆分与续批识别；审阅 LaTeX 候选后新建文档 |
-| 编辑与检查 | LaTeX 高亮、常用片段与符号补全、五类文档模板、查找替换、文档大纲、命令面板；检查公式语法及简单合计 |
-| 修复与审阅 | 先做保留原文的确定性语法修复；模型候选经过语法和修改范围校验，查看 diff 后明确采用或拒绝 |
-| 预览与交付 | 编译当前文档，逐页预览并导出 PDF；也可导出 `.tex` 和质检报告 |
-| 连接本机模型 | 保存本地服务地址与模型名称，显式检查连接；不会自动改用云模型 |
+### 1. macOS 桌面版（Apple Silicon，macOS 15 及以上）
 
-保存会检查文件版本，发现其他窗口已修改时停止覆盖。编辑内容变化后，旧 PDF 导出会失效，需要重新编译。示例原文件保留在仓库中，保存时建立本地副本。
+1. 前往 [GitHub Releases](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest) 下载 **`TeXada-Studio-macOS-arm64.dmg`**（已通过 Apple 公证签名）。
+2. 双击打开 `.dmg` 镜像，将 **TeXada Studio** 拖入右侧的 **Applications（应用程序）** 文件夹。
+3. 在「应用程序」或启动台中双击 **TeXada Studio** 即可开始写作。
 
-左侧活动栏可展开文档导航、搜索、图片/PDF 识别和 Agent。点击“检查”查看底部问题列表；从 Agent 中生成和审阅修复候选。底部“问题”“日志”和右侧 Agent 可随时收起，“导出”菜单提供当前 LaTeX 和已编译 PDF。
+### 2. Windows 桌面版（64 位 Windows 10 / 11）
 
-## 开始使用
+1. 前往 [GitHub Releases](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest) 下载 **`TeXada-Studio-Windows-x64.zip`**。
+2. 将压缩包完整解压到任意目录（请勿直接在压缩包预览窗口内双击运行）。
+3. 打开解压后的文件夹，双击 **`TeXada Studio.exe`** 即可启动。
 
-需要 **Python 3.11+**。下面以已安装的 `python3.13` 为例，也可替换为其他满足要求的版本：
+<details>
+<summary><strong>进阶方式：从源码在浏览器中运行（适合 Linux 用户或开发者）</strong></summary>
+
+需要 Python 3.11+；如需离线 PDF 编译预览，可按需安装 `tectonic` 与 `poppler`：
 
 ```bash
 git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
 cd TeXada-Studio-with-agentskills
-python3.13 -m venv .venv
-.venv/bin/python -m pip install -r webui/requirements.txt
-.venv/bin/python scripts/run-local-studio.py --check
+python3 -m venv .venv && .venv/bin/python -m pip install -r webui/requirements.txt
+./scripts/start-local-studio.command   # Windows 可双击 scripts\start-local-studio.bat
 ```
 
-macOS 可双击 `scripts/start-local-studio.command`，Windows 可双击 `scripts/start-local-studio.bat`（虚拟环境路径为 `.venv\Scripts\python.exe`），或在项目目录运行：
+完整的源码环境准备、离线缓存预热与命令行说明见 [本地部署与开发指南](docs/local-studio.md)。
+</details>
 
-```bash
-./scripts/start-local-studio.command
-```
+---
 
-启动器打开本机浏览器，文档和模型处理都在本地。编辑器资源已随源码提供，无需前端构建。首次安装依赖、模型与 TeX 资源需要联网准备，完整步骤见[首次准备与离线使用](docs/local-studio.md#首次准备与离线使用)。
+## 功能一览：不装模型 vs 开启本地模型
 
-macOS 与 Windows 还可以直接下载或自行构建**自包含桌面应用**（内嵌 Python、Tectonic、TeX 资源、Poppler 及 `llama-server`，产物不依赖仓库、包管理器或网络：macOS 用 `desktop/build_bundle.py`，Windows x64 用 `desktop/build_windows_bundle.py`；macOS 另有轻量薄壳 `desktop/build_app.py`），详见[桌面端说明](desktop/README.md)与[捆绑许可审计](desktop/licenses-audit.md)。
+安装包默认不捆绑体积较大的 AI 模型文件，**装好软件立刻就能写稿、检查和编译 PDF**；需要识图或复杂修复时，可在软件内一键下载轻量本地模型：
+
+| 使用场景 | 不安装 AI 模型（开箱即用） | 开启本地 AI 模型后 |
+| --- | --- | --- |
+| **LaTeX 编辑与模板** | 5 套内置模板、82 条数学/定理代码片段、章节折叠与语法高亮 | 同左 |
+| **离线中文 PDF 预览** | 一键编译多页中文 PDF、适应窗口/100% 缩放、报错点击跳回源码行 | 同左 |
+| **公式与括号检查** | 自动定位未闭合括号、重上下标、矩阵/`cases` 列数异常，并自动修补确定的缺失定界符 | 对规则无法直接修补的残缺公式生成候选修改建议 |
+| **表格合计核对** | 自动重算简单三线表末行（`合计` / `总计` / `total`）的数字总和 | 自动补全缺列或留空的表格合计行 |
+| **文档格式清洗** | 一键清除混入正文的不可见零宽字符（如复制粘贴带入的隐形符号） | 为未闭合的章节/作者命令及 `itemize` / `center` 等环境提供闭合候选 |
+| **图片与 PDF 识别导入** | 需配置视觉模型后可用 | 将讲义照片、截图或扫描 PDF 分页识别为 LaTeX 草稿 |
+
+---
+
+## 工作区界面导览
+
+打开软件后，界面分为五个直观区域：
+
+1. **最左侧活动栏与文件导航**：切换「文档列表」与「章节大纲」，提供 **从模板新建**、**上传 `.tex` 文件**、**图片/PDF 识别导入** 按钮；你的个人文档置顶显示，内置练习样本收纳在下方的「示例文档」折叠区中。
+2. **顶部工具栏**：显示当前文档名与保存状态，集中放置 **保存**、**检查**、**修复**（Agent 抽屉）、**编译**、**导出**、**命令面板** 与 **设置** 按钮。
+3. **中央源码与审阅区**：日常写作时为本地 Monaco 编辑器；当生成修复建议后，会自动开启 **「修复对比」** 双栏视图，左侧原稿、右侧修改建议逐行对照。
+4. **右侧 PDF 预览区**：实时展示编译后的 PDF 页面，支持翻页与「适应窗口 / 100% 原尺寸」切换。只要你改动了左侧源码，旧预览会自动标记为待更新，避免误导出旧版 PDF。
+5. **底部问题/日志栏与状态栏**：平时自动收起不占空间；点击问题条目可直接跳转到对应源码行，右下角状态栏随时显示当前行列号与本地模型连接状态。
+
+---
+
+## 日常使用指南
+
+### 1. 新建、打开与保存文稿
+
+- **从模板快速开始**：点击左侧栏的 **「从模板新建」**（或按 `⇧⌘P` / `Ctrl+Shift+P` 打开命令面板），可从 5 套内置离线模板中选择：
+  - **空白文章**（中文 `ctexart`，默认配好常用数学宏包与中文字体）
+  - **课堂讲义**（预置定理、引理、定义与证明环境）
+  - **试卷模板**（含大题、小题与分值排版骨架）
+  - **Beamer 演示文稿**（中文学术幻灯片）
+  - **英文文章**（标准 `article` 排版）
+- **导入已有 `.tex`**：点击左侧栏上传图标选择本机 `.tex` 文件（单文件上限 2 MiB）。
+- **安全保存**：按 `⌘S`（Windows `Ctrl+S`）或点击顶栏「保存」。若你打开内置示例文档进行修改，首次保存会自动创建属于你的本地副本，不会破坏原始示例；关闭窗口时若有未保存改动，软件会弹窗提醒。
+
+### 2. 离线编译预览与导出
+
+1. 点击顶栏 **「编译」**，右侧即刻生成并展示 PDF 预览。
+2. 若源码存在排版错误，底部日志面板会提取具体的报错行号与原因，**点击报错提示即可直接定位到出错的那一行**。
+3. 点击顶栏 **「导出」** 菜单，可将成果保存到电脑任意文件夹：
+   - **导出 `.tex` 源码**：保存当前编辑器（或当前审阅候选）的源文件；
+   - **导出 `.pdf` 成稿**：保存与当前源码版本一致的最新 PDF；
+   - **导出 `.audit.md` 报告**：保存包含检查结果、修改记录与编译摘要的质检报告。
+
+### 3. 图片与 PDF 识别导入（OCR 转 LaTeX）
+
+当你手头有纸质讲义照片、公式截图或扫描版 PDF 想转成可编辑的 LaTeX 时（需先按[配置](#配置)一节启动本地模型）：
+
+1. 点击最左侧活动栏的 **「导入图片/PDF」** 图标，选择本机 `PNG`、`JPEG`、`WebP` 或 `PDF` 文件（不超过 12 MiB）。
+2. 若选择 PDF，可指定**起始页码**以及单次识别页数（每次 1、3 或 5 页，避免长文档卡死等待）。
+3. 识别完成后会弹出 **识别结果审阅窗**：
+   - 你可以对照原件直接在文本框内修正识别文字；
+   - 多页 PDF 可勾选排除不需要的页面，并自由选择 **合并为一篇文档** 或 **按页拆分为多篇独立文档**；
+   - 若 PDF 还有剩余页，保存当前批次后点击 **「继续识别后续页」** 即可无缝续接下一页。
+
+### 4. 智能检查与修复审阅（不静默篡改原稿）
+
+TeXada Studio 严格遵循 **「先检查 → 生成对比候选 → 你点头才采用」** 的安全流程，绝不会在后台偷偷改写你的正文：
+
+1. **只检查不改稿**：点击顶栏 **「检查」**，底部「问题」面板会列出当前文档中检测到的公式定界符/上下标问题、简单表格合计偏差与隐形格式噪声，点击任意条目即可跳到对应行自行修改。
+2. **生成修复建议**：点击顶栏 **「修复」**：
+   - 软件会先用确定性规则瞬间修好明确的括号配对、标量合计错误与不可见零宽字符（无需调用模型）；
+   - 对剩余问题再请求本地模型，并通过**防篡改守卫**严格拦截任何试图偷改数字、变量、正负号或删减正文项的建议，同时自动测试候选稿能否顺利编译。
+3. **左右对比与一键撤销**：
+   - 生成建议后自动切换到 **「修复对比」** 标签页，高亮展示每一处增删以及编译是否通过；
+   - 确认无误点击 **「采用候选」** 将修改写入编辑器；不满意则点击 **「拒绝候选」** 原封不动保留原稿；
+   - 即使点击了「采用候选」，也可随时按 **`⌘Z` / `Ctrl+Z` 一键撤销**（或 `⇧⌘Z` / `Ctrl+Shift+Z` 重做），最后按 `⌘S` / `Ctrl+S` 正式保存。
+4. **进阶实验选项（按需开启）**：展开右侧 Agent 面板，可按需勾选默认关闭的「受限 Agent 规划」或「模型选择公式/表格 Skill」，让本机模型在受控步数内自主编排公式、表格与文档清洗技能。
+
+---
 
 ## 配置
 
-### 本机模型服务
+点击顶栏齿轮图标打开 **「设置」**，即可调整编辑器字号、自动换行以及配置本地 AI 模型。
 
-本地模式仅接受 `http://localhost`、`127.0.0.1` 或 `[::1]` 上的 OpenAI 兼容端点（`/v1/models` 与 `/v1/chat/completions`），无需 API Key，也不会自动改用云模型。三种接法：
+### 1. 一键下载并启动内置本地模型（推荐）
 
-1. **在界面里配置或启动受管模型**：状态栏「本地模型」可保存已有服务地址与模型名称并显式「检查连接」，也可在「Studio 管理的模型」中按需下载并启动经 SHA-256 校验的 MiniCPM-V 4.7 1B 或 35B-A3B Q4_K_M（需 `llama-server`，macOS 与 Windows 自包含桌面包均已内置）。连接信息保存在用户数据目录。
-2. **启动时复用已有服务**（例如已在本机运行的 Ollama）：
+打开 **「设置 → 本地模型」**，在「Studio 管理的本地模型」下拉框中按电脑内存选择一款型号，点击 **「下载并启动」** 即可（支持断点续传与自动完整性校验，软件退出时自动关闭后台模型）：
 
-   ```bash
-   .venv/bin/python scripts/run-local-studio.py \
-     --base-url http://127.0.0.1:11434/v1 \
-     --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
-   ```
+| 模型档位 | 占用磁盘空间 | 推荐电脑内存 | 适用建议 |
+| --- | --- | --- | --- |
+| **MiniCPM-V 4.7 1B（Q4_K_M 轻量版）** | 约 **1.8 GB** | **16 GB 及以上** | **推荐大多数日常电脑使用**：下载快、响应轻快，支持图片/PDF 识别与公式/表格/文档清洗全套流程 |
+| **MiniCPM-V 4.7 35B-A3B（Q4_K_M 旗舰版）** | 约 **22.3 GB** | **64 GB 及以上** | 适合大内存工作站，面对复杂版面转写与长难公式修复时表现更稳健 |
 
-   模型名称须与本机服务 `/v1/models` 返回的名称完全一致；退出时只停止启动器自己启动的进程，不影响已有服务。
-3. **自动启动本机权重**：默认查找 `~/.texada/models/` 下的 GGUF 与 projector，需要 `llama-server`；也可用 `--gguf`/`--mmproj` 显式指定路径。
+### 2. 连接本机已有的 Ollama 或 llama.cpp 服务
 
-图片/PDF 识别要求端点真实支持 `image_url`，出现在模型列表不代表已验证；确定性语法修复候选不需要模型。模型下载、默认路径与可选参数见[本机模型连接](docs/local-studio.md#本机模型连接)。
+如果你电脑上已经装有 Ollama 或自行运行的 `llama-server`，无需重复下载权重，直接在「本地模型」中填入本机地址与模型名称：
 
-默认使用 **35B-A3B Q4_K_M**（`minicpm-v4.7-35b-a3b-q4`），本地服务默认 `http://127.0.0.1:18147/v1`，保留已保存的手动配置；不自动降级到 1B。权重与视觉投影器约 22.3GB，另需运行缓存与系统内存：16GB 不作为支持目标，24GB 不建议；32GB 是未实测的容量起点，64GB Mac 已实测。1B F16 仍可手动配置。[模型对照与证据边界](docs/evaluation-results/v47-local-comparison-01/README.md)。
+- **服务地址示例**：`http://127.0.0.1:11434/v1`（Ollama）或 `http://127.0.0.1:18147/v1`（`llama-server`）
+- **生效步骤**：填写地址与模型名 → 点击 **「检查连接」** 验证可达 → 点击 **「保存设置」** 正式启用。
+- **隐私保护限制**：仅允许连接 `127.0.0.1` / `localhost` 本机回环地址，系统会自动拒绝任何外部公网云端地址。
 
-### 可选工具与 TeX 资源
+### 3. 文档与数据保存在哪里？
 
-| 想使用的功能 | 还需准备 |
+你的文档、历史备份与下载的模型均保存在电脑本地的标准应用数据目录中，升级软件版本不会丢失个人文稿：
+
+| 操作系统 | 默认本地数据目录 |
 | --- | --- |
-| 编辑、语法检查、简单表格检查 | 上述 Python 依赖；编辑器资源已随源码提供 |
-| 模型候选与图片识别 | 本机 MiniCPM-V 4.7 35B-A3B Q4 服务；自动启动还需 `llama-server`、GGUF 和 projector；确定性语法候选不需要模型 |
-| PDF 导入 | Poppler 的 `pdfinfo`、`pdftoppm` |
-| PDF 编译与预览 | Tectonic、Poppler 和文档所需的 TeX 缓存、字体 |
+| **macOS** | `~/Library/Application Support/TeXada Studio` |
+| **Windows** | `%LOCALAPPDATA%\TeXada Studio` |
+| **Linux** | `~/.local/share/texada-studio`（或 `$XDG_DATA_HOME/texada-studio`） |
 
-Tectonic 可一键自举：Studio 设置面板点「下载 Tectonic」，或运行 `.venv/bin/python scripts/install_local_tools.py`——固定官方 Release、SHA256 校验、安装到 `~/.texada/bin` 并自动加入启动 PATH，运行中的会话装完即可编译。旁的「安装 Poppler」按钮在 macOS 显式走 Homebrew、在 Windows 下载固定版本便携包并校验 SHA256；Linux 请使用系统包管理器，见[排错说明](docs/troubleshooting.md)。
+其中 `documents/` 存放你的全部 `.tex` 文稿，`documents/.history/` 与 `documents/.trash/` 会自动保留历史版本与已删除文稿的本地备份，需要备份迁机时直接拷贝 `documents/` 文件夹即可。
 
-Studio 编译只使用已缓存的 TeX 资源，不会在文档处理过程中悄悄下载。首次准备：
+---
 
-```bash
-.venv/bin/python scripts/prepare-local-tex.py --download-resources
-```
+## 常用快捷键速查
 
-完成后可去掉参数重新运行做离线检查。
+| 操作 | macOS 快捷键 | Windows / Linux 快捷键 |
+| --- | --- | --- |
+| 保存当前文档 | `⌘S` | `Ctrl+S` |
+| 撤销编辑 / 撤销刚采用的修复候选 | `⌘Z` | `Ctrl+Z` |
+| 重做 | `⇧⌘Z` 或 `⌘Y` | `Ctrl+Shift+Z` 或 `Ctrl+Y` |
+| 打开命令面板（新建模板、跳转章节等） | `⇧⌘P` | `Ctrl+Shift+P` |
+| 在文档中查找 | `⌘F` | `Ctrl+F` |
+| 查找并替换 | `⌥⌘F` | `Ctrl+H` |
+| 弹窗列表选择与关闭 | `↑` / `↓` 移动，`Enter` 确认，`Esc` 关闭 | `↑` / `↓` 移动，`Enter` 确认，`Esc` 关闭 |
 
-### 编辑器偏好与本地数据
+---
 
-字号、自动换行、代码小地图等编辑器偏好保存在当前浏览器。文档、运行记录与连接信息保存在用户数据目录；私密浏览器入口写入权限受限的 `session.json`，访问凭据不打印、每次启动更换。备份与恢复见[本地数据与恢复](docs/local-studio.md#本地数据与恢复)。
+## 使用须知与常见问题
 
-## 第一份文档
+### 使用边界提醒
 
-1. 打开 `welcome.tex` 或 `math-clean.tex`，点击“检查”；编译依赖就绪后点击“编译”。
-2. 打开 `math-delimiters.tex`，生成修复候选，查看 diff 后决定是否采用；采用后点击“保存”。
-3. 刷新页面，确认保存内容仍在，再导出当前版本的 `.tex` 或 PDF。
-4. 选择自己有权使用的图片或 PDF，点击“开始识别”；对照原件审阅识别结果，再新建文档。
+- **人工核对不可替代**：语法检查通过或 PDF 编译成功，仅代表 LaTeX 排版格式合法，**不代表数学公式推导正确或图片识别毫无遗漏**（例如 `1+1=3` 语法完全合法但结论错误；模糊照片中的上下标仍需对照原件核实）。
+- **单文件与离线宏包范围**：当前以单个 `.tex` 文件为单位进行编辑与编译。桌面版已内置 `ctex`、`amsmath`、`amsthm`、`mathtools`、`geometry`、`hyperref`、`xcolor`、`booktabs`、`tabularx`、`multirow`、`enumitem`、`listings`、`tikz` 等 30 余个高频宏包与 Fandol 中文字体；若文档依赖外部图片目录或冷门宏包，可导出 `.tex` 后使用本机完整 TeX Live 编译。
 
-“保存”或 `⌘/Ctrl+S` 才会把编辑内容写入本地文档。识别结果和修复候选都不会自动覆盖原文。
+### 常见疑问速查
 
-公式修复遵循保真策略：候选不能改数字、变量、运算符或删项，缺定界符等情况先补再验；方法与边界见[公式修复质量记录](docs/formula-repair-quality.md)。
+- **问：状态栏显示「模型：未检查」是出错了吗？**
+  答：不是报错，仅代表本次打开软件后还没有主动探测外部模型。若使用内置模型，去「设置 → 本地模型」点击启动即可；不启动模型也完全不影响写 LaTeX、做规则检查与离线编译 PDF。
+- **问：为什么像 `$a_$` 这样的公式只提示问题，没有自动帮我填上数字？**
+  答：因为缺少下标时系统无法凭空猜测你原本想写 `$a_1$` 还是 `$a_n$`。为防止胡乱编造改变数学原意，所有含义不唯一的残缺位置都会保留原样并提醒你手动补全。
+- **问：下载安装包后如何校验文件完整性？**
+  答：可在终端对同目录下载的校验文件执行 `shasum -a 256 -c checksum.txt`（macOS）或在 PowerShell 执行 `Get-FileHash .\TeXada-Studio-Windows-x64.zip -Algorithm SHA256` 对照 `checksum-windows.txt`。
 
-用顶栏“命令”或 `⌘/Ctrl+Shift+P` 查找操作；侧栏大纲可跳转到章节。查找与替换使用编辑器自带面板，外观菜单可以调整字号、自动换行和小地图，设置会在本机保留。LaTeX 常用命令、定理类环境与希腊字母等符号提供本地片段建议，也可按 `Ctrl+Space` 主动唤出；章节命令、导言区定义与交叉引用键分级着色，结构模块一眼可辨；编辑器支持按章节与环境折叠；侧栏“从模板新建”可按空白文章、数学讲义、试卷、Beamer 演示与英文文章五类骨架创建文档。状态栏显示光标行列、选区和文档字数。
+遇到其他安装、连接或编译问题，请查阅 **[完整安装与使用排错指南](docs/troubleshooting.md)**。
 
-## 边界与检查范围
+---
 
-语法通过、编译通过、转写忠实与数学正确是不同的判断：`∫₀¹ x dx` 可以语法与编译全过，正确值仍是 `1/2`。OCR、修复候选和表格提示都要结合原文复核。
+## 进阶文档与开源许可
 
-扫描器支持常见行内与显示公式环境并跳过注释与原样文本；复杂对齐、未知宏和不支持的结构保留人工检查。当前工作单位是单个 `.tex`，多文件工程与多人协作未纳入本地版范围。详见[检查与审阅边界](docs/local-studio.md#检查与审阅边界)与[路线图](docs/roadmap.md)。
+- **使用与部署**：[本地部署与开发指南](docs/local-studio.md) · [安装与使用排错](docs/troubleshooting.md) · [AgentSkills 使用说明](docs/agent-skills.md) · [CLI 批处理手册](harness/README.md)
+- **版本与更新**：[版本发布与变更总览](docs/changelog/README.md) · [完整 CHANGELOG](docs/changelog/CHANGELOG.md) · [最新 v0.1.4 发布说明](docs/releases/v0.1.4.md)
+- **架构与设计**：[系统架构与设计总览](docs/architecture/README.md) · [AgentSkills 技术设计报告](docs/architecture/skills-technical-report.md) · [受限规划器](docs/architecture/constrained-planner.md) · [多 Skill 选择](docs/architecture/skill-selection.md) · [全部文档总索引](docs/index.md)
+- **验证与协作**：[当前验证记录](docs/current-validation.md) · [可复核源码包](docs/source-package.md) · [参与贡献](CONTRIBUTING.md) · [安全策略](SECURITY.md) · [求助支持](SUPPORT.md)
 
-## 文档与技术资料
-
-日常使用先看[本地使用指南](docs/local-studio.md)与[排错说明](docs/troubleshooting.md)。其余入口：
-
-- [Studio 操作 Skill](skills/texada-studio/SKILL.md)、[AgentSkills 使用指南](docs/agent-skills.md)：工作区操作、公式/表格、OCR 输入与审阅边界。
-- [当前验证](docs/current-validation.md)、[架构](docs/architecture.md)、[CLI Harness](harness/README.md)、[源码打包](docs/source-package.md)。
-- 案例、验证历史、Skill 实验、系列说明与历史演示的完整清单见[文档导航](docs/index.md)。
-
-旧 `run-minicpm-v47-studio.sh` 是显式选择的云 API 入口，见[兼容说明](docs/local-studio.md#旧云-api-入口与实验功能)，不要将其结果当作本地推理验收。
-
-原创代码、文档和合成样本采用 **AGPL-3.0-only**；第三方组件保留各自归属，见 [LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [Active Calculus 来源声明](samples/research/ACTIVE_CALCULUS_NOTICE.md)。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)，求助见 [SUPPORT.md](SUPPORT.md)。
-
-维护者 [@CacinieP](https://github.com/CacinieP)。引用信息见 [CITATION.cff](CITATION.cff)。
-
-### 两种模型均支持：1B 与 35B Q4
-
-两种尺寸都支持：**35B Q4 默认，1B F16 与 1B Q4 可显式选择**。界面连接设置也可填写对应服务的真实模型别名。
-
-```bash
-.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
-.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
-.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
-```
-
-默认权重路径：35B Q4 位于 `~/.texada/models/`；1B F16/Q4 位于 `~/.texada/models/1b/`，各自目录放对应变体的 `mmproj-model-f16.gguf`，避免混用 projector。其他位置的现有文件可用 `--gguf`、`--mmproj` 指定。不会自动下载或静默切换尺寸。
+**许可证与维护**：维护者 [CacinieP](https://github.com/CacinieP)。项目原创代码、文档与合成样本采用 [AGPL-3.0-only](LICENSE) 开源许可；本地捆绑的编辑器、字体与工具链保留各自开源许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [桌面端组件许可审计](desktop/licenses-audit.md)。
