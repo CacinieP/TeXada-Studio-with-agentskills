@@ -278,6 +278,53 @@ class PopplerTests(unittest.TestCase):
             with self.assertRaisesRegex(tool_fetch.ToolFetchError, "Homebrew"):
                 tool_fetch.install_poppler(run=lambda argv, **kwargs: None)
 
+    def test_find_brew_and_install_poppler_discover_macos_homebrew_outside_launchd_path(self):
+        empty_sys_bin = self.root / "usr-bin"
+        empty_sys_bin.mkdir(parents=True)
+        fake_brew_bin = self.root / "opt-homebrew-bin"
+        fake_brew_bin.mkdir(parents=True)
+        for name in ("brew", "pdftoppm", "pdfinfo"):
+            exe = fake_brew_bin / name
+            exe.write_bytes(b"#!/bin/sh\nexit 0\n")
+            exe.chmod(0o755)
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            return SimpleNamespace(returncode=0, stdout="==> Pouring poppler\n", stderr="")
+
+        with mock.patch.dict(tool_fetch.os.environ, {"PATH": str(empty_sys_bin)}), \
+             mock.patch.object(tool_fetch, "MACOS_BREW_PATH", str(fake_brew_bin), create=True):
+            status = tool_fetch.poppler_status(platform_name="darwin")
+            self.assertFalse(status["in_path"])
+            self.assertEqual(status["brew"], str(fake_brew_bin / "brew"))
+            result = tool_fetch.install_poppler(run=run, platform_name="darwin")
+
+        self.assertEqual(calls, [[str(fake_brew_bin / "brew"), "install", "poppler"]])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["method"], "homebrew")
+        self.assertEqual(result["path"], str(fake_brew_bin))
+
+    def test_install_poppler_returns_existing_when_bundled_tools_ready_without_brew(self):
+        bundled_bin = self.root / "bundled-bin"
+        bundled_bin.mkdir(parents=True)
+        for name in ("pdftoppm", "pdfinfo"):
+            exe = bundled_bin / name
+            exe.write_bytes(b"#!/bin/sh\nexit 0\n")
+            exe.chmod(0o755)
+        missing_brew_dir = self.root / "no-homebrew"
+
+        with mock.patch.dict(tool_fetch.os.environ, {"PATH": str(bundled_bin)}), \
+             mock.patch.object(tool_fetch, "MACOS_BREW_PATH", str(missing_brew_dir), create=True):
+            result = tool_fetch.install_poppler(
+                run=lambda *a, **kw: self.fail("bundled Poppler must not invoke brew when brew is absent"),
+                platform_name="darwin",
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["tool"], "poppler")
+        self.assertEqual(result["method"], "existing")
+
     def test_install_maps_brew_failure(self):
         def run(argv, **kwargs):
             return SimpleNamespace(returncode=1, stdout="", stderr="Error: offline")

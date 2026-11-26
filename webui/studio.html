@@ -997,6 +997,25 @@ function mergeKnownModelAvailability(config) {
   }
   return config;
 }
+const DEFAULT_TOOLS_HINT = $("installToolsHint").textContent || "仅在点击时执行：Tectonic 从官方 Release 下载并校验 SHA256；Poppler 在 macOS 经 Homebrew 安装、在 Windows 下载固定版本便携包并校验 SHA256（GPL-2+，进程调用）。Linux 请用系统包管理器。";
+let toolInstallNotice = "", installingLocalTool = "";
+function syncLocalToolControls(tools = {}) {
+  const tectonicReady = Boolean(tools.tectonic);
+  const popplerReady = Boolean(tools.pdftoppm && tools.pdfinfo !== false);
+  if (installingLocalTool !== "tectonic") {
+    $("btnInstallTools").disabled = tectonicReady;
+    $("btnInstallTools").textContent = tectonicReady ? "Tectonic 已就绪" : "下载 Tectonic 0.17.0（官方 Release）";
+  }
+  if (installingLocalTool !== "poppler") {
+    $("btnInstallPoppler").disabled = popplerReady;
+    $("btnInstallPoppler").textContent = popplerReady ? "Poppler 已就绪" : "安装 Poppler（macOS / Windows）";
+  }
+  if (!toolInstallNotice) {
+    $("installToolsHint").textContent = (tectonicReady && popplerReady)
+      ? "本地 PDF 编译器（Tectonic）与页面预览/导入工具（Poppler）均已就绪，无需额外安装。"
+      : DEFAULT_TOOLS_HINT;
+  }
+}
 function displayConfig(config, preserveDraft=false) {
   studioConfig=config;
   if (typeof config.model_available === "boolean") {
@@ -1011,6 +1030,7 @@ function displayConfig(config, preserveDraft=false) {
   const available=config.model_available;
   displayModelConnection(available);
   const tools=config.tools || {};
+  syncLocalToolControls(tools);
   $("configStatus").textContent=[available === true ? "模型服务可用" : available === false ? "尚未连接到本地模型" : "连接状态尚未检查", `编译器：${tools.tectonic ? "可用" : "待安装"}`,`页面预览：${tools.pdftoppm ? "可用" : "待安装"}`].join(" · ");
   if (config.error) $("configStatus").textContent += " · " + config.error;
 }
@@ -1023,6 +1043,7 @@ async function loadConfig(probe=false) {
 function openModelSettings() {
   modelDraftEdited=false;
   managedModelUserSelected=false;
+  toolInstallNotice="";
   if (studioConfig) displayConfig(studioConfig);
   openDialog("settingsDialog");
   loadConfig().catch(warn);
@@ -1149,15 +1170,22 @@ $("btnStartModel").onclick = () => managedModelAction("start");
 $("btnStopModel").onclick = () => managedModelAction("stop");
 async function installLocalTools(tool="tectonic"){
   const button=$(tool==="poppler"?"btnInstallPoppler":"btnInstallTools"),hint=$("installToolsHint");
+  installingLocalTool=tool;
   button.disabled=true;
   hint.textContent=tool==="poppler"?"正在安装 Poppler（macOS 经 Homebrew，Windows 下载固定版本便携包并校验 SHA256）…":"正在从 Tectonic 官方 Release 下载（约 21 MB），完成后自动校验 SHA256…";
+  toolInstallNotice=hint.textContent;
   try {
     const d=await post("tools/install",{tool});
+    installingLocalTool="";
     hint.textContent=tool==="poppler"?"Poppler 已安装；PDF 导入与页面预览可用。":`已安装 Tectonic ${d.version} → ${d.path}；本次会话即可编译 PDF。`;
+    toolInstallNotice=hint.textContent;
+    button.textContent=tool==="poppler"?"Poppler 已就绪":"Tectonic 已就绪";
     toast(tool==="poppler"?"Poppler 安装完成。":"Tectonic 安装完成。");
     loadConfig().catch(()=>{});
   } catch(error) {
+    installingLocalTool="";
     hint.textContent="安装失败："+(error&&error.message||String(error))+"。可重试或改用系统包管理器。";
+    toolInstallNotice=hint.textContent;
     button.disabled=false;
   }
 }

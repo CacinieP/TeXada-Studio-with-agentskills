@@ -2,6 +2,12 @@
 
 > 中文版本矩阵、各版本独立发布说明与子模块变更索引见 **[版本发布与变更日志总览](README.md)**；最新正式版说明见 **[TeXada Studio v0.1.4](../releases/v0.1.4.md)**。
 
+## Unreleased
+
+### Fixed
+
+- **macOS Homebrew fallback discovery and desktop ready-tool controls (#101)**: `webui/tool_fetch.py` now falls back to `/opt/homebrew/bin` and `/usr/local/bin` when a macOS GUI app starts under `launchd`'s stripped `PATH`, returns `method: "existing"` when Poppler is already bundled/available without Homebrew, and returns the resolved Homebrew `bin` directory so `/api/studio/tools/install` activates it in the current session immediately; `webui/studio.html` synchronizes `#btnInstallTools`, `#btnInstallPoppler`, and `#installToolsHint` with `config.tools` so bundled/ready desktop tools display `Tectonic 已就绪` / `Poppler 已就绪` (disabled) instead of misleading install prompts.
+
 ## 0.1.4 — 2026-11-26
 
 ### Fixed
