@@ -279,12 +279,13 @@ class PopplerTests(unittest.TestCase):
                 tool_fetch.install_poppler(run=lambda argv, **kwargs: None)
 
     def test_find_brew_and_install_poppler_discover_macos_homebrew_outside_launchd_path(self):
+        suffix = ".exe" if os.name == "nt" else ""
         empty_sys_bin = self.root / "usr-bin"
         empty_sys_bin.mkdir(parents=True)
         fake_brew_bin = self.root / "opt-homebrew-bin"
         fake_brew_bin.mkdir(parents=True)
         for name in ("brew", "pdftoppm", "pdfinfo"):
-            exe = fake_brew_bin / name
+            exe = fake_brew_bin / f"{name}{suffix}"
             exe.write_bytes(b"#!/bin/sh\nexit 0\n")
             exe.chmod(0o755)
         calls = []
@@ -297,19 +298,23 @@ class PopplerTests(unittest.TestCase):
              mock.patch.object(tool_fetch, "MACOS_BREW_PATH", str(fake_brew_bin), create=True):
             status = tool_fetch.poppler_status(platform_name="darwin")
             self.assertFalse(status["in_path"])
-            self.assertEqual(status["brew"], str(fake_brew_bin / "brew"))
+            self.assertIsNotNone(status["brew"])
+            self.assertEqual(Path(status["brew"]).resolve(), (fake_brew_bin / f"brew{suffix}").resolve())
             result = tool_fetch.install_poppler(run=run, platform_name="darwin")
 
-        self.assertEqual(calls, [[str(fake_brew_bin / "brew"), "install", "poppler"]])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(Path(calls[0][0]).resolve(), (fake_brew_bin / f"brew{suffix}").resolve())
+        self.assertEqual(calls[0][1:], ["install", "poppler"])
         self.assertTrue(result["ok"])
         self.assertEqual(result["method"], "homebrew")
-        self.assertEqual(result["path"], str(fake_brew_bin))
+        self.assertEqual(Path(result["path"]).resolve(), fake_brew_bin.resolve())
 
     def test_install_poppler_returns_existing_when_bundled_tools_ready_without_brew(self):
+        suffix = ".exe" if os.name == "nt" else ""
         bundled_bin = self.root / "bundled-bin"
         bundled_bin.mkdir(parents=True)
         for name in ("pdftoppm", "pdfinfo"):
-            exe = bundled_bin / name
+            exe = bundled_bin / f"{name}{suffix}"
             exe.write_bytes(b"#!/bin/sh\nexit 0\n")
             exe.chmod(0o755)
         missing_brew_dir = self.root / "no-homebrew"
