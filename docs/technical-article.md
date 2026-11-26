@@ -2,7 +2,7 @@
 
 本文保留所引演示版本的技术说明；模型请求次数、当时的公式提取范围和“重试尚无反馈”等描述均是历史记录。当前本地启动、图片/PDF 转写和保存流程见[本地使用指南](local-studio.md)；确定性优先、候选保真与重试反馈的后续实现见[公式修复质量记录](formula-repair-quality.md)，外部 Agent 的操作入口见[AgentSkills 使用指南](agent-skills.md)。历史结果不替代当前版本验证。
 
-[项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)
+[项目代码](https://github.com/CacinieP/TeXada-Studio-with-agentskills) · [技术报告](architecture/skills-technical-report.md) · [复现案例](casebook.md) · [演示视频](https://www.bilibili.com/video/BV16Kan6rEGv/)
 
 微信公众号：[阅读已发布文章](https://mp.weixin.qq.com/s/kDkmQp12pBSPkqw2UpeLXw)。
 
@@ -95,4 +95,4 @@ CLI 续跑时检查输入与执行上下文哈希。公式、已有裁剪文件�
 
 修改一条 Skill 指令后，可以检查请求记录中的 Skill 摘要；修改检查器后，可以运行对应案例。CLI 还会在输入或执行上下文变化时重新检查。这样，读者既能试用修复流程，也能沿着指令、代码和记录继续开发。
 
-[Skill 技术报告](skills-technical-report.md)说明职责划分、加载方式和扩展入口；同模型有无 Skill 的对照配置、逐次候选与现有结果集中在[实验报告](skills-pilot-analysis.md)。后续开发与评测安排见[路线图](roadmap.md)。
+[Skill 技术报告](architecture/skills-technical-report.md)说明职责划分、加载方式和扩展入口；同模型有无 Skill 的对照配置、逐次候选与现有结果集中在[实验报告](skills-pilot-analysis.md)。后续开发与评测安排见[路线图](roadmap.md)。

@@ -58,4 +58,4 @@ Studio 表格修复优先执行 0 模型调用的确定性单格重算；若简�
 `version`，不要为迁就它删掉运行时契约。真实模型行为需另做受控验证，fixture 仅验证流程。
 
 当前功能以本页、各 Skill 和 [本地指南](local-studio.md) 为准。
-[技术报告](skills-technical-report.md) 与历史实验保留各自日期的设计和结果。
+[技术报告](architecture/skills-technical-report.md) 与历史实验保留各自日期的设计和结果。

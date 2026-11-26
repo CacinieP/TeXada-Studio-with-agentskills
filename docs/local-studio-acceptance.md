@@ -1,6 +1,6 @@
 # TeXada Studio 本地版验收记录
 
-最新深海蓝工作区及 34 项 Chrome 检查见[TeXada 视觉实现与验收](texada-visual-implementation.md)。
+最新深海蓝工作区及 34 项 Chrome 检查见[TeXada 视觉实现与验收](architecture/visual-workspace.md)。
 
 编辑器品牌、命令面板、大纲、查找替换与长文档交互的后续验收见[编辑器升级验收](editor-polish-acceptance.md)：26 项 Chrome 检查和两套 Node 前端回归通过，Python 回归维持 283 项通过。
 

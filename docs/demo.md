@@ -4,7 +4,7 @@
 
 安装与启动以[本地使用指南](local-studio.md)为准。工作台运行在本机浏览器中，先用 `math-clean.tex` 检查编辑和已准备好的编译环境，再用 `math-delimiters.tex` 审阅语法候选，或用 `report-01.tex` 核对确定性合计。采用、保存和编译当前版本后导出是不同动作。
 
-图片/PDF 转写结果需对照原件审阅，再另建文档；复杂对齐和未知结构保留人工处理。当前实现及实测范围分别见[公式修复质量记录](formula-repair-quality.md)、[本地验收](local-studio-acceptance.md)与[视觉工作区验收](texada-visual-implementation.md)。操作 Skill 见[AgentSkills 使用指南](agent-skills.md)。
+图片/PDF 转写结果需对照原件审阅，再另建文档；复杂对齐和未知结构保留人工处理。当前实现及实测范围分别见[公式修复质量记录](formula-repair-quality.md)、[本地验收](local-studio-acceptance.md)与[视觉工作区验收](architecture/visual-workspace.md)。操作 Skill 见[AgentSkills 使用指南](agent-skills.md)。
 
 下列视频与旧截图保留对应版本的界面、等待时间和结果，不代表当前界面或当前规则的模型请求次数。
 

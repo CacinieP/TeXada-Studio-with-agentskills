@@ -19,7 +19,7 @@ TeXada 系列使用 MiniCPM 连接两类工作：先把公式描述、截图或�
 
 共同设计方向是：**生成候选 → 确定性检查 → 展示证据与差异 → 使用者决定是否采用**。两个项目已有各自的检查和记录方式，统一接口与统一报告格式属于后续迭代。
 
-Studio 的具体支持范围、启动依赖与现有模型配置以 [README](../README.md) 为准，Skill 加载与状态管理见 [技术报告](skills-technical-report.md)。
+Studio 的具体支持范围、启动依赖与现有模型配置以 [README](../README.md) 为准，Skill 加载与状态管理见 [技术报告](architecture/skills-technical-report.md)。
 
 ## 2026-10-13 的手动搭配流程
 
@@ -53,7 +53,7 @@ Studio 通过 `scripts/run-minicpm-v47-studio.sh` 显式选择 4.7 API profile�
 
 ## 维护与许可记录
 
-本文以 Studio `f738799a7271efc9e4c10420c52e4b347b623bff` 为基线整理；已有技术材料见 [项目报告](project-report.md)、[演示与证据](dynamic-demo.md)及 [Skill 技术报告](skills-technical-report.md)。
+本文以 Studio `f738799a7271efc9e4c10420c52e4b347b623bff` 为基线整理；已有技术材料见 [项目报告](project-report.md)、[演示与证据](dynamic-demo.md)及 [Skill 技术报告](architecture/skills-technical-report.md)。
 
 各仓库保留自身许可证与第三方声明。Studio 见 [LICENSE](../LICENSE) 和 [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md)；Math Agent 见其 [LICENSE](https://github.com/CacinieP/TeXada-the-Math-Agent/blob/main/LICENSE) 和 [项目说明](https://github.com/CacinieP/TeXada-the-Math-Agent)。发布系列材料时同时核对当前提交和状态日期。
 

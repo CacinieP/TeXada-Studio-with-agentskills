@@ -1,135 +1,172 @@
-# TeXada Studio Local
+# TeXada Studio User Manual
 
-Edit LaTeX, transcribe images or PDFs, check formulas and simple totals, review repair diffs, then save, compile and export on your own computer.
+[中文用户手册](README.md) · [Download Latest v0.1.4](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest) · [Changelog & Releases](docs/changelog/README.md) · [Troubleshooting](docs/troubleshooting.md) · [System Architecture](docs/architecture/README.md) · [Documentation Index](docs/index.md)
 
-Studio is a local workspace opened in your browser. Documents and run records stay on your machine; image transcription and model candidates use the local model service you configure.
+**TeXada Studio** is a **local, privacy-first LaTeX writing, image/PDF import, and AI-assisted review workspace** that runs entirely on your own computer.
 
-[中文](README.md) · [Start](#start) · [Configuration](#configuration) · [Local guide](docs/local-studio.md) · [AgentSkills](docs/agent-skills.md) · [Documentation](docs/index.md)
+It brings together LaTeX editing, offline CJK-ready PDF compilation and preview, formula/table/cleanup diagnostics, and side-by-side repair review in a single window. Your documents, builds, and local AI inference stay on your machine—**no cloud account, no internet requirement, and no external data uploads**.
 
-![TeXada Studio: local LaTeX source and a compiled Chinese PDF](assets/studio-workspace.png)
+![TeXada Studio Workspace Overview](docs/images/studio-overview.png)
 
-Current UI, using the repository's synthetic `welcome.tex` sample; November 4, 2026.
+---
 
-This is a local, single-user workspace; see the [v0.1.4 release notes](docs/releases/v0.1.4.md) (Chinese) for the current release (shipping both macOS Apple Silicon notarized DMG and Windows x64 self-contained portable ZIP). Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
+## Quick Installation & Launch
 
-## What you can do
+For everyday writing, download the official **self-contained desktop release**. It already bundles the offline LaTeX compiler (`tectonic` with 30+ common packages and Fandol CJK fonts), PDF page renderer (`poppler` with CJK character maps), and the local model engine (`llama-server`)—**no TeX Live, Homebrew, or Python setup required**.
 
-| Task | Workflow |
-| --- | --- |
-| Manage documents | Import or create `.tex`, save, rename, and delete; saved changes survive refresh |
-| Transcribe sources | Import PNG, JPEG, WebP, or PDF, up to five pages per request; choose a start page, exclude or split pages, and continue with later batches; review the candidate before creating a document |
-| Edit and inspect | LaTeX highlighting, snippets and symbols, five document templates, find/replace, section outline, command palette, formula syntax checks, and simple totals |
-| Review repairs | Source-preserving deterministic syntax repairs first; model candidates require syntax and mutation-scope checks before explicit review |
-| Preview and export | Compile the current document, browse PDF pages, and export PDF, `.tex`, or an audit report |
-| Connect a local model | Save a loopback endpoint and model name, then explicitly check availability |
+### macOS Desktop App (Apple Silicon, macOS 15+)
 
-Saving checks the file revision before replacing it. Edits invalidate an older PDF, so export requires compilation of the current content. Repository samples remain unchanged; saving creates a local copy.
+1. Download **`TeXada-Studio-macOS-arm64.dmg`** (Developer ID signed & Apple notarized) from [GitHub Releases](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest).
+2. Open the `.dmg` disk image and drag **TeXada Studio** into your **Applications** folder.
+3. Launch **TeXada Studio** from Applications or Launchpad.
 
-The activity rail opens document navigation, search, image/PDF import and Agent review. Check results appear in the bottom problems panel; create and review repair candidates through Agent. The Agent drawer and bottom problems/log panels can collapse. The export menu offers the current LaTeX and its compiled PDF.
+### Windows Desktop App (64-bit Windows 10 / 11)
 
-## Start
+1. Download **`TeXada-Studio-Windows-x64.zip`** from [GitHub Releases](https://github.com/CacinieP/TeXada-Studio-with-agentskills/releases/latest).
+2. Extract the entire ZIP archive to any folder.
+3. Open the extracted folder and double-click **`TeXada Studio.exe`**.
 
-Requires **Python 3.11+**. The example uses an installed `python3.13`; substitute another supported version if needed:
+<details>
+<summary><strong>Advanced: Run from Source in Your Browser (Linux or Developers)</strong></summary>
+
+Requires Python 3.11+ (install `tectonic` and `poppler` optionally if you need offline PDF previews):
 
 ```bash
 git clone https://github.com/CacinieP/TeXada-Studio-with-agentskills.git
 cd TeXada-Studio-with-agentskills
-python3.13 -m venv .venv
-.venv/bin/python -m pip install -r webui/requirements.txt
-.venv/bin/python scripts/run-local-studio.py --check
-./scripts/start-local-studio.command
+python3 -m venv .venv && .venv/bin/python -m pip install -r webui/requirements.txt
+./scripts/start-local-studio.command   # On Windows: scripts\start-local-studio.bat
 ```
 
-On macOS, double-click `scripts/start-local-studio.command`; on Windows, double-click `scripts/start-local-studio.bat` (with `.venv\Scripts\python.exe`) after installing dependencies. The launcher opens your browser. Editor assets are bundled with the source; no frontend build is required. First-time preparation of dependencies, model weights, fonts, and TeX resources needs network access — see [first-time setup](docs/local-studio.md#首次准备与离线使用).
+See the [Local Deployment & Developer Guide](docs/local-studio.md) (Chinese) for CLI flags, offline TeX cache preparation, and test suites.
+</details>
 
-macOS and Windows also support **self-contained desktop bundles** (embedding Python, Tectonic, the TeX resource cache, Poppler, and `llama-server` — no repo, package manager, or network needed at runtime: `desktop/build_bundle.py` on macOS, `desktop/build_windows_bundle.py` on Windows x64; macOS also offers a lightweight shell via `desktop/build_app.py`). See the [desktop guide](desktop/README.md) and the [bundling license audit](desktop/licenses-audit.md) (Chinese).
+---
+
+## What Works Out of the Box vs. With a Local AI Model
+
+The installer does not bundle multi-gigabyte model weights, so **you can write, check, and compile PDFs immediately after installation**. Whenever you want OCR import or model-assisted repairs, you can download a lightweight local model in one click inside Settings:
+
+| Capability | Without AI Model (Immediate) | With Local AI Model Enabled |
+| --- | --- | --- |
+| **LaTeX Editing & Templates** | 5 built-in offline templates, 82 math/theorem snippets, structure folding & syntax highlighting | Same |
+| **Offline PDF Preview** | Multi-page CJK & English PDF compilation, Fit/100% zoom, click compile errors to jump to source line | Same |
+| **Formula & Delimiter Checks** | Detects unclosed delimiters, duplicate scripts, and matrix/`cases` shape errors; deterministically repairs unambiguous missing delimiters | Proposes guarded repairs for ambiguous or incomplete formula syntax |
+| **Table Total Auditing** | Deterministically recomputes scalar final-row totals (`合计` / `总计` / `total`) in simple `tabular` tables | Completes short or blank final total rows under strict row-preservation guards |
+| **Document Format Cleanup** | Strips invisible zero-width characters pasted into prose | Proposes conservative closures for unclosed commands and prose environments (`itemize`, `center`, etc.) |
+| **Image & PDF OCR Import** | Requires a local vision model | Transcribes lecture photos, screenshots, or scanned PDFs page-by-page into LaTeX drafts |
+
+---
+
+## Workspace Tour
+
+The Studio window is organized into five clean areas:
+
+1. **Left Activity Bar & Sidebar**: Switch between **Documents** and **Section Outline**, create documents from templates, upload `.tex` files, or launch **Image/PDF Import**. Your personal documents appear at the top, while built-in practice files are tucked inside the collapsible **Samples** group.
+2. **Top Toolbar**: Shows the active filename and save status alongside **Save**, **Check**, **Repair** (Agent drawer), **Compile**, **Export**, **Command Palette**, and **Settings**.
+3. **Center Editor & Diff Review**: Provides the local Monaco editor during writing, and automatically opens a side-by-side **Repair Diff** tab whenever repair candidates are ready for inspection.
+4. **Right PDF Preview**: Displays rendered PDF pages with page navigation and Fit-to-Width / 100% zoom controls. Editing source text immediately marks old previews stale so outdated PDFs are never exported by mistake.
+5. **Bottom Diagnostics/Logs & Status Bar**: Stays collapsed until needed; click any problem or compiler error to jump straight to its source line. The status bar displays cursor coordinates and live local model connectivity.
+
+---
+
+## Core Workflows
+
+### 4.1 Create, Open & Save Documents
+
+- **New from Template**: Click **New from Template** in the sidebar (or press `⇧⌘P` / `Ctrl+Shift+P` to open the Command Palette) to choose from five offline templates: **Blank Chinese Article**, **Lecture Notes**, **Exam Paper**, **Beamer Slides**, or **English Article**.
+- **Import `.tex` Files**: Click the upload button in the sidebar to import an existing `.tex` file (up to 2 MiB).
+- **Safe Saving**: Press `⌘S` (`Ctrl+S` on Windows/Linux) to save. Saving edits to a built-in sample creates your own personal copy without altering the original sample, and closing the app with unsaved changes prompts for confirmation.
+
+### 4.2 Offline PDF Compilation & Export
+
+1. Click **Compile** in the top toolbar to build and preview your multi-page PDF completely offline.
+2. If LaTeX reports an error, the bottom log highlights the exact line number—**click the diagnostic to jump directly to that line**.
+3. Open the **Export** menu to save your `.tex` source, the verified `.pdf` matching your current text, or a structured `.audit.md` quality report.
+
+### 4.3 Image & PDF OCR Import
+
+To turn photographed notes, formula screenshots, or scanned PDFs into editable LaTeX (with a local vision model running):
+
+1. Click the **Import Image/PDF** icon on the left activity bar and choose a `PNG`, `JPEG`, `WebP`, or `PDF` file (up to 12 MiB).
+2. For PDFs, pick the **start page** and batch size (1, 3, or 5 pages per batch).
+3. Review the transcription in the **Import Review Dialog**:
+   - Edit the recognized LaTeX directly while comparing against your source;
+   - Exclude unwanted pages, merge pages into one document, or **split into one `.tex` document per page**;
+   - Click **Continue Remaining Pages** on longer PDFs to process the next batch seamlessly.
+
+### 4.4 Guarded Checks & Side-by-Side Repair Review
+
+TeXada Studio never overwrites your manuscript behind your back—every repair follows **Check → Side-by-Side Diff → Explicit Adoption**:
+
+1. **Inspect Only (`Check`)**: Scans inline formulas, matrices/`cases`, simple table totals, and invisible cleanup issues without changing a single character.
+2. **Generate Candidates (`Repair`)**: Applies zero-call deterministic fixes first, calls your local model only where needed, blocks any candidate that alters numbers, variables, operators, or prose meaning, and test-compiles the resulting candidate.
+3. **Review & Undo Freely**: Inspect every highlighted change in the **Repair Diff** tab. Click **Adopt Candidate** to apply it to the editor or **Reject Candidate** to keep your original text. Even after adopting, you can press **`⌘Z` / `Ctrl+Z`** to undo (or `⇧⌘Z` / `Ctrl+Shift+Z` to redo) before saving with `⌘S` / `Ctrl+S`.
+4. **Optional Agent Experiments**: Open the right Agent drawer to opt into **Constrained Agent Planning** or **Allowlisted Skill Selection** when desired.
+
+---
 
 ## Configuration
 
-### Local model service
+Open **Settings** (gear icon in the top bar) to customize editor font size, word wrap, and local AI models.
 
-Local mode accepts only OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/completions`) on `localhost`, `127.0.0.1`, or `[::1]`. It needs no API key and never falls back to a cloud model. Three ways to connect:
+### 5.1 One-Click Managed Local Models (Recommended)
 
-1. **In the UI (or Studio-managed models)**: status bar "local model" can save an existing endpoint and model name and run an explicit connection check, or explicitly download and launch SHA-256-verified MiniCPM-V 4.7 1B or 35B-A3B Q4_K_M weights (requires `llama-server`, bundled in both macOS and Windows self-contained desktop releases). Connection details stay in the user data directory.
-2. **Reuse an existing service at launch** (for example an Ollama instance already running locally):
+In **Settings → Local Model**, select a model profile matching your machine's memory and click **Download & Start** (downloads are resumable, SHA-256 verified, and automatically stopped when you quit TeXada Studio):
 
-   ```bash
-   .venv/bin/python scripts/run-local-studio.py \
-     --base-url http://127.0.0.1:11434/v1 \
-     --model minicpm-v4.7-35b-a3b-q4 --no-auto-model
-   ```
+| Managed Profile | Disk Space | Recommended RAM | Best For |
+| --- | --- | --- | --- |
+| **MiniCPM-V 4.7 1B (`Q4_K_M`)** | ~**1.8 GB** | **16 GB+** | **Recommended for most laptops & desktops**: fast download, responsive OCR and formula/table/cleanup repairs |
+| **MiniCPM-V 4.7 35B-A3B (`Q4_K_M`)** | ~**22.3 GB** | **64 GB+** | High-memory workstations handling dense page transcriptions and complex repairs |
 
-   The model name must exactly match an id returned by your service's `/v1/models`; on exit the launcher stops only model processes it started itself.
-3. **Auto-start local weights**: by default the launcher looks for the GGUF and projector under `~/.texada/models/` and requires `llama-server`; pass `--gguf`/`--mmproj` to point at explicit paths.
+### 5.2 Connect an Existing Local Ollama or llama.cpp Server
 
-Image/PDF transcription requires an endpoint that actually supports `image_url` — appearing in the model list is not verification. Deterministic syntax repairs need no model. See the [model guide](docs/local-studio.md#本机模型连接) for downloads, default paths, and optional parameters.
+If you already run Ollama or `llama-server` locally, enter its loopback URL (for example `http://127.0.0.1:11434/v1` or `http://127.0.0.1:18147/v1`) and model name in **Settings → Local Model**, click **Check Connection**, and click **Save Settings**. Only `127.0.0.1` / `localhost` loopback endpoints are accepted; cloud URLs are rejected by design.
 
-The default is **35B-A3B Q4_K_M** (`minicpm-v4.7-35b-a3b-q4`) at `http://127.0.0.1:18147/v1`; saved explicit settings are preserved and there is no automatic downgrade to 1B. Weights plus projector total about 22.3GB before runtime/system memory: 16GB is not a supported target, 24GB is not recommended, 32GB is an untested planning starting point, and 64GB Mac was tested. 1B F16 remains manually selectable. See [comparison and evidence limits](docs/evaluation-results/v47-local-comparison-01/README.md).
+### 5.3 Where Are My Documents Stored?
 
-### Optional tools and TeX resources
+All documents, automatic history backups, and downloaded models live in your standard OS user data directory and persist across app upgrades:
 
-| Feature | Additional requirements |
+| Operating System | Default User Data Directory |
 | --- | --- |
-| Editing and deterministic checks | Python dependencies above; editor assets are bundled |
-| Model candidates and image transcription | A local MiniCPM-V 4.7 35B-A3B Q4 service; automatic startup also needs `llama-server`, GGUF and projector. Deterministic repairs need no model |
-| PDF import | Poppler's `pdfinfo` and `pdftoppm` |
-| PDF compilation and preview | Tectonic, Poppler, required TeX cache, and fonts |
+| **macOS** | `~/Library/Application Support/TeXada Studio` |
+| **Windows** | `%LOCALAPPDATA%\TeXada Studio` |
+| **Linux** | `~/.local/share/texada-studio` (or `$XDG_DATA_HOME/texada-studio`) |
 
-Tectonic can bootstrap itself: click "Download Tectonic" in the Studio settings dialog, or run `.venv/bin/python scripts/install_local_tools.py` — a pinned official release, SHA256-verified, installed to `~/.texada/bin` and picked up by the launcher's PATH, effective in a running session without restart. The adjacent "Install Poppler" button drives `brew install poppler` on macOS and downloads a pinned SHA256-verified Poppler archive on Windows; Linux users should use their system package manager (see the [troubleshooting guide](docs/troubleshooting.md)).
+Your `.tex` files live in `documents/`, with automatic version snapshots in `documents/.history/` and deleted copies in `documents/.trash/`.
 
-Studio compiles only against cached TeX resources and never downloads packages while processing documents. First-time preparation:
+---
 
-```bash
-.venv/bin/python scripts/prepare-local-tex.py --download-resources
-```
+## Keyboard Shortcuts
 
-Re-run without the flag afterwards for an offline check.
+| Action | macOS | Windows / Linux |
+| --- | --- | --- |
+| Save document | `⌘S` | `Ctrl+S` |
+| Undo edit or adopted repair | `⌘Z` | `Ctrl+Z` |
+| Redo | `⇧⌘Z` or `⌘Y` | `Ctrl+Shift+Z` or `Ctrl+Y` |
+| Command Palette (templates, outline jump, actions) | `⇧⌘P` | `Ctrl+Shift+P` |
+| Find in document | `⌘F` | `Ctrl+F` |
+| Find and replace | `⌥⌘F` | `Ctrl+H` |
+| Navigate & confirm modal lists | `↑` / `↓`, `Enter`, `Esc` | `↑` / `↓`, `Enter`, `Esc` |
 
-### Editor preferences and local data
+---
 
-Font size, word wrap, and minimap preferences persist in your browser. Documents, run records, and connection details live in the user data directory; the private browser entry is written to an owner-only `session.json`, credentials are never printed, and the entry is renewed on every launch. See [local data and recovery](docs/local-studio.md#本地数据与恢复).
+## Important Notes & FAQ
 
-## First document
+- **Human Review Remains Essential**: Passing syntax checks or PDF compilation means the LaTeX structure is valid—**not** that a mathematical identity is true (e.g., `1+1=3` compiles cleanly) or that an OCR transcription is error-free. Always verify symbols and data against your original source.
+- **Single-File Scope & Bundled Packages**: Studio edits and compiles single `.tex` files offline with 30+ pre-warmed packages (`ctex`, `amsmath`, `amsthm`, `mathtools`, `geometry`, `hyperref`, `xcolor`, `booktabs`, `tabularx`, `multirow`, `enumitem`, `listings`, `tikz`, Fandol CJK fonts, etc.). Multi-file projects with external figures or specialized packages should be compiled with a full local TeX distribution after exporting `.tex`.
+- **Why does the status bar say `Model: Unchecked`?** That simply means no external connection probe has been run yet in this session; editing, deterministic repairs, and offline PDF compilation work immediately without a model.
+- **Why wasn't `$a_$` filled in automatically?** When an operand or subscript is missing, guessing `$a_1$` could silently invent false math. Ambiguous expressions are intentionally preserved for your manual completion.
 
-1. Open `welcome.tex` or `math-clean.tex` and choose **Check**. Once compiler dependencies are ready, choose **Compile**.
-2. Open `math-delimiters.tex`, generate a candidate, review the diff, and accept or reject it. Save after adopting a candidate.
-3. Refresh to check persistence, then export the current `.tex` or PDF.
-4. Select an authorized image or PDF, start recognition, review it against the original, and create a document from the candidate.
+For detailed troubleshooting, see the [Installation & Usage Troubleshooting Guide](docs/troubleshooting.md) (Chinese).
 
-Use **Save** or `⌘/Ctrl+S` to persist edits. OCR and repair candidates do not automatically replace the source.
+---
 
-Formula repairs follow a source-preservation policy: candidates must not change numbers, variables, or operators or delete terms; unambiguous delimiters are closed and rechecked first. See the [repair-quality record](docs/formula-repair-quality.md) for the policy and evidence.
+## Documentation & License
 
-Open the command palette with `Cmd/Ctrl+Shift+P`, navigate sections through the outline, and use the editor's find/replace panels. Font size, word wrap, and minimap preferences persist in your browser. Local LaTeX snippets — common commands, theorem-class environments, Greek letters and math symbols — need no model call; `Ctrl+Space` can request suggestions. Sectioning commands, preamble/definition directives (including `\input`/`\include` file splits), and cross-reference keys each get their own color, so the document's structural modules stand out. The editor folds documents by TeX structure: environments pair with their `\end`, and sections close at the next heading. The sidebar's "new from template" action creates documents from five offline skeletons: blank article, lecture notes, exam paper, Beamer, and English article. The status bar shows cursor, selection, and word counts.
+- **Guides & CLI**: [Local Deployment Guide](docs/local-studio.md) · [Troubleshooting](docs/troubleshooting.md) · [AgentSkills Guide](docs/agent-skills.md) · [CLI Harness](harness/README.md)
+- **Releases & Changelog**: [Release & Changelog Hub](docs/changelog/README.md) · [Full CHANGELOG](docs/changelog/CHANGELOG.md) · [v0.1.4 Release Notes](docs/releases/v0.1.4.md)
+- **System Architecture**: [Architecture Overview](docs/architecture/README.md) · [AgentSkills Technical Report](docs/architecture/skills-technical-report.md) · [Constrained Planner](docs/architecture/constrained-planner.md) · [Skill Selection](docs/architecture/skill-selection.md) · [Full Documentation Index](docs/index.md)
+- **Governance & Packaging**: [Source Package Verification](docs/source-package.md) · [Contributing](CONTRIBUTING.md) · [Security Policy](SECURITY.md) · [Support](SUPPORT.md)
 
-## Scope and boundaries
-
-Syntax acceptance, compilation, faithful transcription, and mathematical correctness are separate judgments: a false equation can pass both syntax and compilation. Review OCR, repairs, and table findings against the original.
-
-The scanner handles common inline and display math and skips comments and literal text; complex alignments, unknown macros, and unsupported structures remain for human review. The current unit of work is one `.tex` file; multi-file projects and collaboration are outside this local version's scope. See [checking and review boundaries](docs/local-studio.md#检查与审阅边界) and the [roadmap](docs/roadmap.md).
-
-## Documentation and technical material
-
-Start with the [local guide](docs/local-studio.md) and the [troubleshooting guide](docs/troubleshooting.md). Further entry points:
-
-- [Studio operation Skill](skills/texada-studio/SKILL.md) and [AgentSkills guide](docs/agent-skills.md): workspace operations, formula/table/OCR inputs and review boundaries.
-- [Current validation](docs/current-validation.md), [architecture](docs/architecture.md), [CLI Harness](harness/README.md), and [source packaging](docs/source-package.md).
-- The complete list of casebooks, validation history, Skill experiments, series notes, and historical demos lives in the [documentation index](docs/index.md).
-
-The legacy `run-minicpm-v47-studio.sh` explicitly selects a cloud API workflow. See [compatibility notes](docs/local-studio.md#旧云-api-入口与实验功能); its results are separate from local inference acceptance.
-
-Original code, documentation, and synthetic fixtures use **AGPL-3.0-only**. Third-party notices remain in [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the [Active Calculus notice](samples/research/ACTIVE_CALCULUS_NOTICE.md). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SUPPORT.md](SUPPORT.md).
-
-Maintainer [@CacinieP](https://github.com/CacinieP). Citation metadata is in [CITATION.cff](CITATION.cff). Detailed technical guides are currently in Chinese.
-
-### Local model profiles: 1B and 35B Q4
-
-Both sizes remain supported; **35B Q4 is the default**, with **1B F16** and 1B Q4 explicitly selectable. The UI connection settings also accept either model's actual service alias.
-
-```bash
-.venv/bin/python scripts/run-local-studio.py --model-profile 35b-q4
-.venv/bin/python scripts/run-local-studio.py --model-profile 1b-f16
-.venv/bin/python scripts/run-local-studio.py --model-profile 1b-q4
-```
-
-Default local files: 35B Q4 under `~/.texada/models/`, 1B F16/Q4 under `~/.texada/models/1b/`; each uses the matching variant's `mmproj-model-f16.gguf` in its own directory. Existing files elsewhere can be selected with `--gguf` and `--mmproj`. No weights are downloaded automatically, and no size switch is made silently.
+**Maintainer & License**: Maintained by [CacinieP](https://github.com/CacinieP). Project-authored code, documentation, and synthetic samples are licensed under [AGPL-3.0-only](LICENSE); bundled editor assets, fonts, and tools retain their respective open-source licenses in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [desktop/licenses-audit.md](desktop/licenses-audit.md).

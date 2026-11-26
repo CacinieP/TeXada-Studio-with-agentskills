@@ -2,9 +2,9 @@
 
 更新：2026-09-29。
 
-本文保留该日期的设计说明与实验边界。当前版本的 Web UI、OCR 输入路线、TeX 扫描器与 Skill 加载范围见 [当前 AgentSkills 使用指南](agent-skills.md)；历史限制不应作为当前功能的判断依据。
+本文保留该日期的设计说明与实验边界。当前版本的 Web UI、OCR 输入路线、TeX 扫描器与 Skill 加载范围见 [当前 AgentSkills 使用指南](../agent-skills.md)；历史限制不应作为当前功能的判断依据。
 
-[架构](architecture.md) · [案例与命令](casebook.md) · [验证记录](validation.md)
+[架构](README.md) · [案例与命令](../casebook.md) · [验证记录](../validation.md)
 
 ## 问题与设计
 
@@ -36,20 +36,20 @@ Tectonic 编译结果作为独立诊断展示；界面允许审阅、采用仍�
 
 ## Skill 与代码的对应关系
 
-[`skills_runtime.py`](../harness/docforensics/skills_runtime.py)只加载白名单中的 `doc-formula-verify/SKILL.md`，校验 frontmatter 名称、UTF-8 内容、大小及解析后的路径。Skill 与检查脚本的符号链接必须落在技能根目录内。加载器在提供方初始化时读取完整文件，失败即报告配置错误；它不扫描所有包，也不根据自然语言匹配 `description`。CLI 按节点 `type` 分发，Studio 按已抽取的问题类型分发，只有公式的 `RETRY` 进入模型请求。
+[`skills_runtime.py`](../../harness/docforensics/skills_runtime.py)只加载白名单中的 `doc-formula-verify/SKILL.md`，校验 frontmatter 名称、UTF-8 内容、大小及解析后的路径。Skill 与检查脚本的符号链接必须落在技能根目录内。加载器在提供方初始化时读取完整文件，失败即报告配置错误；它不扫描所有包，也不根据自然语言匹配 `description`。CLI 按节点 `type` 分发，Studio 按已抽取的问题类型分发，只有公式的 `RETRY` 进入模型请求。
 
-[`OllamaProvider`](../harness/docforensics/vlm.py)把完整 Skill 文件内容加入 system 消息，原始公式放在独立的 user JSON 中。CLI 默认 `--skill-mode on`，Studio 默认 `SKILL_MODE=on`；`off` 保留基础提示、模型参数、工具和重试预算，只省去 Skill 内容。直接构造提供方的默认值仍为 `off`，产品入口显式传入配置。Fixture 读取预设候选，无模型请求。
+[`OllamaProvider`](../../harness/docforensics/vlm.py)把完整 Skill 文件内容加入 system 消息，原始公式放在独立的 user JSON 中。CLI 默认 `--skill-mode on`，Studio 默认 `SKILL_MODE=on`；`off` 保留基础提示、模型参数、工具和重试预算，只省去 Skill 内容。直接构造提供方的默认值仍为 `off`，产品入口显式传入配置。Fixture 读取预设候选，无模型请求。
 
 日志记录 Skill SHA256、实际请求消息的 `prompt_sha256`、加载标志和请求次数。Skill 指纹回答“用了哪版约定”，请求指纹回答“这次实际发送的指令与公式是否相同”，检查器指纹回答“由哪版规则回判”。Skill、系统提示、请求模板与检查器指纹进入 CLI 的执行上下文，实际请求消息摘要随调用记录；修改指令或检查器后会重新检查，避免复用旧终态。节点选择、检查器执行和重试由 Python 控制；当前没有模型自主选择工具的规划循环。
 
 | Skill | 代码入口或使用方式 | 当前职责 |
 | --- | --- | --- |
-| [doc-formula-verify](../skills/doc-formula-verify/SKILL.md) | `skills_runtime.py`、`vlm.py`、`verify.py` | 实载公式指令、SymPy 检查、候选回判 |
-| [doc-table-audit](../skills/doc-table-audit/SKILL.md) | CLI `audit_table.py`；Studio `_table_problems()` | 结构化网格检查；Studio 另行解析简单 TeX 表格并重算 |
-| [doc-report](../skills/doc-report/SKILL.md) | CLI `write_report()`；Studio 导出 | 终态、候选差异、失败原因和调用记录 |
-| [doc-layout-parse](../skills/doc-layout-parse/SKILL.md) | CLI 读取现有 `layout.json` | 输入准备约定；自动 PDF/OCR 提取待实现 |
-| [doc-ocr-extract](../skills/doc-ocr-extract/SKILL.md) | `scripts/ocr_extract.py`（连接本机 vision 模型） | 图片 → 文本候选行；分治边界：不修复、不写状态、人工采纳后入文 |
-| [latex-cleanup](../skills/latex-cleanup/SKILL.md) | 独立脚本和测试 | LaTeX 整理、编译和验证；Studio 直接调用 Tectonic |
+| [doc-formula-verify](../../skills/doc-formula-verify/SKILL.md) | `skills_runtime.py`、`vlm.py`、`verify.py` | 实载公式指令、SymPy 检查、候选回判 |
+| [doc-table-audit](../../skills/doc-table-audit/SKILL.md) | CLI `audit_table.py`；Studio `_table_problems()` | 结构化网格检查；Studio 另行解析简单 TeX 表格并重算 |
+| [doc-report](../../skills/doc-report/SKILL.md) | CLI `write_report()`；Studio 导出 | 终态、候选差异、失败原因和调用记录 |
+| [doc-layout-parse](../../skills/doc-layout-parse/SKILL.md) | CLI 读取现有 `layout.json` | 输入准备约定；自动 PDF/OCR 提取待实现 |
+| [doc-ocr-extract](../../skills/doc-ocr-extract/SKILL.md) | `scripts/ocr_extract.py`（连接本机 vision 模型） | 图片 → 文本候选行；分治边界：不修复、不写状态、人工采纳后入文 |
+| [latex-cleanup](../../skills/latex-cleanup/SKILL.md) | 独立脚本和测试 | LaTeX 整理、编译和验证；Studio 直接调用 Tectonic |
 
 只有公式 Skill 正文接入了上述模型请求宿主。其他包按表中方式使用，包结构遵循 [Agent Skills 规范](https://agentskills.io/specification)。
 
@@ -99,13 +99,13 @@ CLI 表格以0起始索引描述维度和合计。形状、合计或数字格式
 
 两次尝试均基于原公式。CLI 遇到空候选即结束，Studio 可以再尝试一次；候选回判遇到环境故障立即停止，Studio 同时停止该任务余下公式的模型请求。错误分类包含 timeout、network_error、http_error、bad_response_json、bad_response_shape 和 bad_candidate_json。原始候选响应最多记录8192字符并标注截断，HTTP 响应上限为1 MiB。
 
-以 [S06 缺失定界符](../samples/docs/math-delimiters.tex)为例，请求的 user 消息只携带任务名与公式；源码行号和问题 ID 留在宿主中关联结果：
+以 [S06 缺失定界符](../../samples/docs/math-delimiters.tex)为例，请求的 user 消息只携带任务名与公式；源码行号和问题 ID 留在宿主中关联结果：
 
 ```json
 {"task":"repair_formula_syntax","latex":"\\displaystyle f(x)=\\left(\\frac{x^2-1}{x-1}"}
 ```
 
-该次[实机候选](dynamic-demo-trace.json)只补上 `\right)`，随后经过语法回判、前后编译与人工采用。检查器的失败原因虽然写入事件，但当前请求不携带该原因、上一候选、周围段落或 crop 图像。第二次调用因此仍是对原公式的重复尝试；固定种子下可能得到相同候选。加入失败反馈需要调整请求契约，并单独比较候选重复率与误改，不能仅靠修改 Skill 正文获得这些上下文。
+该次[实机候选](../dynamic-demo-trace.json)只补上 `\right)`，随后经过语法回判、前后编译与人工采用。检查器的失败原因虽然写入事件，但当前请求不携带该原因、上一候选、周围段落或 crop 图像。第二次调用因此仍是对原公式的重复尝试；固定种子下可能得到相同候选。加入失败反馈需要调整请求契约，并单独比较候选重复率与误改，不能仅靠修改 Skill 正文获得这些上下文。
 
 `model_calls` 统计发起的 HTTP 尝试，包含超时。Fixture 为0；缺乏 trace 的自定义提供方会标记计数下界。Studio 分别保存 `configured_model` 与实际 `model`，零请求时后者为 null。每个任务创建自己的提供方，防止 trace 串入其他任务。
 
@@ -115,7 +115,7 @@ CLI 在 `state.jsonl` 中依次写入 `CHECK`、`PROVIDER_START`、`PROVIDER_RES
 
 终态匹配键为 `doc + node_id + input_sha256 + context_sha256`。输入摘要覆盖节点内容和已有 crop 字节，执行上下文覆盖程序、检查器、Python/依赖、提供方、模型参数及 Skill。输入或上下文变化会重新检查，暂时故障在恢复后重试。模型标识目前包括标签与配置；同标签更换权重时应新建状态目录并另存 digest。自定义提供方缺少稳定指纹时禁用跨次复用。
 
-日志逐条 flush/fsync，可容忍截断尾行和非对象记录；同目录只允许一个进程写入。未知节点类型走 pass-through，报告中的 `OK` 只表示该节点被保留。完整协议见 [Harness 手册](../harness/README.md)。
+日志逐条 flush/fsync，可容忍截断尾行和非对象记录；同目录只允许一个进程写入。未知节点类型走 pass-through，报告中的 `OK` 只表示该节点被保留。完整协议见 [Harness 手册](../../harness/README.md)。
 
 Studio 在 `state/studio/jobs/<job_id>/` 保存任务和逐候选事件。编译产物位于 `state/studio/<文档名>/before-<job_id>/` 与 `after-<job_id>/`，按任务隔离。完成结果可在重启后按 ID 读取；中断任务显示已有事件，后续需要新建任务。采用更新浏览器编辑器，导出用于保存；上传则写入文档目录，同名上传会覆盖。当前采用共享令牌、单 worker 和进程内调度。
 
@@ -130,7 +130,7 @@ Studio 在 `state/studio/jobs/<job_id>/` 保存任务和逐候选事件。编译
 3. 用 fixture 走通接受、拒绝、空候选和环境故障；修改 Skill、检查器或模型参数后，验证旧终态不再被复用。
 4. 固定样本、模型与预算，比较仅检查器、Skill off、Skill on。分别看语法接受、原文误改、人工语义复核和请求用量。
 
-对应验证入口包括[加载器测试](../harness/tests/test_skills_runtime.py)、[实际请求序列化测试](../harness/tests/test_vlm.py)与[三组评测运行器](../scripts/evaluate_skills.py)。前两者核对路径、内容哈希、消息分层和响应校验；运行器核对两模型组的端点、模型、基础提示、检查器和参数一致。Skill on 增加输入 token，比较时需同时报告这部分成本。这样，协议是否执行与指令是否改善结果可以分别检验。
+对应验证入口包括[加载器测试](../../harness/tests/test_skills_runtime.py)、[实际请求序列化测试](../../harness/tests/test_vlm.py)与[三组评测运行器](../../scripts/evaluate_skills.py)。前两者核对路径、内容哈希、消息分层和响应校验；运行器核对两模型组的端点、模型、基础提示、检查器和参数一致。Skill on 增加输入 token，比较时需同时报告这部分成本。这样，协议是否执行与指令是否改善结果可以分别检验。
 
 ## 可执行复现
 
@@ -154,14 +154,14 @@ python scripts/evaluate_skills.py run \
   --fixture-repairs samples/research/smoke_repairs.json
 ```
 
-它执行真实检查器，模型请求数为0。使用实际模型时，按[研究协议](../samples/research/README.md)显式指定 `--mode model`、端点和模型标签；先导实验的命令与复核入口见[实验分析](skills-pilot-analysis.md)。Studio 样本、故障注入及编译复现见[案例手册](casebook.md)。
+它执行真实检查器，模型请求数为0。使用实际模型时，按[研究协议](../../samples/research/README.md)显式指定 `--mode model`、端点和模型标签；先导实验的命令与复核入口见[实验分析](../skills-pilot-analysis.md)。Studio 样本、故障注入及编译复现见[案例手册](../casebook.md)。
 
 ## 结果与下一步
 
-27个合成检查案例均符合预期，覆盖非法输入、严格解析、数字格式与精度。三处缺陷直接对应实现改动：F04 的 `x+` 促成完整解析；S05 的横杠合计要求确认源码实际改变；T16/T17 的大整数促成动态精度设置。[检查报告](evaluation-results/checker-report.md)保留逐例响应和退出码。
+27个合成检查案例均符合预期，覆盖非法输入、严格解析、数字格式与精度。三处缺陷直接对应实现改动：F04 的 `x+` 促成完整解析；S05 的横杠合计要求确认源码实际改变；T16/T17 的大整数促成动态精度设置。[检查报告](../evaluation-results/checker-report.md)保留逐例响应和退出码。
 
-Studio 共13份文档，新增8份包含4类语法缺陷、正常对照、积分语义反例和两类范围边界；它们共抽取15个公式、报告4个语法问题。8份原稿与4份作者参考修订的独立编译结果全部符合预期。最新实机运行在 S06 上完成1次请求、1处修复、编译失败转通过及人工采用导出；缺失下标候选仍失败的旧记录另行保留。[编译复现](evaluation-results/studio-latex/README.md) · [实机记录](dynamic-demo.md) · [历史失败](evaluation-results/studio-earlier/README.md)
+Studio 共13份文档，新增8份包含4类语法缺陷、正常对照、积分语义反例和两类范围边界；它们共抽取15个公式、报告4个语法问题。8份原稿与4份作者参考修订的独立编译结果全部符合预期。最新实机运行在 S06 上完成1次请求、1处修复、编译失败转通过及人工采用导出；缺失下标候选仍失败的旧记录另行保留。[编译复现](../evaluation-results/studio-latex/README.md) · [实机记录](../dynamic-demo.md) · [历史失败](../evaluation-results/studio-earlier/README.md)
 
-三组先导实验使用6条开放教材公式及6条人工注入变体。两个模型组各有5个候选被语法接受，最终输出相同；17次 HTTP 尝试中有1次超时。独立人工语义复核待完成。当前结果支持运行与证据流程的复核，尚未观察到 Skill 的输出增益；小规模单来源实验也不足以估计真实文档效果。详见[实验分析](skills-pilot-analysis.md)。
+三组先导实验使用6条开放教材公式及6条人工注入变体。两个模型组各有5个候选被语法接受，最终输出相同；17次 HTTP 尝试中有1次超时。独立人工语义复核待完成。当前结果支持运行与证据流程的复核，尚未观察到 Skill 的输出增益；小规模单来源实验也不足以估计真实文档效果。详见[实验分析](../skills-pilot-analysis.md)。
 
-下一步优先改进 TeX 上下文提取，完成独立语义复核，再扩大自然错误与正常对照来源。第二次尝试加入失败反馈也值得单独对照，保持相同预算，观察候选重复率和误改。完整测试数量、环境及历史版本集中记录在[验证页](validation.md)。
+下一步优先改进 TeX 上下文提取，完成独立语义复核，再扩大自然错误与正常对照来源。第二次尝试加入失败反馈也值得单独对照，保持相同预算，观察候选重复率和误改。完整测试数量、环境及历史版本集中记录在[验证页](../validation.md)。

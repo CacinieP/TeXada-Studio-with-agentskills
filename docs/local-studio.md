@@ -230,7 +230,7 @@ Studio 在本机启动 `llama-server`（Windows 为无控制台弹窗的 `llama-
 
 `scripts/run-minicpm-v47-studio.sh` 保留为明确选择的旧云 API 入口，使用 `TEXADA_LOCAL_MODE=0`。它与本地启动器是不同的执行配置；云推理记录不能当作本机 Q4 结果。需要沿用时，先通过进程环境提供自己的 API 配置，参阅[历史 MiniCPM 4.7 适配](minicpm-v47.md)与[部署说明](../deploy/README.md)。不要把密钥写进文档或仓库。
 
-默认关闭的[受限 Agent 规划](studio-constrained-planner.md)、[多 Skill 选择](studio-skill-selection.md)和[单公式 Math Agent 交接](studio-formula-handoff.md)保留为实验。交接需要另外运行配置好的 Math Agent；普通本地编辑、候选和 OCR 不依赖它。实验仍受候选审阅、版本绑定和宿主预算约束。
+默认关闭的[受限 Agent 规划](architecture/constrained-planner.md)、[多 Skill 选择](architecture/skill-selection.md)和[单公式 Math Agent 交接](architecture/formula-handoff.md)保留为实验。交接需要另外运行配置好的 Math Agent；普通本地编辑、候选和 OCR 不依赖它。实验仍受候选审阅、版本绑定和宿主预算约束。
 
 较早的文章、界面图和演示只描述各自日期的版本，不能用来证明本次 UI、离线或 OCR 验收已经完成。
 
@@ -275,7 +275,7 @@ JavaScript 测试使用 Node.js 22。上述回归使用 fixture 或本地 HTTP �
 | Skill 有/无对照与执行计划 | [研究协议](../samples/research/README.md)、[先导分析](skills-pilot-analysis.md) |
 | 固定 Studio 编译输入 | `scripts/compile_studio_cases.py`；[依赖与结果](evaluation-results/studio-latex/README.md) |
 | latex-cleanup 编译和行为检查 | [测试说明](../skills/latex-cleanup/tests/CASES.md) |
-| 项目与接口设计 | [架构](architecture.md)、[Skill 技术报告](skills-technical-report.md)、[历史验证](validation.md) |
+| 项目与接口设计 | [架构](architecture/README.md)、[Skill 技术报告](architecture/skills-technical-report.md)、[历史验证](validation.md) |
 
 评估运行器需要新的输出目录。只验证执行计划的示例：
 

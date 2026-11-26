@@ -8,4 +8,4 @@
 | [Tectonic 项目](https://tectonic-typesetting.github.io/en-US/) | TeX 编译引擎 |
 | [Active Calculus 来源声明](../samples/research/ACTIVE_CALCULUS_NOTICE.md) | 先导实验的教材版本、抽样、修改与 CC-BY-SA-4.0 署名 |
 
-程序行为以[技术报告](skills-technical-report.md)和源码为准；硬件、模型配置与运行结果见[验证记录](validation.md)。
+程序行为以[技术报告](architecture/skills-technical-report.md)和源码为准；硬件、模型配置与运行结果见[验证记录](validation.md)。
