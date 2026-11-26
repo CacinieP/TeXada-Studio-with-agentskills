@@ -155,8 +155,9 @@ kbd { font:10px/1.5 ui-monospace,Menlo,monospace;color:#7e9ab9;white-space:nowra
 .drawer-heading h2 { font-size:12px;font-weight:500; }
 .drawer-heading .ui-icon { color:var(--accent); }
 .panel { border-bottom:1px solid var(--border-soft);padding:12px 13px; }
-.panel h4 { font-weight:500;color:#bcd5ef;font-size:11px;margin-bottom:9px; }
-.panel .toolbar-button,.panel .act,.panel .light-button { width:100%;margin-top:7px; }
+.panel h4 { display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:500;color:#bcd5ef;font-size:11px;margin-bottom:9px; }
+.panel > .toolbar-button,.panel > .act,.panel > .light-button { width:100%;margin-top:7px; }
+#btnRefreshJobs { width:24px;height:24px;padding:4px;flex:none; }
 .panel .hint { margin-bottom:4px; }
 #btnInspector { color:#6e9dc9;font-size:10px; }
 #preview img { display:block;max-width:100%;background:white;margin-top:7px; }

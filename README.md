@@ -10,7 +10,7 @@
 
 当前界面截图，使用仓库自带的合成 `welcome.tex` 示例；2026-11-04。
 
-当前面向本地单用户，最新发行版见 [v0.1.3 发布说明](docs/releases/v0.1.3.md)（同时提供 macOS Apple Silicon 公证安装包与 Windows x64 自包含便携包）。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
+当前面向本地单用户，最新发行版见 [v0.1.4 发布说明](docs/releases/v0.1.4.md)（同时提供 macOS Apple Silicon 公证安装包与 Windows x64 自包含便携包）。已验证范围见 [E2E 发行验收记录](docs/evaluation-results/e2e-release-01/SUMMARY.md) 与[当前验证记录](docs/current-validation.md)，历史录屏和模型实验保留各自日期与版本。
 
 ## 这版可以做什么
 

@@ -238,9 +238,13 @@ def inspect_tex_cleanup(content):
 
     unclosed_envs.sort(key=lambda item: item["offset"])
 
+    unclosed_tail_diagnostics = [
+        diag for diag in math_report["diagnostics"]
+        if diag.get("code") in {"unclosed_math", "mismatched_environment"}
+    ]
     unclosed_commands = []
     if (not brace_negative
-            and not math_report["diagnostics"]
+            and not unclosed_tail_diagnostics
             and brace_stack
             and all(item["command"] in PROSE_BRACE_COMMANDS
                     and content[item["brace_offset"] + 1:item["line_code_end"]].strip()
@@ -302,6 +306,14 @@ def _strip_offsets(text, offsets):
     return "".join(ch for idx, ch in enumerate(text) if idx not in skip)
 
 
+def strip_zero_width_candidate(content):
+    """Strip zero-width format noise outside protected regions even when structural deficits coexist."""
+    report = inspect_tex_cleanup(content)
+    if not report["zero_width_offsets"]:
+        return None
+    return _strip_offsets(content, report["zero_width_offsets"])
+
+
 def deterministic_cleanup_candidate(content):
     """Strip zero-width format noise outside protected regions when no structural closure is needed."""
     report = inspect_tex_cleanup(content)
@@ -342,7 +354,8 @@ def _decompose_cleanup(original, candidate):
     cand_math = analyze_math(candidate)
     if ([(n["opening"], n["latex"], n["closing"]) for n in orig_math["nodes"]]
             != [(n["opening"], n["latex"], n["closing"]) for n in cand_math["nodes"]]
-            or len(orig_math["diagnostics"]) != len(cand_math["diagnostics"])):
+            or [d.get("code") for d in orig_math["diagnostics"]]
+            != [d.get("code") for d in cand_math["diagnostics"]]):
         return None, None, "math_content_modified", None
 
     protected, orig_comments = _protected_mask(original, orig_math)
@@ -446,6 +459,48 @@ def _decompose_cleanup(original, candidate):
     return zw_offsets, insertions, "structural_cleanup_repair", "structural_cleanup_insertion"
 
 
+def _decompose_zero_width_only(original, candidate):
+    """Validate deterministic zero-width-only stripping when structural deficits remain untouched."""
+    if not isinstance(original, str) or not original.strip():
+        return None, None, "invalid_original", None
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None, None, "invalid_candidate", None
+    if len(candidate) > MAX_CLEANUP_CHARS:
+        return None, None, "candidate_too_large", None
+    if any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in candidate):
+        return None, None, "control_character_in_candidate", None
+    if original == candidate:
+        return None, None, "unchanged_candidate", None
+    orig_report = inspect_tex_cleanup(original)
+    zw_offsets = orig_report["zero_width_offsets"]
+    if not zw_offsets:
+        return None, None, "no_zero_width_noise", None
+    orig_math = analyze_math(original)
+    cand_math = analyze_math(candidate)
+    if ([(n["opening"], n["latex"], n["closing"]) for n in orig_math["nodes"]]
+            != [(n["opening"], n["latex"], n["closing"]) for n in cand_math["nodes"]]
+            or [d.get("code") for d in orig_math["diagnostics"]]
+            != [d.get("code") for d in cand_math["diagnostics"]]):
+        return None, None, "math_content_modified", None
+    _, orig_comments = _protected_mask(original, orig_math)
+    _, cand_comments = _protected_mask(candidate, cand_math)
+    if orig_comments != cand_comments:
+        return None, None, "comment_modified", None
+    if candidate != _strip_offsets(original, zw_offsets):
+        return None, None, "unauthorized_cleanup_change", None
+    if inspect_tex_cleanup(candidate)["zero_width_offsets"]:
+        return None, None, "cleanup_incomplete", None
+    return zw_offsets, (), "deterministic_zero_width_cleanup", "strip_zero_width"
+
+
+def assess_zero_width_cleanup(original, candidate):
+    """Authorize conservative zero-width-only removal even when structural issues remain for human review."""
+    _zw_offsets, _insertions, reason, method = _decompose_zero_width_only(original, candidate)
+    if method is None:
+        return {"allowed": False, "reason": reason, "method": "none"}
+    return {"allowed": True, "reason": reason, "method": method}
+
+
 def assess_cleanup_candidate(original, candidate):
     """Authorize only conservative zero-width stripping and/or exact structural closures."""
     zw_offsets, insertions, reason, method = _decompose_cleanup(original, candidate)
@@ -477,6 +532,8 @@ def _tabular_ranges(content):
 def cleanup_edits(original, candidate):
     """Build disjoint span edits ``(line, start, end, before, after, skill)`` transforming ``original`` into ``candidate``."""
     zw_offsets, insertions, _reason, method = _decompose_cleanup(original, candidate)
+    if method is None:
+        zw_offsets, insertions, _reason, method = _decompose_zero_width_only(original, candidate)
     if method is None:
         return []
 

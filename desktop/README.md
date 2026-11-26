@@ -33,7 +33,7 @@ $env:TECTONIC_CACHE_DIR = "$env:LOCALAPPDATA\TectonicProject\Tectonic\Cache"
 ```
 
 产物位于 `dist-win\TeXada Studio\`,双击 `TeXada Studio.exe` 启动:
-- 纯标准库从品牌 PNG 生成多尺寸 `AppIcon.ico`(16–256 px Vista+ PNG-in-ICO)并写入可执行版本 `0.1.3.0`;
+- 纯标准库从品牌 PNG 生成多尺寸 `AppIcon.ico`(16–256 px Vista+ PNG-in-ICO)并写入可执行版本 `0.1.4.0`;
 - `Resources\` 内含 `webui`、`harness`、`skills`、`samples\docs`、`tex-cache\`、`bin\tectonic.exe`、Poppler Windows(`pdfinfo.exe`、`pdftoppm.exe`、动态库与 `share\poppler` CJK 字形映射)、可选 `llama-server.exe`(`b12631` CPU x64,SHA-256 锁定校验)与 `licenses\`;
 - 首次启动自动将 `Resources\tex-cache` 种子到 `%LOCALAPPDATA%\TectonicProject\Tectonic\Cache` 并设置 `TECTONIC_CACHE_DIR`,日常编译与预览全离线;
 - `desktop/windows_entry.py` 同时承接包内 `[TeXada Studio.exe, verify.py, ...]` 检查器子进程调用,机器无需预装系统 Python。

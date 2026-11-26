@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4 — 2026-11-26
+
+### Fixed
+
+- **Conservative TeX cleanup: stop `unexpected_math_close` from hiding unclosed commands, preserve deterministic zero-width stripping alongside structural deficits, and forward full cleanup diagnostics (#96)**: `harness/docforensics/tex_cleanup.py` now suppresses `unclosed_commands` only when tail-masking math diagnostics (`unclosed_math`, `mismatched_environment`) are present so unclosed single-line prose/preamble commands (`\author{...`, `\section{...`) are still detected and repairable alongside stray `\]` delimiters. Added `strip_zero_width_candidate` and `assess_zero_width_cleanup` so conservative zero-width format noise (`\ufeff`, `\u200b`, `\u200c`, `\u200d`) outside comments, opaque blocks, and math spans is stripped before model cleanup (avoiding false `unauthorized_cleanup_change` rejections on invisible echoes) and retained deterministically when model cleanup is unavailable or rejected; `repair_context.checker.reason` now summarizes all detected cleanup issues rather than only the first item.
+- **MiniCPM 1B Skill routing, JSON Schema enforcement, and bounded structural cleanup choices (#96)**: When running against the `1b` GGUF runtime (`minicpm-v4.7-1b-q4_k_m`, including externally reused `llama-server` processes), `webui/local_runtime.py` constrains `select_skill` via numbered choices (`select_skill_choice` with strict `json_schema`), attaches strict `json_schema` `response_format` contracts to `repair_table` and `repair_cleanup`, and resolves multi-deficit or unclosed-environment cleanup through bounded per-deficit closure choices (`studio_cleanup_choices`, preserving inner-before-outer `\end{...}` order for nested environments) while keeping full zero-trust host verification in `assess_cleanup_candidate`.
+- **Compiler log path redaction and upgrade-safe static asset revalidation (#96, #97)**: `webui/app.py:_studio_compile` strips internal `STUDIO_STATE/builds/...` host directory prefixes from compiler logs after extracting line diagnostics so local filesystem paths never leak into `#pvLog`, `#joblog`, or exported `.audit.md` reports, and `/static/editor/*` + `/static/brand/*` now emit `Cache-Control: no-cache` so persistent desktop WebView caches revalidate CSS/JS assets across `.app` upgrades.
+- **Studio review lifecycle, historical report export, Undo/Redo synchronization, connection badge persistence, and keyboard navigation (#97)**: Editing source text after candidate generation now disposes the expired `diffEditor` and hides `#tab-diff`; clicking historical jobs whose source changed or already has a review decision updates the read-only compile/review summary and exports that job's `.audit.md` report under its own document name without auto-opening a closed Agent drawer; opening or switching documents immediately resets stale `#probCount`, `scrollTop`, and cursor position (`1:1`) with Monaco `stickyScroll` disabled; adopting a candidate focuses the editor and wires `⌘/Ctrl+Z` + `⌘/Ctrl+⇧+Z` (`⌘/Ctrl+Y`) to re-sync `#reviewHint` and re-run `analyze()`; `保存设置` preserves verified `已连接` / `未连接` availability when `base_url` and `model` are unchanged; Command Palette (`⌘⇧P`) `Enter` swallows synthetic `keyup` button activation so newly opened dialogs (`转到章节` / `从模板新建`) stay open with `ArrowUp`/`ArrowDown` list navigation; and `#btnRefreshJobs` renders as a compact inline `24px` icon button.
+
+### Changed
+
+- Bump desktop bundle metadata to `0.1.4` (macOS `CFBundleShortVersionString` `0.1.4`, build `9`; Windows `0.1.4.0`).
+
 ## 0.1.3 — 2026-11-25
 
 ### Fixed

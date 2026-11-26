@@ -10,7 +10,7 @@ Studio is a local workspace opened in your browser. Documents and run records st
 
 Current UI, using the repository's synthetic `welcome.tex` sample; November 4, 2026.
 
-This is a local, single-user workspace; see the [v0.1.3 release notes](docs/releases/v0.1.3.md) (Chinese) for the current release (shipping both macOS Apple Silicon notarized DMG and Windows x64 self-contained portable ZIP). Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
+This is a local, single-user workspace; see the [v0.1.4 release notes](docs/releases/v0.1.4.md) (Chinese) for the current release (shipping both macOS Apple Silicon notarized DMG and Windows x64 self-contained portable ZIP). Verified scope is recorded in the [E2E release summary](docs/evaluation-results/e2e-release-01/SUMMARY.md) and [current verification record](docs/current-validation.md); historical videos and experiments retain their own dates and versions.
 
 ## What you can do
 

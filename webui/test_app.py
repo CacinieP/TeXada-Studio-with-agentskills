@@ -1471,6 +1471,80 @@ class StudioTrackARepairPipelineTest(unittest.TestCase):
         self.assertEqual(popen_mock.call_args.kwargs.get("errors"), "replace")
         self.assertEqual(popen_mock.call_args.kwargs.get("creationflags"), 0x08000000)
 
+    def test_cleanup_falls_back_to_deterministic_zero_width_strip_and_forwards_all_cleanup_issues(self):
+        source = (
+            "\\author{TeXada Studio\n"
+            "正文\u200b段落。\n"
+            "\\begin{itemize}\n"
+            "\\item 第一项\n"
+        )
+        seen_contexts = []
+
+        class FailingCleanupProvider:
+            name = "failing-cleanup"
+            last_trace = {"model_calls": 1, "reason": "bad_candidate_json"}
+            fingerprint = lambda self: {}
+
+            def repair_cleanup(self, node, **kwargs):
+                seen_contexts.append(node["data"]["repair_context"])
+                self.last_trace = {"model_calls": 1, "reason": "bad_candidate_json"}
+                return None
+
+        fixed, edits = studio._apply_fixes(source, [], provider=FailingCleanupProvider())
+        self.assertEqual(len(seen_contexts), 2)
+        reason_summary = seen_contexts[0]["checker"]["reason"]
+        self.assertIn("zero_width_noise", reason_summary)
+        self.assertIn("unclosed_command_brace", reason_summary)
+        self.assertIn("unclosed_environment", reason_summary)
+        self.assertNotIn("\u200b", fixed)
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0]["skill"], "latex-cleanup")
+
+        planned_fixed, planned_edits, summary = studio._apply_planned_fixes(
+            source, [], provider=FailingCleanupProvider(), emit=lambda *a, **k: None, use_model_planner=False,
+        )
+        self.assertNotIn("\u200b", planned_fixed)
+        self.assertEqual([e["skill"] for e in planned_edits], ["latex-cleanup"])
+        remaining_kinds = [p["kind"] for p in studio._planned_problems(summary, planned_fixed)]
+        self.assertNotIn("zero_width_noise", remaining_kinds)
+        self.assertIn("unclosed_command_brace", remaining_kinds)
+        self.assertIn("unclosed_environment", remaining_kinds)
+
+        with tempfile.TemporaryDirectory() as temp_state, \
+                patch.object(studio, "STUDIO_STATE", temp_state), \
+                patch.object(studio, "_is_local_mode", return_value=True):
+            studio._local_runtime(managed=False).update_settings({
+                "base_url": "http://127.0.0.1:53058/v1",
+                "model": studio.PROFILES["1b"].model,
+            })
+            provider_1b = studio._new_provider()
+            self.assertEqual(
+                provider_1b.fingerprint()["parameters"].get("planner_response_format"),
+                "numbered_json_choice",
+            )
+
+    def test_studio_compile_redacts_internal_build_directory_paths_from_logs(self):
+        captured_dir = {}
+
+        def fake_run(cmd, **kwargs):
+            build_dir = Path(cmd[cmd.index("-o") + 1])
+            captured_dir["path"] = build_dir
+            msg = (
+                f"error: {build_dir / 'main.tex'}:3: Undefined control sequence.\n"
+                f"note: Writing `{build_dir / 'main.log'}` (9.0 KiB)\n"
+            )
+            return SimpleNamespace(returncode=1, stdout=msg.encode("utf-8"), stderr=b"")
+
+        with tempfile.TemporaryDirectory() as temp_state, \
+                patch.object(studio, "STUDIO_STATE", temp_state), \
+                patch.object(studio.subprocess, "run", side_effect=fake_run):
+            res = studio._studio_compile("a\nb\n\\badcmd\n", "secret-doc.tex", "redact-check")
+        self.assertFalse(res["compile_ok"])
+        self.assertEqual(res["diagnostic"], {"line": 3, "message": "Undefined control sequence."})
+        self.assertNotIn(str(captured_dir["path"]), res["log"])
+        self.assertIn("main.tex:3: Undefined control sequence.", res["log"])
+        self.assertIn("main.log", res["log"])
+
 
 if __name__ == '__main__':
     unittest.main()

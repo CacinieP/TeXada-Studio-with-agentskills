@@ -515,8 +515,39 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
     Imported lazily so image import tests need only the Python standard library.
     The calling app has already added its harness path before creating providers.
     """
-    from docforensics.vlm import OpenAICompatibleProvider, _ResponseTooLarge, _canonical, _hash, _minicpm_json_examples
-    from docforensics.skills_runtime import DEFAULT_SKILL_ROOT, file_sha256, load_skill
+    from pathlib import Path as _Path  # noqa: F401
+    import socket as _socket
+    import urllib.error as _urlerror
+    from docforensics.vlm import (
+        CLEANUP_MAX_CHARS,
+        CLEANUP_SYSTEM_PROMPT,
+        OpenAICompatibleProvider,
+        _ResponseTooLarge,
+        _canonical,
+        _contains_credential,
+        _hash,
+        _minicpm_json_examples,
+        _reject_json_constant,
+        _repair_context,
+        _unique_json_object,
+        error_detail,
+    )
+    from docforensics.skills_runtime import (
+        DEFAULT_SKILL_ROOT,
+        LoadedSkill,
+        file_sha256,
+        load_cleanup_skill,
+        load_skill,
+    )
+    from docforensics.tex_cleanup import (
+        _is_unescaped,
+        _line_starts,
+        _protected_mask,
+        _tabular_ranges,
+        inspect_tex_cleanup,
+        strip_zero_width_candidate,
+    )
+    from docforensics.tex_context import analyze_math
 
     base = validate_base_url(base)
     model = _model_name(model)
@@ -537,6 +568,7 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
             self.skill_root = skill_root
             self.skill = load_skill(skill_root=skill_root) if skill_mode == "on" else None
             self.last_trace = {}
+            self._cleanup_choice_schema = None
             self.checker_sha256 = file_sha256(Path(skill_root or DEFAULT_SKILL_ROOT) / "doc-formula-verify" / "scripts" / "verify.py")
 
         def fingerprint(self):
@@ -545,6 +577,44 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
             if constrain_planner:
                 record["parameters"]["planner_response_format"] = "numbered_json_choice"
             return record
+
+        def select_skill(self, snapshot, *, timeout=120):
+            if not constrain_planner:
+                return super().select_skill(snapshot, timeout=timeout)
+            if not isinstance(snapshot, dict) or not isinstance(snapshot.get("node"), dict):
+                return super().select_skill(snapshot, timeout=timeout)
+            node = snapshot["node"]
+            node_kind = node.get("kind")
+            catalog = snapshot.get("catalog") if isinstance(snapshot.get("catalog"), list) else []
+            matching = [
+                {"skill_id": item.get("skill_id"), "capability": item.get("capability"),
+                 "node_kind": item.get("node_kind")}
+                for item in catalog
+                if isinstance(item, dict) and isinstance(item.get("skill_id"), str)
+                and item.get("node_kind") == node_kind
+            ]
+            options = matching or [{"skill_id": None, "capability": "none", "node_kind": node_kind}]
+            request = {
+                "node": {"id": node.get("id"), "kind": node_kind, "line": node.get("line")},
+                "choices": [{"choice": index, **option} for index, option in enumerate(options)],
+            }
+            answer = self.structured_decision(
+                "select_skill_choice", request,
+                'Select one numbered Skill choice for the node. Return only {"choice": number}.',
+                timeout=timeout,
+            )
+            index = answer.get("choice") if isinstance(answer, dict) else None
+            if not (isinstance(answer, dict) and set(answer) == {"choice"}
+                    and type(index) is int and 0 <= index < len(options)):
+                if answer is not None:
+                    self.last_trace["reason"] = "invalid_skill_choice"
+                return None
+            chosen = options[index]
+            return {
+                "skill_id": chosen["skill_id"],
+                "state_rev": snapshot.get("state_rev"),
+                "reason": f"route {node_kind}" if chosen["skill_id"] else "no applicable skill",
+            }
 
         def plan_action(self, snapshot, *, timeout=120):
             if not constrain_planner:
@@ -579,6 +649,247 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
             return {"action": action, "node_id": option["node_id"], "state_rev": snapshot["state_rev"],
                     "params": {"reason": "模型选择人工核对"} if action == "request-human" else {}}
 
+        def _cleanup_choice_plan(self, content):
+            base = strip_zero_width_candidate(content) or content
+            report = inspect_tex_cleanup(base)
+            deficits = len(report["unclosed_commands"]) + len(report["unclosed_environments"])
+            if deficits == 0 or deficits > 16:
+                return None
+            if not report["unclosed_environments"] and deficits <= 1 and len(base.splitlines()) <= 3:
+                return None
+            starts = _line_starts(base)
+            math_report = analyze_math(base)
+            protected, _ = _protected_mask(base, math_report)
+            tab_ranges = _tabular_ranges(base)
+            line_bounds = []
+            for idx, l_start in enumerate(starts):
+                l_end = starts[idx + 1] - 1 if idx + 1 < len(starts) else len(base)
+                if l_end > l_start and base[l_end - 1] == "\r":
+                    l_end -= 1
+                line_bounds.append((l_start, l_end))
+
+            def safe_pos(pos):
+                if 0 < pos < len(base) and protected[pos - 1] and protected[pos]:
+                    return False
+                if not _is_unescaped(base, pos):
+                    return False
+                if any(n["start"] < pos < n["end"] for n in math_report["nodes"]):
+                    return False
+                if any(ts < pos < te for ts, te in tab_ranges):
+                    return False
+                return True
+
+            items = []
+            for cmd in report["unclosed_commands"]:
+                line_no = cmd["line"]
+                l_start, l_end = line_bounds[line_no - 1]
+                b_off, code_end = cmd["brace_offset"], cmd["line_code_end"]
+                offsets = []
+                if b_off < code_end and base[b_off + 1:code_end].strip() and safe_pos(code_end):
+                    offsets.append(code_end)
+                for idx in range(b_off + 2, code_end):
+                    if base[idx] in " \t" and base[idx - 1] not in " \t{" and base[b_off + 1:idx].strip() and safe_pos(idx):
+                        if idx not in offsets:
+                            offsets.append(idx)
+                        if len(offsets) >= 4:
+                            break
+                if not offsets:
+                    return None
+                items.append({
+                    "kind": "unclosed_command_brace",
+                    "line": line_no,
+                    "command": cmd["command"],
+                    "insertions": [(pos, "}") for pos in offsets],
+                    "choices": [
+                        {"choice": i, "repaired_line": base[l_start:pos] + "}" + base[pos:l_end]}
+                        for i, pos in enumerate(offsets)
+                    ],
+                })
+
+            boundary_prefixes = ("\\section", "\\subsection", "\\subsubsection", "\\begin{tabular}")
+            for env in report["unclosed_environments"]:
+                env_name = env["name"]
+                start_line = env["line"]
+                offsets = []
+
+                def add_offset(pos):
+                    if pos > env["offset"] and safe_pos(pos) and pos not in offsets and len(offsets) < 5:
+                        offsets.append(pos)
+
+                for ln in range(start_line + 1, len(starts) + 1):
+                    ls, le = line_bounds[ln - 1]
+                    stripped = base[ls:le].strip()
+                    if stripped.startswith(boundary_prefixes):
+                        if ln - 2 >= start_line:
+                            pls, ple = line_bounds[ln - 2]
+                            if not base[pls:ple].strip():
+                                add_offset(starts[ln - 2])
+                        add_offset(ls)
+                    elif not stripped and ln < len(starts):
+                        nls, nle = line_bounds[ln]
+                        next_stripped = base[nls:nle].strip()
+                        if next_stripped and not next_stripped.startswith(("\\item", "%")):
+                            add_offset(ls)
+                    elif stripped == "\\end{document}":
+                        if ln - 2 >= start_line:
+                            pls, ple = line_bounds[ln - 2]
+                            if not base[pls:ple].strip():
+                                add_offset(starts[ln - 2])
+                        add_offset(ls)
+                add_offset(len(base))
+                if not offsets:
+                    return None
+                choices = []
+                insertions = []
+                for i, pos in enumerate(offsets):
+                    prefix_nl = "" if (pos == 0 or base[pos - 1] == "\n") else "\n"
+                    ins_text = f"{prefix_nl}\\end{{{env_name}}}\n"
+                    insertions.append((pos, ins_text))
+                    before_snip = base[max(0, pos - 60):pos].splitlines()[-1:] or [""]
+                    after_snip = base[pos:min(len(base), pos + 60)].splitlines()[:2] or ["<EOF>"]
+                    choices.append({
+                        "choice": i,
+                        "before": before_snip[0],
+                        "insert": f"\\end{{{env_name}}}",
+                        "after": " / ".join(s for s in after_snip if s.strip()) or "<blank>",
+                    })
+                items.append({
+                    "kind": "unclosed_environment",
+                    "line": start_line,
+                    "environment": env_name,
+                    "insertions": insertions,
+                    "choices": choices,
+                })
+            return base, items
+
+        def repair_cleanup(self, node, *, timeout=120, loaded_skill=None):
+            if not constrain_planner:
+                return super().repair_cleanup(node, timeout=timeout, loaded_skill=loaded_skill)
+            data = node.get("data") if isinstance(node, dict) else None
+            content = data.get("content") if isinstance(data, dict) else None
+            if (not isinstance(content, str) or not content.strip() or len(content) > CLEANUP_MAX_CHARS
+                    or any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in content)):
+                return super().repair_cleanup(node, timeout=timeout, loaded_skill=loaded_skill)
+            plan = self._cleanup_choice_plan(content)
+            if plan is None:
+                return super().repair_cleanup(node, timeout=timeout, loaded_skill=loaded_skill)
+            base, items = plan
+            trace = self._new_trace("repair_cleanup")
+            started = time.monotonic()
+            try:
+                system = (
+                    CLEANUP_SYSTEM_PROMPT
+                    + "\n\nFor each numbered cleanup item, select the best structural closure choice index. "
+                    "Return strict JSON mapping each item_k key to its chosen integer index."
+                )
+                if loaded_skill is not None:
+                    if not (isinstance(loaded_skill, LoadedSkill) and loaded_skill.name == "latex-cleanup"):
+                        trace["reason"] = "wrong_loaded_skill"
+                        return None
+                    trace.update(skill_mode="selected", skill_loaded=True, skill_id=loaded_skill.name,
+                                 skill_name=loaded_skill.name, skill_sha256=loaded_skill.sha256)
+                    system += ("\n\nThe fixed host loaded these local Skill instructions:\n"
+                               '<loaded_skill name="latex-cleanup">\n' + loaded_skill.instructions + "\n</loaded_skill>")
+                elif self.skill_mode == "on":
+                    try:
+                        skill = load_cleanup_skill(skill_root=self.skill_root)
+                    except ValueError:
+                        trace["reason"] = "skill_unavailable"
+                        return None
+                    trace.update(skill_loaded=True, skill_id=skill.name, skill_name=skill.name,
+                                 skill_sha256=skill.sha256)
+                    system += ("\n\nThe fixed host loaded these local Skill instructions:\n"
+                               '<loaded_skill name="latex-cleanup">\n' + skill.instructions + "\n</loaded_skill>")
+                req_items = []
+                props = {}
+                req_keys = []
+                for idx, item in enumerate(items):
+                    key = f"item_{idx}"
+                    req_keys.append(key)
+                    props[key] = {"type": "integer", "enum": list(range(len(item["choices"])))}
+                    entry = {"key": key, "kind": item["kind"], "line": item["line"], "choices": item["choices"]}
+                    if "command" in item:
+                        entry["command"] = item["command"]
+                    if "environment" in item:
+                        entry["environment"] = item["environment"]
+                    req_items.append(entry)
+                request = {"task": "repair_tex_cleanup_choices", "items": req_items}
+                feedback = _repair_context(data.get("repair_context"))
+                if feedback:
+                    request["repair_context"] = feedback
+                    trace["repair_context_sha256"] = _hash(_canonical(feedback))
+                self._cleanup_choice_schema = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "studio_cleanup_choices",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": req_keys,
+                            "properties": props,
+                        },
+                    },
+                }
+                try:
+                    response = self._chat(_canonical(request), system=system, examples=[], timeout=timeout)
+                except _ResponseTooLarge:
+                    trace["reason"] = "response_too_large"
+                    return None
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    trace["reason"] = "bad_response_json"
+                    return None
+                except _urlerror.HTTPError as exc:
+                    trace["reason"] = "http_error"
+                    trace["error"] = error_detail(exc, self._api_key)
+                    return None
+                except (TimeoutError, _socket.timeout) as exc:
+                    trace["reason"] = "timeout"
+                    trace["error"] = error_detail(exc, self._api_key)
+                    return None
+                except _urlerror.URLError as exc:
+                    trace["reason"] = "timeout" if isinstance(exc.reason, (TimeoutError, _socket.timeout)) else "network_error"
+                    trace["error"] = error_detail(exc, self._api_key)
+                    return None
+                except Exception as error:
+                    trace["reason"] = "provider_error"
+                    trace["error"] = error_detail(error, self._api_key)
+                    return None
+                finally:
+                    self._cleanup_choice_schema = None
+                raw_content = self._completion_content(trace, response)
+                if raw_content is None:
+                    return None
+                try:
+                    record = json.loads(raw_content, object_pairs_hook=_unique_json_object,
+                                        parse_constant=_reject_json_constant)
+                except ValueError:
+                    trace["reason"] = "bad_candidate_json"
+                    return None
+                if _contains_credential(record, self._api_key):
+                    trace["raw_candidate_response"] = "[redacted credential response]"
+                    trace["response_truncated"] = False
+                    trace["reason"] = "credential_in_response"
+                    return None
+                if not isinstance(record, dict) or set(record) != set(req_keys):
+                    trace["reason"] = "bad_candidate_type"
+                    return None
+                selected_insertions = []
+                for idx, item in enumerate(items):
+                    val = record.get(f"item_{idx}")
+                    if type(val) is not int or not (0 <= val < len(item["insertions"])):
+                        trace["reason"] = "bad_candidate_type"
+                        return None
+                    pos, ins_text = item["insertions"][val]
+                    selected_insertions.append((pos, idx, ins_text))
+                candidate = base
+                for pos, _idx, ins_text in sorted(selected_insertions, key=lambda pair: (-pair[0], pair[1])):
+                    candidate = candidate[:pos] + ins_text + candidate[pos:]
+                trace["reason"] = "ok"
+                return candidate
+            finally:
+                trace["elapsed_seconds"] = round(time.monotonic() - started, 6)
+
         def _chat(self, prompt, *, system=None, examples=None, timeout=120):
             messages = [{"role": "system", "content": self._system_prompt() if system is None else system}]
             if examples is not None:
@@ -590,7 +901,8 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
                        "messages": messages, "stream": False}
             if self.disable_thinking:
                 payload["chat_template_kwargs"] = {"enable_thinking": False}
-            if self.last_trace.get("operation") == "plan_action_choice":
+            operation = self.last_trace.get("operation")
+            if operation in {"plan_action_choice", "select_skill_choice"}:
                 choices = json.loads(prompt)["choices"]
                 payload["response_format"] = {
                     "type": "json_schema",
@@ -604,6 +916,42 @@ def make_local_provider(base, model, *, skill_mode="off", skill_root=None, seed=
                     },
                 }
                 payload["max_tokens"] = min(self.max_tokens, 64)
+            elif constrain_planner and operation == "repair_cleanup" and self._cleanup_choice_schema is not None:
+                payload["response_format"] = self._cleanup_choice_schema
+                payload["max_tokens"] = min(self.max_tokens, 128)
+            elif constrain_planner and operation == "repair_cleanup":
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "studio_cleanup_candidate",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["content"],
+                            "properties": {"content": {"type": "string"}},
+                        },
+                    },
+                }
+            elif constrain_planner and operation == "repair_table":
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "studio_table_candidate",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["rows"],
+                            "properties": {
+                                "rows": {
+                                    "type": "array",
+                                    "items": {"type": "array", "items": {"type": "string"}},
+                                },
+                            },
+                        },
+                    },
+                }
             self.last_trace["prompt_sha256"] = _hash(_canonical(payload["messages"]))
             self.last_trace.update(model_called=True, model_calls=1)
             try:
