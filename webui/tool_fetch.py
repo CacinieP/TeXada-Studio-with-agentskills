@@ -50,6 +50,7 @@ POPPLER_WINDOWS_URL = (
 POPPLER_WINDOWS_SHA256 = "7a6f256a0ddf7536182246a5733331bf4677cbcc34f4663774947ad34556c8d0"
 
 DEFAULT_BIN_DIR = Path.home() / ".texada" / "bin"
+MACOS_BREW_PATH = os.pathsep.join(("/opt/homebrew/bin", "/usr/local/bin"))
 
 
 class ToolFetchError(RuntimeError):
@@ -164,10 +165,23 @@ def tectonic_status(bin_dir=None, *, platform_name=None):
             "installed_version": version}
 
 
-def poppler_status():
+def _find_brew(*, platform_name=None):
+    """查找 brew 可执行文件;macOS 图形会话 PATH 不含 Homebrew 时回退标准前缀。"""
+    effective = platform_name if platform_name is not None else sys.platform
+    found = shutil.which("brew")
+    if found or effective != "darwin":
+        return found
+    return shutil.which("brew", path=MACOS_BREW_PATH)
+
+
+def poppler_status(*, platform_name=None, extra_path=None):
     """Poppler(pdfinfo/pdftoppm)是否可用,以及本机是否有 Homebrew。"""
-    return {"in_path": bool(shutil.which("pdftoppm")) and bool(shutil.which("pdfinfo")),
-            "brew": shutil.which("brew")}
+    in_path = bool(shutil.which("pdftoppm")) and bool(shutil.which("pdfinfo"))
+    if not in_path and extra_path:
+        in_path = bool(shutil.which("pdftoppm", path=str(extra_path))) and bool(
+            shutil.which("pdfinfo", path=str(extra_path))
+        )
+    return {"in_path": in_path, "brew": _find_brew(platform_name=platform_name)}
 
 
 def _safe_zip_parts(raw_name: str) -> list[str]:
@@ -310,9 +324,14 @@ def install_poppler(run=None, *, bin_dir=None, fetch=None, progress=None, platfo
         return _install_poppler_windows(bin_dir=bin_dir, fetch=fetch, progress=progress)
     if effective_platform != "darwin":
         raise ToolFetchError("此入口仅支持 macOS 与 Windows;Linux 请用系统包管理器安装 poppler-utils。")
-    brew = shutil.which("brew")
+    brew = _find_brew(platform_name=effective_platform)
     if not brew:
+        if poppler_status(platform_name=effective_platform)["in_path"]:
+            existing = shutil.which("pdftoppm")
+            return {"ok": True, "tool": "poppler", "method": "existing",
+                    "path": str(Path(existing).parent) if existing else ""}
         raise ToolFetchError("未找到 Homebrew;请先安装 brew,或手动安装 Poppler 并加入 PATH。")
+    brew_bin = str(Path(brew).parent)
     runner = run or subprocess.run
     try:
         completed = runner([brew, "install", "poppler"], capture_output=True, text=True, timeout=1800)
@@ -323,9 +342,9 @@ def install_poppler(run=None, *, bin_dir=None, fetch=None, progress=None, platfo
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()[-400:]
         raise ToolFetchError(f"brew 安装 Poppler 失败:{detail or '未知错误'}")
-    if not poppler_status()["in_path"]:
+    if not poppler_status(platform_name=effective_platform, extra_path=brew_bin)["in_path"]:
         raise ToolFetchError("brew 报告成功但未找到 pdfinfo/pdftoppm;请检查 brew 状态。")
-    return {"ok": True, "tool": "poppler", "method": "homebrew",
+    return {"ok": True, "tool": "poppler", "method": "homebrew", "path": brew_bin,
             "version": (completed.stdout or "").strip().splitlines()[-1][:120] if (completed.stdout or "").strip() else ""}
 
 

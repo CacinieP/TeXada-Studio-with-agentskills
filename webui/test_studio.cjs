@@ -536,6 +536,20 @@ const testWatchdog = setTimeout(() => { console.error("Studio behavior test did 
   assert.equal(get('btnInstallTools').disabled,false,'a failed install re-enables the button');
   assert.match(get('installToolsHint').textContent,/安装失败/,'failure reason is shown inline');
 
+  // Bundled/ready local tools disable install buttons and suppress misleading Homebrew prompts.
+  run('toolInstallNotice=""');
+  run('displayConfig({base_url:"http://127.0.0.1:53374/v1",model:"minicpm-v4.7-1b-q4_k_m",local_mode:true,model_available:true,tools:{tectonic:true,pdftoppm:true,pdfinfo:true}})');
+  assert.equal(get('btnInstallTools').disabled,true,'bundled tectonic disables the download button');
+  assert.match(get('btnInstallTools').textContent,/已就绪/,'bundled tectonic button shows ready label');
+  assert.equal(get('btnInstallPoppler').disabled,true,'bundled poppler disables the install button');
+  assert.match(get('btnInstallPoppler').textContent,/已就绪/,'bundled poppler button shows ready label');
+  assert.match(get('installToolsHint').textContent,/无需额外安装/,'bundled tools hint states no extra install is needed');
+  assert.doesNotMatch(get('installToolsHint').textContent,/Homebrew/,'ready desktop tools do not tell the user to use Homebrew');
+  run('displayConfig({base_url:"http://127.0.0.1:8080/v1",model:"minicpm-v4.7-1b-q4_k_m",local_mode:true,model_available:null,tools:{tectonic:false,pdftoppm:false,pdfinfo:false}})');
+  assert.equal(get('btnInstallTools').disabled,false,'missing tectonic re-enables download button');
+  assert.equal(get('btnInstallPoppler').disabled,false,'missing poppler re-enables install button');
+  assert.match(get('installToolsHint').textContent,/Homebrew/,'missing tools restore on-demand install instructions');
+
   // The template picker lists the shipped skeletons and creates from them verbatim.
   context.testEditor.setValue('template base');run("savedContent='template base';documentOrigin='local';");
   get('btnNewFromTemplate').onclick();
